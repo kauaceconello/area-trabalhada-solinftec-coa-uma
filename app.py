@@ -36,7 +36,7 @@ st.markdown(
 )
 
 # =========================================================
-# BOTÃO MAIOR (CSS)
+# CSS – BOTÃO GRANDE
 # =========================================================
 st.markdown(
     """
@@ -65,7 +65,14 @@ uploaded_gpkg = st.file_uploader(
     type=["gpkg"]
 )
 
-GERAR = st.button("▶️ Gerar mapa")
+# =========================================================
+# BOTÃO GERAR MAPA (controle correto)
+# =========================================================
+if "gerar_mapa" not in st.session_state:
+    st.session_state["gerar_mapa"] = False
+
+if st.button("▶️ Gerar mapa"):
+    st.session_state["gerar_mapa"] = True
 
 # =========================================================
 # SIDEBAR – PARÂMETROS
@@ -96,7 +103,7 @@ FIG_HEIGHT = 9
 # =========================================================
 # PROCESSAMENTO
 # =========================================================
-if uploaded_zip and uploaded_gpkg and GERAR:
+if uploaded_zip and uploaded_gpkg and st.session_state["gerar_mapa"]:
 
     with tempfile.TemporaryDirectory() as tmpdir:
 
@@ -155,6 +162,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
             area_total_ha = base_fazenda.geometry.area.sum() / 10000
 
+            # regra mínima
             if area_total_ha < 0.5:
                 continue
 
@@ -183,6 +191,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 # Linhas
                 # -------------------------
                 linhas = []
+
                 for _, grupo in gdf_pts.groupby("cd_equipamento"):
                     grupo = grupo.sort_values("dt_hr_local_inicial")
                     linha_atual = []
@@ -204,6 +213,10 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                     if len(linha_atual) >= 2:
                         linhas.append(LineString(linha_atual))
 
+                if not linhas:
+                    st.warning("⚠️ Não foi possível gerar linhas válidas para esta fazenda.")
+                    continue
+
                 gdf_linhas = gpd.GeoDataFrame(geometry=linhas, crs=base_fazenda.crs)
 
                 buffer_linhas = gdf_linhas.buffer(LARGURA_IMPLEMENTO / 2)
@@ -216,9 +229,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 pct_trab = area_trab_ha / area_total_ha * 100
                 pct_nao = area_nao_ha / area_total_ha * 100
 
-                dt_min = df_faz["dt_hr_local_inicial"].min()
-                dt_max = df_faz["dt_hr_local_inicial"].max()
-
                 # =========================================================
                 # PLOT
                 # =========================================================
@@ -230,7 +240,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 )
                 base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.2)
 
-                # 🔧 LEGENDA ALINHADA AO TÍTULO
+                # legenda alinhada ao título
                 leg = ax.legend(
                     handles=[
                         mpatches.Patch(color=COR_TRABALHADA, label="Área trabalhada"),
