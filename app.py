@@ -145,23 +145,35 @@ if uploaded_zip and uploaded_gpkg and GERAR:
         # =========================================================
         for FAZENDA_ID in df["cd_fazenda"].dropna().unique():
 
+            df_faz = df[df["cd_fazenda"] == FAZENDA_ID].copy()
+            base_fazenda = base[base["FAZENDA"] == FAZENDA_ID].copy()
+
+            if df_faz.empty or base_fazenda.empty:
+                continue
+
+            # 🔑 PROJETAR ANTES DE CALCULAR ÁREA
+            base_fazenda = base_fazenda.to_crs(epsg=31983)
+
+            # 🔑 ÁREA TOTAL ANTES DE QUALQUER COISA
+            area_total_ha = base_fazenda.geometry.area.sum() / 10000
+
+            # ❌ NÃO GERA MAPA
+            if area_total_ha < 0.5:
+                continue
+
+            # =====================================================
+            # AGORA SIM CRIA A JANELA
+            # =====================================================
             with st.expander(
                 f"🗺️ Mapa – Fazenda {FAZENDA_ID}",
                 expanded=False
             ):
 
-                df_faz = df[df["cd_fazenda"] == FAZENDA_ID].copy()
-                base_fazenda = base[base["FAZENDA"] == FAZENDA_ID].copy()
-
-                if df_faz.empty or base_fazenda.empty:
-                    st.warning("Dados insuficientes para esta fazenda.")
-                    continue
-
                 nome_fazenda = base_fazenda["PROPRIEDADE"].iloc[0]
                 geom_fazenda = unary_union(base_fazenda.geometry)
 
                 # -------------------------
-                # Projeção
+                # Pontos
                 # -------------------------
                 gdf_pts = gpd.GeoDataFrame(
                     df_faz,
@@ -170,14 +182,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                         df_faz["vl_latitude_inicial"]
                     ),
                     crs="EPSG:4326"
-                )
-
-                base_fazenda = base_fazenda.to_crs(epsg=31983)
-                gdf_pts = gdf_pts.to_crs(epsg=31983)
-                geom_fazenda = gpd.GeoSeries(
-                    [geom_fazenda],
-                    crs=base_fazenda.crs
-                ).iloc[0]
+                ).to_crs(epsg=31983)
 
                 # -------------------------
                 # Linhas
@@ -204,10 +209,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                     if len(linha_atual) >= 2:
                         linhas.append(LineString(linha_atual))
 
-                gdf_linhas = gpd.GeoDataFrame(
-                    geometry=linhas,
-                    crs=base_fazenda.crs
-                )
+                gdf_linhas = gpd.GeoDataFrame(geometry=linhas, crs=base_fazenda.crs)
 
                 buffer_linhas = gdf_linhas.buffer(LARGURA_IMPLEMENTO / 2)
                 area_trabalhada = unary_union(buffer_linhas).intersection(geom_fazenda)
@@ -216,13 +218,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 # -------------------------
                 # Estatísticas
                 # -------------------------
-                area_total_ha = base_fazenda.geometry.area.sum() / 10000
-
-                # ✅ REGRA DE ÁREA MÍNIMA
-                if area_total_ha < 0.5:
-                    st.warning("Área da fazenda menor que 0,50 ha. Mapa não gerado.")
-                    continue
-
                 area_trab_ha = area_trabalhada.area / 10000
                 area_nao_ha = area_nao_trabalhada.area / 10000
 
@@ -236,29 +231,16 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 periodo_fim = dt_max.strftime("%d/%m/%Y %H:%M")
 
                 # =========================================================
-                # PLOT
+                # PLOT (INALTERADO)
                 # =========================================================
                 fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
 
-                base_fazenda.plot(
-                    ax=ax,
-                    facecolor=COR_NAO_TRAB,
-                    edgecolor="black",
-                    linewidth=1.2
+                base_fazenda.plot(ax=ax, facecolor=COR_NAO_TRAB, edgecolor="black", linewidth=1.2)
+                gpd.GeoSeries(area_trabalhada, crs=base_fazenda.crs).plot(
+                    ax=ax, color=COR_TRABALHADA, alpha=0.9
                 )
+                base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.2)
 
-                gpd.GeoSeries(
-                    area_trabalhada,
-                    crs=base_fazenda.crs
-                ).plot(ax=ax, color=COR_TRABALHADA, alpha=0.9)
-
-                base_fazenda.boundary.plot(
-                    ax=ax,
-                    color="black",
-                    linewidth=1.2
-                )
-
-                # LEGENDA
                 leg = ax.legend(
                     handles=[
                         mpatches.Patch(color=COR_TRABALHADA, label="Área trabalhada"),
@@ -285,11 +267,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                     f"Não trabalhada: {area_nao_ha:.2f} ha ({pct_nao:.1f}%)\n\n"
                     f"Período:\n{periodo_ini} até {periodo_fim}",
                     fontsize=11,
-                    bbox=dict(
-                        boxstyle="round,pad=0.8",
-                        facecolor=COR_CAIXA,
-                        edgecolor="black"
-                    )
+                    bbox=dict(boxstyle="round,pad=0.8", facecolor=COR_CAIXA, edgecolor="black")
                 )
 
                 fig.suptitle(
@@ -300,33 +278,17 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 brasilia = pytz.timezone("America/Sao_Paulo")
                 hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
 
-                fig.text(
-                    0.5,
-                    0.075,
-                    "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos. "
-                    "Podem ocorrer divergências por falhas de registro, GPS ou operação.",
-                    ha="center",
-                    fontsize=9,
-                    color=COR_RODAPE
-                )
+                fig.text(0.5, 0.075,
+                         "⚠️ Os resultados apresentados dependem da qualidade dos dados fornecidos.",
+                         ha="center", fontsize=9, color=COR_RODAPE)
 
-                fig.text(
-                    0.5,
-                    0.045,
-                    "Relatório elaborado com base em dados da Solinftec.",
-                    ha="center",
-                    fontsize=10,
-                    color=COR_RODAPE
-                )
+                fig.text(0.5, 0.045,
+                         "Relatório elaborado com base em dados da Solinftec.",
+                         ha="center", fontsize=10, color=COR_RODAPE)
 
-                fig.text(
-                    0.5,
-                    0.025,
-                    f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
-                    ha="center",
-                    fontsize=10,
-                    color=COR_RODAPE
-                )
+                fig.text(0.5, 0.025,
+                         f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
+                         ha="center", fontsize=10, color=COR_RODAPE)
 
                 plt.subplots_adjust(left=0.05, right=0.90, bottom=0.30)
                 ax.axis("off")
