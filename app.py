@@ -221,7 +221,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
         )
         base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.2)
 
-        # LEGENDA ALINHADA AO TÍTULO
+        # LEGENDA
         leg = fig.legend(
             handles=[
                 mpatches.Patch(color=COR_TRABALHADA, label="Área trabalhada"),
@@ -256,7 +256,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             fontsize=15
         )
 
-               brasilia = pytz.timezone("America/Sao_Paulo")
+        brasilia = pytz.timezone("America/Sao_Paulo")
         hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
 
         # DISCLAIMER
@@ -271,7 +271,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             color=COR_RODAPE
         )
 
-        # RODAPÉ – linha institucional
+        # RODAPÉ
         fig.text(
             0.5,
             0.045,
@@ -282,7 +282,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             color=COR_RODAPE
         )
 
-        # RODAPÉ – autoria
         fig.text(
             0.5,
             0.025,
