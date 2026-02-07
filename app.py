@@ -310,7 +310,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
                 fig.text(
                     centro_mapa,
-                    0.015,
+                    0.020,
                     f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
                     ha="center",
                     fontsize=10,
