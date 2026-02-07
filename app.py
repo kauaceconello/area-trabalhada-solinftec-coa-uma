@@ -36,7 +36,7 @@ st.markdown(
 )
 
 # =========================================================
-# CSS – BOTÃO GRANDE
+# BOTÃO MAIOR (CSS)
 # =========================================================
 st.markdown(
     """
@@ -65,14 +65,7 @@ uploaded_gpkg = st.file_uploader(
     type=["gpkg"]
 )
 
-# =========================================================
-# BOTÃO GERAR MAPA (controle correto)
-# =========================================================
-if "gerar_mapa" not in st.session_state:
-    st.session_state["gerar_mapa"] = False
-
-if st.button("▶️ Gerar mapa"):
-    st.session_state["gerar_mapa"] = True
+GERAR = st.button("▶️ Gerar mapa")
 
 # =========================================================
 # SIDEBAR – PARÂMETROS
@@ -103,7 +96,7 @@ FIG_HEIGHT = 9
 # =========================================================
 # PROCESSAMENTO
 # =========================================================
-if uploaded_zip and uploaded_gpkg and st.session_state["gerar_mapa"]:
+if uploaded_zip and uploaded_gpkg and GERAR:
 
     with tempfile.TemporaryDirectory() as tmpdir:
 
@@ -138,6 +131,9 @@ if uploaded_zip and uploaded_gpkg and st.session_state["gerar_mapa"]:
             (df["cd_operacao_parada"] == -1)
         ].copy()
 
+        # 🔧 CORREÇÃO CRÍTICA: garantir mesmo tipo
+        df["cd_fazenda"] = df["cd_fazenda"].astype(str)
+
         # -------------------------
         # GPKG
         # -------------------------
@@ -146,37 +142,26 @@ if uploaded_zip and uploaded_gpkg and st.session_state["gerar_mapa"]:
             f.write(uploaded_gpkg.read())
 
         base = gpd.read_file(gpkg_path)
+        base["FAZENDA"] = base["FAZENDA"].astype(str)
 
         # =========================================================
         # LOOP POR FAZENDA
         # =========================================================
         for FAZENDA_ID in df["cd_fazenda"].dropna().unique():
 
-            df_faz = df[df["cd_fazenda"] == FAZENDA_ID].copy()
-            base_fazenda = base[base["FAZENDA"] == FAZENDA_ID].copy()
+            with st.expander(f"🗺️ Mapa – Fazenda {FAZENDA_ID}", expanded=True):
 
-            if df_faz.empty or base_fazenda.empty:
-                continue
+                df_faz = df[df["cd_fazenda"] == FAZENDA_ID].copy()
+                base_fazenda = base[base["FAZENDA"] == FAZENDA_ID].copy()
 
-            base_fazenda = base_fazenda.to_crs(epsg=31983)
+                if df_faz.empty or base_fazenda.empty:
+                    st.warning("Dados insuficientes para esta fazenda.")
+                    continue
 
-            area_total_ha = base_fazenda.geometry.area.sum() / 10000
-
-            # regra mínima
-            if area_total_ha < 0.5:
-                continue
-
-            nome_fazenda = base_fazenda["PROPRIEDADE"].iloc[0]
-
-            with st.expander(
-                f"🗺️ Mapa – {nome_fazenda}",
-                expanded=False
-            ):
-
-                geom_fazenda = unary_union(base_fazenda.geometry)
+                nome_fazenda = base_fazenda["PROPRIEDADE"].iloc[0]
 
                 # -------------------------
-                # Pontos
+                # Projeção
                 # -------------------------
                 gdf_pts = gpd.GeoDataFrame(
                     df_faz,
@@ -185,13 +170,18 @@ if uploaded_zip and uploaded_gpkg and st.session_state["gerar_mapa"]:
                         df_faz["vl_latitude_inicial"]
                     ),
                     crs="EPSG:4326"
-                ).to_crs(epsg=31983)
+                )
+
+                base_fazenda = base_fazenda.to_crs(epsg=31983)
+                gdf_pts = gdf_pts.to_crs(epsg=31983)
+
+                # 🔧 união correta da fazenda
+                geom_fazenda = unary_union(base_fazenda.geometry)
 
                 # -------------------------
                 # Linhas
                 # -------------------------
                 linhas = []
-
                 for _, grupo in gdf_pts.groupby("cd_equipamento"):
                     grupo = grupo.sort_values("dt_hr_local_inicial")
                     linha_atual = []
@@ -213,21 +203,27 @@ if uploaded_zip and uploaded_gpkg and st.session_state["gerar_mapa"]:
                     if len(linha_atual) >= 2:
                         linhas.append(LineString(linha_atual))
 
-                if not linhas:
-                    st.warning("⚠️ Não foi possível gerar linhas válidas para esta fazenda.")
-                    continue
-
                 gdf_linhas = gpd.GeoDataFrame(geometry=linhas, crs=base_fazenda.crs)
 
                 buffer_linhas = gdf_linhas.buffer(LARGURA_IMPLEMENTO / 2)
                 area_trabalhada = unary_union(buffer_linhas).intersection(geom_fazenda)
                 area_nao_trabalhada = geom_fazenda.difference(area_trabalhada)
 
+                # -------------------------
+                # Estatísticas
+                # -------------------------
+                area_total_ha = base_fazenda.geometry.area.sum() / 10000
                 area_trab_ha = area_trabalhada.area / 10000
                 area_nao_ha = area_nao_trabalhada.area / 10000
 
                 pct_trab = area_trab_ha / area_total_ha * 100
                 pct_nao = area_nao_ha / area_total_ha * 100
+
+                dt_min = df_faz["dt_hr_local_inicial"].min()
+                dt_max = df_faz["dt_hr_local_inicial"].max()
+
+                periodo_ini = dt_min.strftime("%d/%m/%Y %H:%M")
+                periodo_fim = dt_max.strftime("%d/%m/%Y %H:%M")
 
                 # =========================================================
                 # PLOT
@@ -240,54 +236,73 @@ if uploaded_zip and uploaded_gpkg and st.session_state["gerar_mapa"]:
                 )
                 base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.2)
 
-                # legenda alinhada ao título
-                leg = ax.legend(
+                # LEGENDA
+                ax.legend(
                     handles=[
                         mpatches.Patch(color=COR_TRABALHADA, label="Área trabalhada"),
                         mpatches.Patch(color=COR_NAO_TRAB, label="Área não trabalhada"),
                         mpatches.Patch(facecolor="none", edgecolor="black", label="Limites da fazenda"),
                     ],
-                    loc="upper center",
-                    bbox_to_anchor=(0.5, 1.02),
+                    loc="lower center",
+                    bbox_to_anchor=(0.5, -0.20),
                     ncol=3,
                     frameon=True,
-                    fontsize=12
+                    fontsize=13
                 )
-                leg.get_frame().set_edgecolor("black")
+
+                # RESUMO LATERAL
+                pos = ax.get_position()
+                fig.text(
+                    pos.x1 + 0.01,
+                    0.5,
+                    f"Resumo da operação\n\n"
+                    f"Fazenda: {FAZENDA_ID} – {nome_fazenda}\n\n"
+                    f"Área total: {area_total_ha:.2f} ha\n"
+                    f"Trabalhada: {area_trab_ha:.2f} ha ({pct_trab:.1f}%)\n"
+                    f"Não trabalhada: {area_nao_ha:.2f} ha ({pct_nao:.1f}%)\n\n"
+                    f"Período:\n{periodo_ini} até {periodo_fim}",
+                    fontsize=11,
+                    bbox=dict(boxstyle="round,pad=0.8", facecolor=COR_CAIXA, edgecolor="black")
+                )
 
                 fig.suptitle(
                     f"Área trabalhada – Fazenda {FAZENDA_ID} – {nome_fazenda}",
-                    fontsize=15,
-                    y=0.98
-                )
-
-                fig.text(
-                    0.92,
-                    0.5,
-                    f"Resumo da operação\n\n"
-                    f"Área total: {area_total_ha:.2f} ha\n"
-                    f"Trabalhada: {area_trab_ha:.2f} ha ({pct_trab:.1f}%)\n"
-                    f"Não trabalhada: {area_nao_ha:.2f} ha ({pct_nao:.1f}%)",
-                    fontsize=11,
-                    bbox=dict(boxstyle="round,pad=0.8", facecolor=COR_CAIXA, edgecolor="black")
+                    fontsize=15
                 )
 
                 brasilia = pytz.timezone("America/Sao_Paulo")
                 hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
 
-                fig.text(0.5, 0.08,
-                         "⚠️ Os resultados apresentados dependem da qualidade dos dados fornecidos.",
-                         ha="center", fontsize=9, color=COR_RODAPE)
+                # DISCLAIMER
+                fig.text(
+                    0.5,
+                    0.08,
+                    "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos.",
+                    ha="center",
+                    fontsize=9,
+                    color=COR_RODAPE
+                )
 
-                fig.text(0.5, 0.05,
-                         "Relatório elaborado com base em dados da Solinftec.",
-                         ha="center", fontsize=9, color=COR_RODAPE)
+                # RODAPÉ
+                fig.text(
+                    0.5,
+                    0.045,
+                    "Relatório elaborado com base em dados da Solinftec.",
+                    ha="center",
+                    fontsize=10,
+                    color=COR_RODAPE
+                )
 
-                fig.text(0.5, 0.03,
-                         f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
-                         ha="center", fontsize=9, color=COR_RODAPE)
+                fig.text(
+                    0.5,
+                    0.025,
+                    f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
+                    ha="center",
+                    fontsize=10,
+                    color=COR_RODAPE
+                )
 
-                plt.subplots_adjust(left=0.04, right=0.88, bottom=0.18, top=0.90)
+                plt.subplots_adjust(left=0.05, right=0.90, bottom=0.32)
                 ax.axis("off")
 
                 st.pyplot(fig)
