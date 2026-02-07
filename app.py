@@ -239,14 +239,13 @@ if uploaded_zip and uploaded_gpkg and GERAR:
         )
         base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.2)
 
- # legenda (centralizada em relação ao MAPA)
-    leg = ax.legend(
-        handles=[
-            mpatches.Patch(color=COR_TRABALHADA, label="Área trabalhada"),
-            mpatches.Patch(color=COR_NAO_TRAB, label="Área não trabalhada"),
-            mpatches.Patch(facecolor="none", edgecolor="black", label="Limites da fazenda"),
+ ## legenda
+leg = ax.legend(
+    handles=[
+        mpatches.Patch(color=COR_TRABALHADA, label="Área trabalhada"),
+        mpatches.Patch(color=COR_NAO_TRAB, label="Área não trabalhada"),
+        mpatches.Patch(facecolor="none", edgecolor="black", label="Limites da fazenda"),
     ],
-        
     loc="upper center",
     bbox_to_anchor=(0.5, -0.06),
     ncol=3,
@@ -262,6 +261,12 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 leg.get_frame().set_edgecolor("black")
 leg.get_frame().set_linewidth(1)
 
+# -------------------------------------------------
+# POSIÇÃO DO MAPA (para a caixa de resumo)
+# -------------------------------------------------
+pos = ax.get_position()
+x_lim = pos.x1
+y_lim = 0.5
 
         # resumo lateral
         pos = ax.get_position()
