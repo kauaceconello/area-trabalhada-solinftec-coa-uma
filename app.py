@@ -48,12 +48,15 @@ uploaded_gpkg = st.file_uploader(
     type=["gpkg"]
 )
 
+# 👉 BOTÃO AQUI (ABAIXO DOS UPLOADS)
+GERAR = st.button("▶️ Gerar mapa")
+
 # =========================================================
 # SIDEBAR – PARÂMETROS
 # =========================================================
 st.sidebar.header("⚙️ Parâmetros")
 
-TEMPO_MAX_SEG = 60  # mantido igual ao Kaggle
+TEMPO_MAX_SEG = 60  # igual Kaggle
 
 LARGURA_IMPLEMENTO = st.sidebar.number_input(
     "Largura do implemento (metros)",
@@ -62,8 +65,6 @@ LARGURA_IMPLEMENTO = st.sidebar.number_input(
     value=6.0,
     step=0.5
 )
-
-GERAR = st.sidebar.button("▶️ Gerar mapa")
 
 # =========================================================
 # CORES E FIGURA (IGUAL AO KAGGLE)
@@ -113,7 +114,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             st.stop()
 
         # -------------------------
-        # Seleção da fazenda (igual Kaggle)
+        # Seleção da fazenda
         # -------------------------
         fazendas_csv = df["cd_fazenda"].dropna().unique()
 
@@ -220,7 +221,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
         periodo_fim = dt_max.strftime("%d/%m/%Y %H:%M")
 
         # =========================================================
-        # PLOT (IDÊNTICO AO KAGGLE)
+        # PLOT
         # =========================================================
         fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
 
@@ -239,34 +240,21 @@ if uploaded_zip and uploaded_gpkg and GERAR:
         )
         base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.2)
 
- ## legenda
-leg = ax.legend(
-    handles=[
-        mpatches.Patch(color=COR_TRABALHADA, label="Área trabalhada"),
-        mpatches.Patch(color=COR_NAO_TRAB, label="Área não trabalhada"),
-        mpatches.Patch(facecolor="none", edgecolor="black", label="Limites da fazenda"),
-    ],
-    loc="upper center",
-    bbox_to_anchor=(0.5, -0.06),
-    ncol=3,
-    frameon=True,
-    fontsize=13,
-    borderpad=0.6,
-    labelspacing=0.8,
-    handletextpad=1.0,
-    handlelength=2.0,
-    transform=ax.transAxes
-)
-
-leg.get_frame().set_edgecolor("black")
-leg.get_frame().set_linewidth(1)
-
-# -------------------------------------------------
-# POSIÇÃO DO MAPA (para a caixa de resumo)
-# -------------------------------------------------
-pos = ax.get_position()
-x_lim = pos.x1
-y_lim = 0.5
+        # legenda
+        leg = ax.legend(
+            handles=[
+                mpatches.Patch(color=COR_TRABALHADA, label="Área trabalhada"),
+                mpatches.Patch(color=COR_NAO_TRAB, label="Área não trabalhada"),
+                mpatches.Patch(facecolor="none", edgecolor="black", label="Limites da fazenda"),
+            ],
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.08),
+            ncol=3,
+            frameon=True,
+            fontsize=13
+        )
+        leg.get_frame().set_edgecolor("black")
+        leg.get_frame().set_linewidth(1)
 
         # resumo lateral
         pos = ax.get_position()
@@ -295,15 +283,23 @@ y_lim = 0.5
 
         fig.text(
             0.5,
+            0.035,
+            "Relatório elaborado com base em dados da Solinftec.",
+            ha="center",
+            fontsize=10,
+            color=COR_RODAPE
+        )
+
+        fig.text(
+            0.5,
             0.02,
-            "Relatório elaborado com base em dados da Solinftec. "
             f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
             ha="center",
             fontsize=10,
             color=COR_RODAPE
         )
 
-        plt.subplots_adjust(left=0.05, right=0.90, bottom=0.15)
+        plt.subplots_adjust(left=0.05, right=0.90, bottom=0.18)
         ax.axis("off")
 
         st.pyplot(fig)
