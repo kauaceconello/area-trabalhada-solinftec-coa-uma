@@ -131,6 +131,9 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             (df["cd_operacao_parada"] == -1)
         ].copy()
 
+        # 🔧 CORREÇÃO CRÍTICA: garantir mesmo tipo
+        df["cd_fazenda"] = df["cd_fazenda"].astype(str)
+
         # -------------------------
         # GPKG
         # -------------------------
@@ -139,6 +142,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             f.write(uploaded_gpkg.read())
 
         base = gpd.read_file(gpkg_path)
+        base["FAZENDA"] = base["FAZENDA"].astype(str)
 
         # =========================================================
         # LOOP POR FAZENDA
@@ -155,7 +159,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                     continue
 
                 nome_fazenda = base_fazenda["PROPRIEDADE"].iloc[0]
-                geom_fazenda = unary_union(base_fazenda.geometry)
 
                 # -------------------------
                 # Projeção
@@ -171,7 +174,9 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
                 base_fazenda = base_fazenda.to_crs(epsg=31983)
                 gdf_pts = gdf_pts.to_crs(epsg=31983)
-                geom_fazenda = gpd.GeoSeries([geom_fazenda], crs=base_fazenda.crs).iloc[0]
+
+                # 🔧 união correta da fazenda
+                geom_fazenda = unary_union(base_fazenda.geometry)
 
                 # -------------------------
                 # Linhas
@@ -231,22 +236,21 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 )
                 base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.2)
 
-                # LEGENDA (ALINHADA AO MAPA)
-                leg = ax.legend(
+                # LEGENDA
+                ax.legend(
                     handles=[
                         mpatches.Patch(color=COR_TRABALHADA, label="Área trabalhada"),
                         mpatches.Patch(color=COR_NAO_TRAB, label="Área não trabalhada"),
                         mpatches.Patch(facecolor="none", edgecolor="black", label="Limites da fazenda"),
                     ],
                     loc="lower center",
-                    bbox_to_anchor=(0.5, -0.18),
+                    bbox_to_anchor=(0.5, -0.20),
                     ncol=3,
                     frameon=True,
                     fontsize=13
                 )
-                leg.get_frame().set_edgecolor("black")
 
-                # RESUMO LATERAL (INALTERADO)
+                # RESUMO LATERAL
                 pos = ax.get_position()
                 fig.text(
                     pos.x1 + 0.01,
@@ -272,11 +276,9 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 # DISCLAIMER
                 fig.text(
                     0.5,
-                    0.075,
-                    "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos. "
-                    "Podem ocorrer divergências por falhas de registro, GPS ou operação.",
+                    0.08,
+                    "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos.",
                     ha="center",
-                    va="bottom",
                     fontsize=9,
                     color=COR_RODAPE
                 )
@@ -287,7 +289,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                     0.045,
                     "Relatório elaborado com base em dados da Solinftec.",
                     ha="center",
-                    va="bottom",
                     fontsize=10,
                     color=COR_RODAPE
                 )
@@ -297,12 +298,11 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                     0.025,
                     f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
                     ha="center",
-                    va="bottom",
                     fontsize=10,
                     color=COR_RODAPE
                 )
 
-                plt.subplots_adjust(left=0.05, right=0.90, bottom=0.30)
+                plt.subplots_adjust(left=0.05, right=0.90, bottom=0.32)
                 ax.axis("off")
 
                 st.pyplot(fig)
