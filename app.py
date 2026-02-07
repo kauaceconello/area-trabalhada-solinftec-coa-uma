@@ -291,7 +291,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
                 fig.text(
                     centro_mapa,
-                    0.08,
+                    0.055,
                     "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos.",
                     ha="center",
                     fontsize=9,
@@ -301,7 +301,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
                 fig.text(
                     centro_mapa,
-                    0.045,
+                    0.030,
                     "Relatório elaborado com base em dados da Solinftec.",
                     ha="center",
                     fontsize=10,
@@ -310,7 +310,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
                 fig.text(
                     centro_mapa,
-                    0.025,
+                    0.015,
                     f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
                     ha="center",
                     fontsize=10,
