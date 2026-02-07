@@ -36,6 +36,23 @@ st.markdown(
 )
 
 # =========================================================
+# BOTÃO MAIOR (CSS)
+# =========================================================
+st.markdown(
+    """
+    <style>
+    div.stButton > button {
+        width: 100%;
+        height: 3.2em;
+        font-size: 1.2em;
+        font-weight: 600;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# =========================================================
 # UPLOAD DE ARQUIVOS
 # =========================================================
 uploaded_zip = st.file_uploader(
@@ -48,7 +65,6 @@ uploaded_gpkg = st.file_uploader(
     type=["gpkg"]
 )
 
-# 👉 BOTÃO AQUI (ABAIXO DOS UPLOADS)
 GERAR = st.button("▶️ Gerar mapa")
 
 # =========================================================
@@ -56,7 +72,7 @@ GERAR = st.button("▶️ Gerar mapa")
 # =========================================================
 st.sidebar.header("⚙️ Parâmetros")
 
-TEMPO_MAX_SEG = 60  # igual Kaggle
+TEMPO_MAX_SEG = 60
 
 LARGURA_IMPLEMENTO = st.sidebar.number_input(
     "Largura do implemento (metros)",
@@ -67,7 +83,7 @@ LARGURA_IMPLEMENTO = st.sidebar.number_input(
 )
 
 # =========================================================
-# CORES E FIGURA (IGUAL AO KAGGLE)
+# CORES E FIGURA
 # =========================================================
 COR_TRABALHADA = "#61b27f"
 COR_NAO_TRAB = "#f8cfc6"
@@ -109,22 +125,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
         df["vl_latitude_inicial"] = pd.to_numeric(df["vl_latitude_inicial"], errors="coerce")
         df["vl_longitude_inicial"] = pd.to_numeric(df["vl_longitude_inicial"], errors="coerce")
 
-        if df.empty:
-            st.error("❌ CSV carregado está vazio.")
-            st.stop()
-
-        # -------------------------
-        # Seleção da fazenda
-        # -------------------------
         fazendas_csv = df["cd_fazenda"].dropna().unique()
-
-        if len(fazendas_csv) == 0:
-            st.error("❌ Nenhuma fazenda encontrada no CSV.")
-            st.stop()
-
-        if len(fazendas_csv) > 1:
-            st.warning(f"⚠️ Mais de uma fazenda detectada: {fazendas_csv}")
-
         FAZENDA_ID = int(fazendas_csv[0])
 
         df = df[
@@ -133,12 +134,8 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             (df["cd_operacao_parada"] == -1)
         ].copy()
 
-        if df.empty:
-            st.error("❌ Nenhum dado válido após filtros.")
-            st.stop()
-
         # -------------------------
-        # Leitura GPKG
+        # GPKG
         # -------------------------
         gpkg_path = os.path.join(tmpdir, "base.gpkg")
         with open(gpkg_path, "wb") as f:
@@ -147,15 +144,11 @@ if uploaded_zip and uploaded_gpkg and GERAR:
         base = gpd.read_file(gpkg_path)
         base_fazenda = base[base["FAZENDA"] == FAZENDA_ID].copy()
 
-        if base_fazenda.empty:
-            st.error("❌ Fazenda não encontrada no GPKG.")
-            st.stop()
-
         nome_fazenda = base_fazenda["PROPRIEDADE"].iloc[0]
         geom_fazenda = unary_union(base_fazenda.geometry)
 
         # -------------------------
-        # Projeção métrica
+        # Projeção
         # -------------------------
         gdf_pts = gpd.GeoDataFrame(
             df,
@@ -171,7 +164,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
         geom_fazenda = gpd.GeoSeries([geom_fazenda], crs=base_fazenda.crs).iloc[0]
 
         # -------------------------
-        # Linhas por equipamento
+        # Linhas
         # -------------------------
         linhas = []
         for _, grupo in gdf_pts.groupby("cd_equipamento"):
@@ -197,9 +190,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
         gdf_linhas = gpd.GeoDataFrame(geometry=linhas, crs=base_fazenda.crs)
 
-        # -------------------------
-        # Buffer e áreas
-        # -------------------------
         buffer_linhas = gdf_linhas.buffer(LARGURA_IMPLEMENTO / 2)
         area_trabalhada = unary_union(buffer_linhas).intersection(geom_fazenda)
         area_nao_trabalhada = geom_fazenda.difference(area_trabalhada)
@@ -225,38 +215,28 @@ if uploaded_zip and uploaded_gpkg and GERAR:
         # =========================================================
         fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
 
-        minx, miny, maxx, maxy = base_fazenda.total_bounds
-        cx, cy = (minx + maxx)/2, (miny + maxy)/2
-        w, h = maxx - minx, maxy - miny
-
-        padding = 0.10
-        ax.set_xlim(cx - w*(1+padding)/2, cx + w*(1+padding)/2)
-        ax.set_ylim(cy - h*(1+padding)/2, cy + h*(1+padding)/2)
-        ax.set_aspect("equal")
-
         base_fazenda.plot(ax=ax, facecolor=COR_NAO_TRAB, edgecolor="black", linewidth=1.2)
         gpd.GeoSeries(area_trabalhada, crs=base_fazenda.crs).plot(
             ax=ax, color=COR_TRABALHADA, alpha=0.9
         )
         base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.2)
 
-        # legenda
-        leg = ax.legend(
+        # LEGENDA ALINHADA AO TÍTULO
+        leg = fig.legend(
             handles=[
                 mpatches.Patch(color=COR_TRABALHADA, label="Área trabalhada"),
                 mpatches.Patch(color=COR_NAO_TRAB, label="Área não trabalhada"),
                 mpatches.Patch(facecolor="none", edgecolor="black", label="Limites da fazenda"),
             ],
-            loc="upper center",
-            bbox_to_anchor=(0.5, -0.08),
+            loc="lower center",
+            bbox_to_anchor=(0.5, 0.13),
             ncol=3,
             frameon=True,
             fontsize=13
         )
         leg.get_frame().set_edgecolor("black")
-        leg.get_frame().set_linewidth(1)
 
-        # resumo lateral
+        # RESUMO
         pos = ax.get_position()
         fig.text(
             pos.x1 + 0.01,
@@ -268,8 +248,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             f"Não trabalhada: {area_nao_ha:.2f} ha ({pct_nao:.1f}%)\n\n"
             f"Período:\n{periodo_ini} até {periodo_fim}",
             fontsize=11,
-            va="center",
-            ha="left",
             bbox=dict(boxstyle="round,pad=0.8", facecolor=COR_CAIXA, edgecolor="black")
         )
 
@@ -281,25 +259,29 @@ if uploaded_zip and uploaded_gpkg and GERAR:
         brasilia = pytz.timezone("America/Sao_Paulo")
         hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
 
+        # DISCLAIMER
         fig.text(
             0.5,
-            0.035,
-            "Relatório elaborado com base em dados da Solinftec.",
+            0.05,
+            "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos. "
+            "Podem ocorrer divergências por falhas de registro, GPS ou operação.",
             ha="center",
-            fontsize=10,
+            fontsize=9,
             color=COR_RODAPE
         )
 
+        # RODAPÉ
         fig.text(
             0.5,
-            0.02,
+            0.025,
+            f"Relatório elaborado com base em dados da Solinftec.\n"
             f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
             ha="center",
             fontsize=10,
             color=COR_RODAPE
         )
 
-        plt.subplots_adjust(left=0.05, right=0.90, bottom=0.18)
+        plt.subplots_adjust(left=0.05, right=0.90, bottom=0.22)
         ax.axis("off")
 
         st.pyplot(fig)
