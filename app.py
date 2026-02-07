@@ -256,44 +256,44 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             fontsize=15
         )
 
-        brasilia = pytz.timezone("America/Sao_Paulo")
+               brasilia = pytz.timezone("America/Sao_Paulo")
         hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
 
-        # DISCLAIMER (linha isolada)
-fig.text(
-    0.5,
-    0.065,
-    "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos. "
-    "Podem ocorrer divergências por falhas de registro, GPS ou operação.",
-    ha="center",
-    va="bottom",
-    fontsize=9,
-    color=COR_RODAPE
-)
+        # DISCLAIMER
+        fig.text(
+            0.5,
+            0.075,
+            "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos. "
+            "Podem ocorrer divergências por falhas de registro, GPS ou operação.",
+            ha="center",
+            va="bottom",
+            fontsize=9,
+            color=COR_RODAPE
+        )
 
-# RODAPÉ (institucional)
-fig.text(
-    0.5,
-    0.025,
-    "Relatório elaborado com base em dados da Solinftec.",
-    ha="center",
-    va="bottom",
-    fontsize=10,
-    color=COR_RODAPE
-)
+        # RODAPÉ – linha institucional
+        fig.text(
+            0.5,
+            0.045,
+            "Relatório elaborado com base em dados da Solinftec.",
+            ha="center",
+            va="bottom",
+            fontsize=10,
+            color=COR_RODAPE
+        )
 
-fig.text(
-    0.5,
-    0.010,
-    f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
-    ha="center",
-    va="bottom",
-    fontsize=10,
-    color=COR_RODAPE
-)
+        # RODAPÉ – autoria
+        fig.text(
+            0.5,
+            0.025,
+            f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
+            ha="center",
+            va="bottom",
+            fontsize=10,
+            color=COR_RODAPE
+        )
 
-
-        plt.subplots_adjust(left=0.05, right=0.90, bottom=0.22)
+        plt.subplots_adjust(left=0.05, right=0.90, bottom=0.24)
         ax.axis("off")
 
         st.pyplot(fig)
