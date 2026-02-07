@@ -131,9 +131,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             (df["cd_operacao_parada"] == -1)
         ].copy()
 
-        # 🔧 CORREÇÃO CRÍTICA: garantir mesmo tipo
-        df["cd_fazenda"] = df["cd_fazenda"].astype(str)
-
         # -------------------------
         # GPKG
         # -------------------------
@@ -142,14 +139,16 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             f.write(uploaded_gpkg.read())
 
         base = gpd.read_file(gpkg_path)
-        base["FAZENDA"] = base["FAZENDA"].astype(str)
 
         # =========================================================
         # LOOP POR FAZENDA
         # =========================================================
         for FAZENDA_ID in df["cd_fazenda"].dropna().unique():
 
-            with st.expander(f"🗺️ Mapa – Fazenda {FAZENDA_ID}", expanded=True):
+            with st.expander(
+                f"🗺️ Mapa – Fazenda {FAZENDA_ID}",
+                expanded=False
+            ):
 
                 df_faz = df[df["cd_fazenda"] == FAZENDA_ID].copy()
                 base_fazenda = base[base["FAZENDA"] == FAZENDA_ID].copy()
@@ -159,6 +158,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                     continue
 
                 nome_fazenda = base_fazenda["PROPRIEDADE"].iloc[0]
+                geom_fazenda = unary_union(base_fazenda.geometry)
 
                 # -------------------------
                 # Projeção
@@ -174,9 +174,10 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
                 base_fazenda = base_fazenda.to_crs(epsg=31983)
                 gdf_pts = gdf_pts.to_crs(epsg=31983)
-
-                # 🔧 união correta da fazenda
-                geom_fazenda = unary_union(base_fazenda.geometry)
+                geom_fazenda = gpd.GeoSeries(
+                    [geom_fazenda],
+                    crs=base_fazenda.crs
+                ).iloc[0]
 
                 # -------------------------
                 # Linhas
@@ -203,7 +204,10 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                     if len(linha_atual) >= 2:
                         linhas.append(LineString(linha_atual))
 
-                gdf_linhas = gpd.GeoDataFrame(geometry=linhas, crs=base_fazenda.crs)
+                gdf_linhas = gpd.GeoDataFrame(
+                    geometry=linhas,
+                    crs=base_fazenda.crs
+                )
 
                 buffer_linhas = gdf_linhas.buffer(LARGURA_IMPLEMENTO / 2)
                 area_trabalhada = unary_union(buffer_linhas).intersection(geom_fazenda)
@@ -213,6 +217,12 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 # Estatísticas
                 # -------------------------
                 area_total_ha = base_fazenda.geometry.area.sum() / 10000
+
+                # ✅ REGRA DE ÁREA MÍNIMA
+                if area_total_ha < 0.5:
+                    st.warning("Área da fazenda menor que 0,50 ha. Mapa não gerado.")
+                    continue
+
                 area_trab_ha = area_trabalhada.area / 10000
                 area_nao_ha = area_nao_trabalhada.area / 10000
 
@@ -230,28 +240,41 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 # =========================================================
                 fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
 
-                base_fazenda.plot(ax=ax, facecolor=COR_NAO_TRAB, edgecolor="black", linewidth=1.2)
-                gpd.GeoSeries(area_trabalhada, crs=base_fazenda.crs).plot(
-                    ax=ax, color=COR_TRABALHADA, alpha=0.9
+                base_fazenda.plot(
+                    ax=ax,
+                    facecolor=COR_NAO_TRAB,
+                    edgecolor="black",
+                    linewidth=1.2
                 )
-                base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.2)
+
+                gpd.GeoSeries(
+                    area_trabalhada,
+                    crs=base_fazenda.crs
+                ).plot(ax=ax, color=COR_TRABALHADA, alpha=0.9)
+
+                base_fazenda.boundary.plot(
+                    ax=ax,
+                    color="black",
+                    linewidth=1.2
+                )
 
                 # LEGENDA
-                ax.legend(
+                leg = ax.legend(
                     handles=[
                         mpatches.Patch(color=COR_TRABALHADA, label="Área trabalhada"),
                         mpatches.Patch(color=COR_NAO_TRAB, label="Área não trabalhada"),
                         mpatches.Patch(facecolor="none", edgecolor="black", label="Limites da fazenda"),
                     ],
                     loc="lower center",
-                    bbox_to_anchor=(0.5, -0.20),
+                    bbox_to_anchor=(0.5, -0.18),
                     ncol=3,
                     frameon=True,
                     fontsize=13
                 )
+                leg.get_frame().set_edgecolor("black")
 
-                # RESUMO LATERAL
                 pos = ax.get_position()
+
                 fig.text(
                     pos.x1 + 0.01,
                     0.5,
@@ -262,7 +285,11 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                     f"Não trabalhada: {area_nao_ha:.2f} ha ({pct_nao:.1f}%)\n\n"
                     f"Período:\n{periodo_ini} até {periodo_fim}",
                     fontsize=11,
-                    bbox=dict(boxstyle="round,pad=0.8", facecolor=COR_CAIXA, edgecolor="black")
+                    bbox=dict(
+                        boxstyle="round,pad=0.8",
+                        facecolor=COR_CAIXA,
+                        edgecolor="black"
+                    )
                 )
 
                 fig.suptitle(
@@ -273,17 +300,16 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 brasilia = pytz.timezone("America/Sao_Paulo")
                 hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
 
-                # DISCLAIMER
                 fig.text(
                     0.5,
-                    0.08,
-                    "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos.",
+                    0.075,
+                    "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos. "
+                    "Podem ocorrer divergências por falhas de registro, GPS ou operação.",
                     ha="center",
                     fontsize=9,
                     color=COR_RODAPE
                 )
 
-                # RODAPÉ
                 fig.text(
                     0.5,
                     0.045,
@@ -302,7 +328,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                     color=COR_RODAPE
                 )
 
-                plt.subplots_adjust(left=0.05, right=0.90, bottom=0.32)
+                plt.subplots_adjust(left=0.05, right=0.90, bottom=0.30)
                 ax.axis("off")
 
                 st.pyplot(fig)
