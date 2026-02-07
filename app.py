@@ -40,9 +40,15 @@ fazendas_gdf = gpd.read_file(gpkg_file)
 # =========================================================
 # PADRONIZAÇÕES
 # =========================================================
-df["dt_hr_local_inicial"] = pd.to_datetime(
-    df["dt_hr_local_inicial"], errors="coerce"
-)
+st.write("Colunas disponíveis no dataframe:")
+st.write(df.columns.tolist())
+
+if "dt_hr_local_inicial" in df.columns:
+    df["dt_hr_local_inicial"] = pd.to_datetime(
+        df["dt_hr_local_inicial"], errors="coerce"
+    )
+else:
+    st.warning("Coluna 'dt_hr_local_inicial' não encontrada no arquivo.")
 
 tz_brasilia = pytz.timezone("America/Sao_Paulo")
 df["dt_hr_local_inicial"] = df["dt_hr_local_inicial"].dt.tz_localize(
