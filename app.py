@@ -151,25 +151,20 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             if df_faz.empty or base_fazenda.empty:
                 continue
 
-            # 🔑 PROJETAR ANTES DE CALCULAR ÁREA
             base_fazenda = base_fazenda.to_crs(epsg=31983)
 
-            # 🔑 ÁREA TOTAL ANTES DE QUALQUER COISA
             area_total_ha = base_fazenda.geometry.area.sum() / 10000
 
-            # ❌ NÃO GERA MAPA
             if area_total_ha < 0.5:
                 continue
 
-            # =====================================================
-            # AGORA SIM CRIA A JANELA
-            # =====================================================
+            nome_fazenda = base_fazenda["PROPRIEDADE"].iloc[0]
+
             with st.expander(
-                f"🗺️ Mapa – Fazenda {FAZENDA_ID}",
+                f"🗺️ Mapa – {nome_fazenda}",
                 expanded=False
             ):
 
-                nome_fazenda = base_fazenda["PROPRIEDADE"].iloc[0]
                 geom_fazenda = unary_union(base_fazenda.geometry)
 
                 # -------------------------
@@ -215,9 +210,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 area_trabalhada = unary_union(buffer_linhas).intersection(geom_fazenda)
                 area_nao_trabalhada = geom_fazenda.difference(area_trabalhada)
 
-                # -------------------------
-                # Estatísticas
-                # -------------------------
                 area_trab_ha = area_trabalhada.area / 10000
                 area_nao_ha = area_nao_trabalhada.area / 10000
 
@@ -227,11 +219,8 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 dt_min = df_faz["dt_hr_local_inicial"].min()
                 dt_max = df_faz["dt_hr_local_inicial"].max()
 
-                periodo_ini = dt_min.strftime("%d/%m/%Y %H:%M")
-                periodo_fim = dt_max.strftime("%d/%m/%Y %H:%M")
-
                 # =========================================================
-                # PLOT (INALTERADO)
+                # PLOT
                 # =========================================================
                 fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
 
@@ -241,56 +230,54 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 )
                 base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.2)
 
+                # 🔧 LEGENDA ALINHADA AO TÍTULO
                 leg = ax.legend(
                     handles=[
                         mpatches.Patch(color=COR_TRABALHADA, label="Área trabalhada"),
                         mpatches.Patch(color=COR_NAO_TRAB, label="Área não trabalhada"),
                         mpatches.Patch(facecolor="none", edgecolor="black", label="Limites da fazenda"),
                     ],
-                    loc="lower center",
-                    bbox_to_anchor=(0.5, -0.18),
+                    loc="upper center",
+                    bbox_to_anchor=(0.5, 1.02),
                     ncol=3,
                     frameon=True,
-                    fontsize=13
+                    fontsize=12
                 )
                 leg.get_frame().set_edgecolor("black")
 
-                pos = ax.get_position()
-
-                fig.text(
-                    pos.x1 + 0.01,
-                    0.5,
-                    f"Resumo da operação\n\n"
-                    f"Fazenda: {FAZENDA_ID} – {nome_fazenda}\n\n"
-                    f"Área total: {area_total_ha:.2f} ha\n"
-                    f"Trabalhada: {area_trab_ha:.2f} ha ({pct_trab:.1f}%)\n"
-                    f"Não trabalhada: {area_nao_ha:.2f} ha ({pct_nao:.1f}%)\n\n"
-                    f"Período:\n{periodo_ini} até {periodo_fim}",
-                    fontsize=11,
-                    bbox=dict(boxstyle="round,pad=0.8", facecolor=COR_CAIXA, edgecolor="black")
-                )
-
                 fig.suptitle(
                     f"Área trabalhada – Fazenda {FAZENDA_ID} – {nome_fazenda}",
-                    fontsize=15
+                    fontsize=15,
+                    y=0.98
+                )
+
+                fig.text(
+                    0.92,
+                    0.5,
+                    f"Resumo da operação\n\n"
+                    f"Área total: {area_total_ha:.2f} ha\n"
+                    f"Trabalhada: {area_trab_ha:.2f} ha ({pct_trab:.1f}%)\n"
+                    f"Não trabalhada: {area_nao_ha:.2f} ha ({pct_nao:.1f}%)",
+                    fontsize=11,
+                    bbox=dict(boxstyle="round,pad=0.8", facecolor=COR_CAIXA, edgecolor="black")
                 )
 
                 brasilia = pytz.timezone("America/Sao_Paulo")
                 hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
 
-                fig.text(0.5, 0.075,
+                fig.text(0.5, 0.08,
                          "⚠️ Os resultados apresentados dependem da qualidade dos dados fornecidos.",
                          ha="center", fontsize=9, color=COR_RODAPE)
 
-                fig.text(0.5, 0.045,
+                fig.text(0.5, 0.05,
                          "Relatório elaborado com base em dados da Solinftec.",
-                         ha="center", fontsize=10, color=COR_RODAPE)
+                         ha="center", fontsize=9, color=COR_RODAPE)
 
-                fig.text(0.5, 0.025,
+                fig.text(0.5, 0.03,
                          f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
-                         ha="center", fontsize=10, color=COR_RODAPE)
+                         ha="center", fontsize=9, color=COR_RODAPE)
 
-                plt.subplots_adjust(left=0.05, right=0.90, bottom=0.30)
+                plt.subplots_adjust(left=0.04, right=0.88, bottom=0.18, top=0.90)
                 ax.axis("off")
 
                 st.pyplot(fig)
