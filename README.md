@@ -1,0 +1,1 @@
+# area-trabalhada-solinftec-coa-uma
