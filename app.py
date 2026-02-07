@@ -259,7 +259,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                         mpatches.Patch(facecolor="none", edgecolor="black", label="Limites da fazenda"),
                 ],
                 loc="lower center",
-                bbox_to_anchor=(centro_mapa, 0.05),
+                bbox_to_anchor=(centro_mapa, 0.01),
                 bbox_transform=fig.transFigure,
                 ncol=3,
                 frameon=True,
