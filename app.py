@@ -224,12 +224,20 @@ if uploaded_zip and uploaded_gpkg:
             # -------------------------
             fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
 
-            minx, miny, maxx, maxy = base_fazenda.total_bounds
-            pad = 0.08
+            # -------------------------------------------------
+            # EXTENSÃO DO MAPA (corrigida para evitar "mapa vazio")
+            # -------------------------------------------------
+geom_ref = area_trabalhada if not area_trabalhada.is_empty else geom_fazenda
 
-            ax.set_xlim(minx - (maxx-minx)*pad, maxx + (maxx-minx)*pad)
-            ax.set_ylim(miny - (maxy-miny)*pad, maxy + (maxy-miny)*pad)
-            ax.set_aspect("equal")
+minx, miny, maxx, maxy = geom_ref.bounds
+
+dx = maxx - minx
+dy = maxy - miny
+pad = 0.15  # 15% de margem real
+
+ax.set_xlim(minx - dx * pad, maxx + dx * pad)
+ax.set_ylim(miny - dy * pad, maxy + dy * pad)
+ax.set_aspect("equal")
 
             base_fazenda.plot(ax=ax, facecolor=COR_NAO_TRAB, edgecolor="black", linewidth=1.2)
             gpd.GeoSeries(area_trabalhada, crs=base_fazenda.crs).plot(
