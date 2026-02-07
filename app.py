@@ -249,6 +249,9 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 )
                 base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.2)
 
+                pos = ax.get_position()
+                centro_mapa = (pos.x0 + pos.x1) / 2
+
                 ax.legend(
                     handles=[
                         mpatches.Patch(color=COR_TRABALHADA, label="Área trabalhada"),
