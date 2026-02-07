@@ -82,6 +82,14 @@ LARGURA_IMPLEMENTO = st.sidebar.number_input(
     step=0.5
 )
 
+# ✅ NOVO PARÂMETRO – ÁREA MÍNIMA
+AREA_MIN_HA = st.sidebar.number_input(
+    "Área mínima trabalhada (ha)",
+    min_value=0.0,
+    value=0.50,
+    step=0.1
+)
+
 # =========================================================
 # CORES E FIGURA
 # =========================================================
@@ -149,81 +157,86 @@ if uploaded_zip and uploaded_gpkg and GERAR:
         # =========================================================
         for FAZENDA_ID in df["cd_fazenda"].dropna().unique():
 
-            with st.expander(f"🗺️ Mapa – Fazenda {FAZENDA_ID}", expanded=True):
+            df_faz = df[df["cd_fazenda"] == FAZENDA_ID].copy()
+            base_fazenda = base[base["FAZENDA"] == FAZENDA_ID].copy()
 
-                df_faz = df[df["cd_fazenda"] == FAZENDA_ID].copy()
-                base_fazenda = base[base["FAZENDA"] == FAZENDA_ID].copy()
+            if df_faz.empty or base_fazenda.empty:
+                continue
 
-                if df_faz.empty or base_fazenda.empty:
-                    st.warning("Dados insuficientes para esta fazenda.")
-                    continue
+            nome_fazenda = base_fazenda["PROPRIEDADE"].iloc[0]
 
-                nome_fazenda = base_fazenda["PROPRIEDADE"].iloc[0]
+            # -------------------------
+            # Projeção
+            # -------------------------
+            gdf_pts = gpd.GeoDataFrame(
+                df_faz,
+                geometry=gpd.points_from_xy(
+                    df_faz["vl_longitude_inicial"],
+                    df_faz["vl_latitude_inicial"]
+                ),
+                crs="EPSG:4326"
+            )
 
-                # -------------------------
-                # Projeção
-                # -------------------------
-                gdf_pts = gpd.GeoDataFrame(
-                    df_faz,
-                    geometry=gpd.points_from_xy(
-                        df_faz["vl_longitude_inicial"],
-                        df_faz["vl_latitude_inicial"]
-                    ),
-                    crs="EPSG:4326"
-                )
+            base_fazenda = base_fazenda.to_crs(epsg=31983)
+            gdf_pts = gdf_pts.to_crs(epsg=31983)
 
-                base_fazenda = base_fazenda.to_crs(epsg=31983)
-                gdf_pts = gdf_pts.to_crs(epsg=31983)
+            geom_fazenda = unary_union(base_fazenda.geometry)
 
-                # 🔧 união correta da fazenda
-                geom_fazenda = unary_union(base_fazenda.geometry)
+            # -------------------------
+            # Linhas
+            # -------------------------
+            linhas = []
+            for _, grupo in gdf_pts.groupby("cd_equipamento"):
+                grupo = grupo.sort_values("dt_hr_local_inicial")
+                linha_atual = []
+                ultimo_tempo = None
 
-                # -------------------------
-                # Linhas
-                # -------------------------
-                linhas = []
-                for _, grupo in gdf_pts.groupby("cd_equipamento"):
-                    grupo = grupo.sort_values("dt_hr_local_inicial")
-                    linha_atual = []
-                    ultimo_tempo = None
-
-                    for _, row in grupo.iterrows():
-                        if ultimo_tempo is None:
-                            linha_atual = [row.geometry]
+                for _, row in grupo.iterrows():
+                    if ultimo_tempo is None:
+                        linha_atual = [row.geometry]
+                    else:
+                        delta = (row["dt_hr_local_inicial"] - ultimo_tempo).total_seconds()
+                        if delta <= TEMPO_MAX_SEG:
+                            linha_atual.append(row.geometry)
                         else:
-                            delta = (row["dt_hr_local_inicial"] - ultimo_tempo).total_seconds()
-                            if delta <= TEMPO_MAX_SEG:
-                                linha_atual.append(row.geometry)
-                            else:
-                                if len(linha_atual) >= 2:
-                                    linhas.append(LineString(linha_atual))
-                                linha_atual = [row.geometry]
-                        ultimo_tempo = row["dt_hr_local_inicial"]
+                            if len(linha_atual) >= 2:
+                                linhas.append(LineString(linha_atual))
+                            linha_atual = [row.geometry]
+                    ultimo_tempo = row["dt_hr_local_inicial"]
 
-                    if len(linha_atual) >= 2:
-                        linhas.append(LineString(linha_atual))
+                if len(linha_atual) >= 2:
+                    linhas.append(LineString(linha_atual))
 
-                gdf_linhas = gpd.GeoDataFrame(geometry=linhas, crs=base_fazenda.crs)
+            if not linhas:
+                continue
 
-                buffer_linhas = gdf_linhas.buffer(LARGURA_IMPLEMENTO / 2)
-                area_trabalhada = unary_union(buffer_linhas).intersection(geom_fazenda)
-                area_nao_trabalhada = geom_fazenda.difference(area_trabalhada)
+            gdf_linhas = gpd.GeoDataFrame(geometry=linhas, crs=base_fazenda.crs)
 
-                # -------------------------
-                # Estatísticas
-                # -------------------------
-                area_total_ha = base_fazenda.geometry.area.sum() / 10000
-                area_trab_ha = area_trabalhada.area / 10000
-                area_nao_ha = area_nao_trabalhada.area / 10000
+            buffer_linhas = gdf_linhas.buffer(LARGURA_IMPLEMENTO / 2)
+            area_trabalhada = unary_union(buffer_linhas).intersection(geom_fazenda)
+            area_nao_trabalhada = geom_fazenda.difference(area_trabalhada)
 
-                pct_trab = area_trab_ha / area_total_ha * 100
-                pct_nao = area_nao_ha / area_total_ha * 100
+            # -------------------------
+            # Estatísticas
+            # -------------------------
+            area_total_ha = base_fazenda.geometry.area.sum() / 10000
+            area_trab_ha = area_trabalhada.area / 10000
+            area_nao_ha = area_nao_trabalhada.area / 10000
 
-                dt_min = df_faz["dt_hr_local_inicial"].min()
-                dt_max = df_faz["dt_hr_local_inicial"].max()
+            # ❌ FILTRO FINAL – ÁREA MÍNIMA TRABALHADA
+            if area_trab_ha < AREA_MIN_HA:
+                continue
 
-                periodo_ini = dt_min.strftime("%d/%m/%Y %H:%M")
-                periodo_fim = dt_max.strftime("%d/%m/%Y %H:%M")
+            pct_trab = area_trab_ha / area_total_ha * 100
+            pct_nao = area_nao_ha / area_total_ha * 100
+
+            dt_min = df_faz["dt_hr_local_inicial"].min()
+            dt_max = df_faz["dt_hr_local_inicial"].max()
+
+            periodo_ini = dt_min.strftime("%d/%m/%Y %H:%M")
+            periodo_fim = dt_max.strftime("%d/%m/%Y %H:%M")
+
+            with st.expander(f"🗺️ Mapa – Fazenda {FAZENDA_ID}", expanded=True):
 
                 # =========================================================
                 # PLOT
@@ -236,7 +249,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 )
                 base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.2)
 
-                # LEGENDA
                 ax.legend(
                     handles=[
                         mpatches.Patch(color=COR_TRABALHADA, label="Área trabalhada"),
@@ -250,7 +262,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                     fontsize=13
                 )
 
-                # RESUMO LATERAL
                 pos = ax.get_position()
                 fig.text(
                     pos.x1 + 0.01,
@@ -273,7 +284,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 brasilia = pytz.timezone("America/Sao_Paulo")
                 hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
 
-                # DISCLAIMER
                 fig.text(
                     0.5,
                     0.08,
@@ -283,7 +293,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                     color=COR_RODAPE
                 )
 
-                # RODAPÉ
                 fig.text(
                     0.5,
                     0.045,
