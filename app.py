@@ -254,17 +254,19 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                         mpatches.Patch(color=COR_TRABALHADA, label="Área trabalhada"),
                         mpatches.Patch(color=COR_NAO_TRAB, label="Área não trabalhada"),
                         mpatches.Patch(facecolor="none", edgecolor="black", label="Limites da fazenda"),
-                    ],
-                    loc="lower center",
-                    bbox_to_anchor=(0.5, -0.20),
-                    ncol=3,
-                    frameon=True,
-                    fontsize=13
+                ],
+                loc="lower center",
+                bbox_to_anchor=(centro_mapa, -0.20),
+                bbox_transform=fig.transFigure,
+                ncol=3,
+                frameon=True,
+                fontsize=13
                 )
+
 
                 pos = ax.get_position()
                 fig.text(
-                    pos.x1 + 0.01,
+                    pos.x1 + 0.015,
                     0.5,
                     f"Resumo da operação\n\n"
                     f"Fazenda: {FAZENDA_ID} – {nome_fazenda}\n\n"
@@ -285,7 +287,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
 
                 fig.text(
-                    0.5,
+                    centro_mapa,
                     0.08,
                     "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos.",
                     ha="center",
@@ -293,8 +295,9 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                     color=COR_RODAPE
                 )
 
+
                 fig.text(
-                    0.5,
+                    centro_mapa,
                     0.045,
                     "Relatório elaborado com base em dados da Solinftec.",
                     ha="center",
@@ -303,7 +306,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 )
 
                 fig.text(
-                    0.5,
+                    centro_mapa,
                     0.025,
                     f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
                     ha="center",
@@ -311,7 +314,8 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                     color=COR_RODAPE
                 )
 
-                plt.subplots_adjust(left=0.05, right=0.90, bottom=0.32)
+
+                plt.subplots_adjust(left=0.10, right=0.78, bottom=0.32, top=0.90)
                 ax.axis("off")
 
                 st.pyplot(fig)
