@@ -20,9 +20,7 @@ import os
 import pytz
 from datetime import datetime
 
-# =========================================================
 # CONFIG STREAMLIT
-# =========================================================
 st.set_page_config(
     page_title="Área Trabalhada – Solinftec",
     layout="wide"
@@ -35,9 +33,7 @@ st.markdown(
     "dados operacionais da **Solinftec** e base cartográfica da fazenda."
 )
 
-# =========================================================
 # BOTÃO MAIOR (CSS)
-# =========================================================
 st.markdown(
     """
     <style>
@@ -52,9 +48,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# =========================================================
 # UPLOAD DE ARQUIVOS
-# =========================================================
 uploaded_zip = st.file_uploader(
     "📦 Upload do ZIP contendo o CSV da Solinftec",
     type=["zip"]
@@ -67,9 +61,7 @@ uploaded_gpkg = st.file_uploader(
 
 GERAR = st.button("▶️ Gerar mapa")
 
-# =========================================================
 # SIDEBAR – PARÂMETROS
-# =========================================================
 st.sidebar.header("⚙️ Parâmetros")
 
 TEMPO_MAX_SEG = 60
@@ -82,7 +74,6 @@ LARGURA_IMPLEMENTO = st.sidebar.number_input(
     step=0.5
 )
 
-# ✅ NOVO PARÂMETRO – ÁREA MÍNIMA
 AREA_MIN_HA = st.sidebar.number_input(
     "Área mínima trabalhada (ha)",
     min_value=0.0,
@@ -90,9 +81,7 @@ AREA_MIN_HA = st.sidebar.number_input(
     step=0.1
 )
 
-# =========================================================
 # CORES E FIGURA
-# =========================================================
 COR_TRABALHADA = "#61b27f"
 COR_NAO_TRAB = "#f8cfc6"
 COR_CAIXA = "#f1f8ff"
@@ -101,16 +90,12 @@ COR_RODAPE = "#7a7a7a"
 FIG_WIDTH = 25
 FIG_HEIGHT = 9
 
-# =========================================================
 # PROCESSAMENTO
-# =========================================================
 if uploaded_zip and uploaded_gpkg and GERAR:
 
     with tempfile.TemporaryDirectory() as tmpdir:
 
-        # -------------------------
         # Extrai ZIP
-        # -------------------------
         zip_path = os.path.join(tmpdir, "dados.zip")
         with open(zip_path, "wb") as f:
             f.write(uploaded_zip.read())
@@ -125,9 +110,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
         csv_path = os.path.join(tmpdir, csv_files[0])
 
-        # -------------------------
         # Leitura CSV
-        # -------------------------
         df = pd.read_csv(csv_path, sep=";", encoding="latin1", engine="python")
 
         df["dt_hr_local_inicial"] = pd.to_datetime(df["dt_hr_local_inicial"], errors="coerce")
@@ -139,12 +122,9 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             (df["cd_operacao_parada"] == -1)
         ].copy()
 
-        # 🔧 CORREÇÃO CRÍTICA: garantir mesmo tipo
         df["cd_fazenda"] = df["cd_fazenda"].astype(str)
 
-        # -------------------------
         # GPKG
-        # -------------------------
         gpkg_path = os.path.join(tmpdir, "base.gpkg")
         with open(gpkg_path, "wb") as f:
             f.write(uploaded_gpkg.read())
@@ -152,9 +132,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
         base = gpd.read_file(gpkg_path)
         base["FAZENDA"] = base["FAZENDA"].astype(str)
 
-        # =========================================================
         # LOOP POR FAZENDA
-        # =========================================================
         for FAZENDA_ID in df["cd_fazenda"].dropna().unique():
 
             df_faz = df[df["cd_fazenda"] == FAZENDA_ID].copy()
@@ -165,9 +143,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
             nome_fazenda = base_fazenda["PROPRIEDADE"].iloc[0]
 
-            # -------------------------
             # Projeção
-            # -------------------------
             gdf_pts = gpd.GeoDataFrame(
                 df_faz,
                 geometry=gpd.points_from_xy(
@@ -182,9 +158,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
             geom_fazenda = unary_union(base_fazenda.geometry)
 
-            # -------------------------
             # Linhas
-            # -------------------------
             linhas = []
             for _, grupo in gdf_pts.groupby("cd_equipamento"):
                 grupo = grupo.sort_values("dt_hr_local_inicial")
@@ -216,14 +190,11 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             area_trabalhada = unary_union(buffer_linhas).intersection(geom_fazenda)
             area_nao_trabalhada = geom_fazenda.difference(area_trabalhada)
 
-            # -------------------------
             # Estatísticas
-            # -------------------------
             area_total_ha = base_fazenda.geometry.area.sum() / 10000
             area_trab_ha = area_trabalhada.area / 10000
             area_nao_ha = area_nao_trabalhada.area / 10000
 
-            # ❌ FILTRO FINAL – ÁREA MÍNIMA TRABALHADA
             if area_trab_ha < AREA_MIN_HA:
                 continue
 
@@ -238,9 +209,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
             with st.expander(f"🗺️ Mapa – {nome_fazenda} (clique para expandir)", expanded=False):
 
-                # =========================================================
                 # PLOT
-                # =========================================================
                 fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
 
                 base_fazenda.plot(ax=ax, facecolor=COR_NAO_TRAB, edgecolor="black", linewidth=1.2)
