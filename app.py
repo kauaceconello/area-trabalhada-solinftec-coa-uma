@@ -1,197 +1,283 @@
+# =========================================================
+# APP STREAMLIT – ÁREA TRABALHADA (SOLINFTEC)
+# Desenvolvido por Kauã Ceconello
+# =========================================================
+
 import streamlit as st
 import pandas as pd
 import geopandas as gpd
-import matplotlib.pyplot as plt
+import numpy as np
+
+from shapely.geometry import Point, LineString
 from shapely.ops import unary_union
-from shapely.geometry import LineString
+
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+
 import zipfile
-import io
+import tempfile
+import os
 import pytz
+from datetime import datetime
 
 # =========================================================
 # CONFIG STREAMLIT
 # =========================================================
-st.set_page_config(layout="wide")
-st.title("Mapas de Área Trabalhada por Fazenda")
+st.set_page_config(
+    page_title="Área Trabalhada – Solinftec",
+    layout="wide"
+)
+
+st.title("📍 Área Trabalhada – Solinftec")
+
+st.markdown(
+    "Aplicação para cálculo e visualização da **área trabalhada** com base em "
+    "dados operacionais da **Solinftec** e base cartográfica da fazenda."
+)
 
 # =========================================================
 # UPLOAD DE ARQUIVOS
 # =========================================================
-zip_file = st.file_uploader("Upload do ZIP contendo o CSV", type=["zip"])
-gpkg_file = st.file_uploader("Upload da Base Cartográfica (GPKG)", type=["gpkg"])
+uploaded_zip = st.file_uploader(
+    "📦 Upload do arquivo ZIP contendo o CSV da Solinftec",
+    type=["zip"]
+)
 
-if not zip_file or not gpkg_file:
-    st.warning("Faça upload do ZIP com o CSV e do arquivo GPKG.")
-    st.stop()
-
-# =========================================================
-# LEITURA DO CSV A PARTIR DO ZIP
-# =========================================================
-with zipfile.ZipFile(zip_file) as z:
-    csv_name = [f for f in z.namelist() if f.endswith(".csv")][0]
-    with z.open(csv_name) as f:
-        df = pd.read_csv(f)
-
-# =========================================================
-# LEITURA DO GPKG
-# =========================================================
-fazendas_gdf = gpd.read_file(gpkg_file)
-
-# =========================================================
-# PADRONIZAÇÕES
-# =========================================================
-st.write("Colunas disponíveis no dataframe:")
-st.write(df.columns.tolist())
-
-if "dt_hr_local_inicial" in df.columns:
-    df["dt_hr_local_inicial"] = pd.to_datetime(
-        df["dt_hr_local_inicial"], errors="coerce"
-    )
-else:
-    st.warning("Coluna 'dt_hr_local_inicial' não encontrada no arquivo.")
-
-tz_brasilia = pytz.timezone("America/Sao_Paulo")
-df["dt_hr_local_inicial"] = df["dt_hr_local_inicial"].dt.tz_localize(
-    tz_brasilia, nonexistent="NaT", ambiguous="NaT"
+uploaded_gpkg = st.file_uploader(
+    "🗺️ Upload da base cartográfica da fazenda (GPKG)",
+    type=["gpkg"]
 )
 
 # =========================================================
-# CORES
+# PARÂMETROS INTERATIVOS
 # =========================================================
+st.sidebar.header("⚙️ Parâmetros")
+
+TEMPO_MAX_SEG = st.sidebar.number_input(
+    "Tempo máximo entre pontos (segundos)",
+    min_value=5,
+    max_value=300,
+    value=60,
+    step=5
+)
+
+LARGURA_IMPLEMENTO = st.sidebar.number_input(
+    "Largura do implemento (metros)",
+    min_value=1.0,
+    max_value=30.0,
+    value=6.0,
+    step=0.5
+)
+
 COR_TRABALHADA = "#61b27f"
-COR_NAO_TRABALHADA = "#f6b1b2"
-COR_RESUMO = "#f1f8ff"
+COR_NAO_TRAB = "#f8cfc6"
+COR_RODAPE = "#7a7a7a"
+
+FIG_WIDTH = 25
+FIG_HEIGHT = 9
 
 # =========================================================
-# FAZENDAS PRESENTES NO CSV
+# PROCESSAMENTO
 # =========================================================
-fazendas_csv = df["cd_fazenda"].dropna().unique()
+if uploaded_zip and uploaded_gpkg:
 
-# =========================================================
-# LOOP POR FAZENDA
-# =========================================================
-for cod_fazenda in fazendas_csv:
+    with tempfile.TemporaryDirectory() as tmpdir:
 
-    st.subheader(f"Mapa – Fazenda {cod_fazenda}")
+        # -------------------------
+        # Extrai ZIP
+        # -------------------------
+        zip_path = os.path.join(tmpdir, "dados.zip")
+        with open(zip_path, "wb") as f:
+            f.write(uploaded_zip.read())
 
-    df_faz = df[df["cd_fazenda"] == cod_fazenda]
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall(tmpdir)
 
-    faz_gdf = fazendas_gdf[fazendas_gdf["FAZENDA"] == cod_fazenda]
+        csv_files = [f for f in os.listdir(tmpdir) if f.lower().endswith(".csv")]
 
-    if faz_gdf.empty:
-        st.error(f"Fazenda {cod_fazenda} não encontrada no GPKG.")
-        continue
+        if not csv_files:
+            st.error("❌ Nenhum arquivo CSV encontrado dentro do ZIP.")
+            st.stop()
 
-    faz_geom = faz_gdf.geometry.iloc[0]
+        csv_path = os.path.join(tmpdir, csv_files[0])
 
-    # =========================================================
-    # LINHAS DE TRABALHO
-    # =========================================================
-    linhas = []
-    for _, row in df_faz.iterrows():
-        try:
-            linhas.append(
-                LineString(
-                    [(row["longitude"], row["latitude"]),
-                     (row["longitude_fim"], row["latitude_fim"])]
-                )
+        # -------------------------
+        # Leitura CSV
+        # -------------------------
+        df = pd.read_csv(
+            csv_path,
+            sep=";",
+            encoding="latin1",
+            engine="python"
+        )
+
+        df["dt_hr_local_inicial"] = pd.to_datetime(df["dt_hr_local_inicial"], errors="coerce")
+        df["vl_latitude_inicial"] = pd.to_numeric(df["vl_latitude_inicial"], errors="coerce")
+        df["vl_longitude_inicial"] = pd.to_numeric(df["vl_longitude_inicial"], errors="coerce")
+
+        df = df.dropna(subset=[
+            "cd_fazenda",
+            "dt_hr_local_inicial",
+            "vl_latitude_inicial",
+            "vl_longitude_inicial"
+        ])
+
+        if df.empty:
+            st.error("❌ O CSV não possui dados válidos.")
+            st.stop()
+
+        # -------------------------
+        # Leitura GPKG
+        # -------------------------
+        gpkg_path = os.path.join(tmpdir, "base.gpkg")
+        with open(gpkg_path, "wb") as f:
+            f.write(uploaded_gpkg.read())
+
+        base = gpd.read_file(gpkg_path)
+
+        # =========================================================
+        # LOOP POR FAZENDA
+        # =========================================================
+        for FAZENDA_ID in sorted(df["cd_fazenda"].unique()):
+
+            st.subheader(f"🗺️ Mapa – Fazenda {FAZENDA_ID}")
+
+            df_faz = df[
+                (df["cd_fazenda"] == FAZENDA_ID) &
+                (df["cd_estado"] == "E") &
+                (df["cd_operacao_parada"] == -1)
+            ].copy()
+
+            if df_faz.empty:
+                st.warning(f"⚠️ Fazenda {FAZENDA_ID}: sem dados produtivos.")
+                continue
+
+            base_fazenda = base[base["FAZENDA"] == FAZENDA_ID].copy()
+
+            if base_fazenda.empty:
+                st.warning(f"⚠️ Fazenda {FAZENDA_ID} não encontrada no GPKG.")
+                continue
+
+            nome_fazenda = (
+                base_fazenda["PROPRIEDADE"].iloc[0]
+                if "PROPRIEDADE" in base_fazenda.columns
+                else ""
             )
-        except:
-            pass
 
-    if not linhas:
-        st.warning("Sem linhas válidas para esta fazenda.")
-        continue
+            # -------------------------
+            # GeoDataFrame pontos
+            # -------------------------
+            gdf_pts = gpd.GeoDataFrame(
+                df_faz,
+                geometry=gpd.points_from_xy(
+                    df_faz["vl_longitude_inicial"],
+                    df_faz["vl_latitude_inicial"]
+                ),
+                crs="EPSG:4326"
+            )
 
-    linhas_union = unary_union(linhas)
+            base_fazenda = base_fazenda.to_crs(epsg=31983)
+            gdf_pts = gdf_pts.to_crs(epsg=31983)
 
-    # =========================================================
-    # BUFFER (parametrizável no futuro)
-    # =========================================================
-    largura_buffer = 5  # metros
-    area_trabalhada = gpd.GeoSeries(linhas_union).buffer(largura_buffer)
+            geom_fazenda = unary_union(base_fazenda.geometry)
 
-    # limitar ao contorno da fazenda
-    area_trabalhada = area_trabalhada.intersection(faz_geom)
+            # -------------------------
+            # Construção das linhas
+            # -------------------------
+            linhas = []
 
-    # área não trabalhada
-    area_nao_trabalhada = faz_geom.difference(unary_union(area_trabalhada))
+            for equipamento, grupo in gdf_pts.groupby("cd_equipamento"):
+                grupo = grupo.sort_values("dt_hr_local_inicial")
 
-    # =========================================================
-    # FIGURA
-    # =========================================================
-    fig, ax = plt.subplots(figsize=(8, 10))
+                linha = []
+                ultimo_tempo = None
 
-    gpd.GeoSeries(area_nao_trabalhada).plot(
-        ax=ax,
-        color=COR_NAO_TRABALHADA,
-        edgecolor="black",
-        linewidth=1,
-        label="Área não trabalhada"
-    )
+                for _, row in grupo.iterrows():
+                    if ultimo_tempo is None:
+                        linha = [row.geometry]
+                    else:
+                        delta = (row["dt_hr_local_inicial"] - ultimo_tempo).total_seconds()
+                        if delta <= TEMPO_MAX_SEG:
+                            linha.append(row.geometry)
+                        else:
+                            if len(linha) >= 2:
+                                linhas.append(LineString(linha))
+                            linha = [row.geometry]
 
-    gpd.GeoSeries(area_trabalhada).plot(
-        ax=ax,
-        color=COR_TRABALHADA,
-        edgecolor="black",
-        linewidth=1,
-        label="Área trabalhada"
-    )
+                    ultimo_tempo = row["dt_hr_local_inicial"]
 
-    gpd.GeoSeries(faz_geom).boundary.plot(
-        ax=ax,
-        color="black",
-        linewidth=2,
-        label="Limites da fazenda"
-    )
+                if len(linha) >= 2:
+                    linhas.append(LineString(linha))
 
-    ax.set_axis_off()
+            if not linhas:
+                st.warning("⚠️ Nenhuma linha válida para gerar área.")
+                continue
 
-    # =========================================================
-    # LEGENDA AJUSTADA
-    # =========================================================
-    ax.legend(
-        loc="lower center",
-        bbox_to_anchor=(0.5, -0.08),
-        ncol=3,
-        frameon=True,
-        fontsize=11,
-        borderpad=0.6,
-        handletextpad=0.8
-    )
+            gdf_linhas = gpd.GeoDataFrame(geometry=linhas, crs=base_fazenda.crs)
 
-    # =========================================================
-    # RESUMO DA OPERAÇÃO
-    # =========================================================
-    periodo_ini = df_faz["dt_hr_local_inicial"].min()
-    periodo_fim = df_faz["dt_hr_local_inicial"].max()
+            buffer_linhas = gdf_linhas.buffer(LARGURA_IMPLEMENTO / 2)
+            area_trabalhada = unary_union(buffer_linhas).intersection(geom_fazenda)
+            area_nao_trabalhada = geom_fazenda.difference(area_trabalhada)
 
-    if pd.notna(periodo_ini) and pd.notna(periodo_fim):
-        periodo_txt = (
-            f"{periodo_ini.strftime('%d/%m/%Y %H:%M')} "
-            f"a {periodo_fim.strftime('%d/%m/%Y %H:%M')}"
-        )
-    else:
-        periodo_txt = "Período indisponível"
+            # -------------------------
+            # Plot
+            # -------------------------
+            fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
 
-    resumo = (
-        f"Fazenda: {cod_fazenda}\n"
-        f"Período: {periodo_txt}\n"
-        f"Largura do buffer: {largura_buffer} m"
-    )
+            minx, miny, maxx, maxy = base_fazenda.total_bounds
+            pad = 0.08
 
-    ax.text(
-        0.02, 0.98,
-        resumo,
-        transform=ax.transAxes,
-        fontsize=11,
-        va="top",
-        ha="left",
-        bbox=dict(
-            boxstyle="round,pad=0.6",
-            facecolor=COR_RESUMO,
-            edgecolor="black"
-        )
-    )
+            ax.set_xlim(minx - (maxx-minx)*pad, maxx + (maxx-minx)*pad)
+            ax.set_ylim(miny - (maxy-miny)*pad, maxy + (maxy-miny)*pad)
+            ax.set_aspect("equal")
 
-    st.pyplot(fig)
+            base_fazenda.plot(ax=ax, facecolor=COR_NAO_TRAB, edgecolor="black", linewidth=1.2)
+            gpd.GeoSeries(area_trabalhada, crs=base_fazenda.crs).plot(
+                ax=ax, color=COR_TRABALHADA, alpha=0.9
+            )
+            base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.2)
+
+            legenda = [
+                mpatches.Patch(color=COR_TRABALHADA, label="Área trabalhada"),
+                mpatches.Patch(color=COR_NAO_TRAB, label="Área não trabalhada"),
+                mpatches.Patch(facecolor="none", edgecolor="black", label="Limite da fazenda"),
+            ]
+
+            ax.legend(
+                handles=legenda,
+                loc="lower center",
+                bbox_to_anchor=(0.5, 0.12),
+                ncol=3,
+                frameon=True,
+                fontsize=13,
+                handlelength=1.2,
+                labelspacing=0.6,
+                borderpad=0.8
+            )
+
+            brasilia = pytz.timezone("America/Sao_Paulo")
+            agora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
+
+            fig.suptitle(
+                f"Área trabalhada – Fazenda {FAZENDA_ID} – {nome_fazenda}",
+                fontsize=16
+            )
+
+            fig.text(
+                0.5,
+                0.03,
+                "Relatório elaborado com base em dados da Solinftec. "
+                f"Desenvolvido por Kauã Ceconello • Gerado em {agora}",
+                ha="center",
+                va="bottom",
+                fontsize=10,
+                color=COR_RODAPE
+            )
+
+            ax.axis("off")
+            plt.subplots_adjust(bottom=0.20)
+
+            st.pyplot(fig)
+
+else:
+    st.info("⬆️ Envie o ZIP com o CSV e o arquivo GPKG para gerar os mapas.")
