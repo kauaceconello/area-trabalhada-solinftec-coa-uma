@@ -285,6 +285,47 @@ ax.set_aspect("equal")
             ax.axis("off")
             plt.subplots_adjust(bottom=0.20)
 
+# CAIXA DE RESUMO (lado esquerdo do mapa)
+# -------------------------------------------------
+area_total_ha = base_fazenda.geometry.area.sum() / 10000
+area_trab_ha = area_trabalhada.area / 10000 if not area_trabalhada.is_empty else 0
+area_nao_ha = area_total_ha - area_trab_ha
+
+pct_trab = (area_trab_ha / area_total_ha * 100) if area_total_ha else 0
+pct_nao = 100 - pct_trab
+
+dt_min = df_faz["dt_hr_local_inicial"].min()
+dt_max = df_faz["dt_hr_local_inicial"].max()
+
+periodo_txt = (
+    f"{dt_min.strftime('%d/%m/%Y %H:%M')} a {dt_max.strftime('%d/%m/%Y %H:%M')}"
+    if pd.notna(dt_min) and pd.notna(dt_max)
+    else "Período indisponível"
+)
+
+resumo_txt = (
+    f"Fazenda: {FAZENDA_ID}\n"
+    f"Área total: {area_total_ha:,.2f} ha\n"
+    f"Área trabalhada: {area_trab_ha:,.2f} ha ({pct_trab:.1f}%)\n"
+    f"Área não trabalhada: {area_nao_ha:,.2f} ha ({pct_nao:.1f}%)\n\n"
+    f"Período:\n{periodo_txt}\n\n"
+    f"Largura do implemento:\n{LARGURA_IMPLEMENTO:.1f} m"
+)
+
+ax.text(
+    0.02, 0.98,
+    resumo_txt,
+    transform=ax.transAxes,
+    ha="left",
+    va="top",
+    fontsize=12,
+    bbox=dict(
+        boxstyle="round,pad=0.6",
+        facecolor="#f1f8ff",
+        edgecolor="black"
+    )
+)
+
             st.pyplot(fig)
 
 else:
