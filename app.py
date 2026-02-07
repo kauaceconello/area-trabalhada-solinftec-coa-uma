@@ -236,7 +236,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             periodo_ini = dt_min.strftime("%d/%m/%Y %H:%M")
             periodo_fim = dt_max.strftime("%d/%m/%Y %H:%M")
 
-            with st.expander(f"🗺️ Mapa – Fazenda {FAZENDA_ID}", expanded=True):
+            with st.expander(f"🗺️ Mapa – {nome_fazenda} (clique para expandir)", expanded=False):
 
                 # =========================================================
                 # PLOT
