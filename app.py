@@ -209,23 +209,28 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
             with st.expander(f"🗺️ Mapa – {nome_fazenda} (clique para expandir)", expanded=False):
 
-                # PLOT
-                fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
-
-                base_fazenda.plot(ax=ax, facecolor=COR_NAO_TRAB, edgecolor="black", linewidth=1.2)
-                gpd.GeoSeries(area_trabalhada, crs=base_fazenda.crs).plot(
-                    ax=ax, color=COR_TRABALHADA, alpha=0.9
-                )
-                base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.2)
-
-                pos = ax.get_position()
-                centro_mapa = (pos.x0 + pos.x1) / 2
-
-                ax.legend(
-                    handles=[
-                        mpatches.Patch(color=COR_TRABALHADA, label="Área trabalhada"),
-                        mpatches.Patch(color=COR_NAO_TRAB, label="Área não trabalhada"),
-                        mpatches.Patch(facecolor="none", edgecolor="black", label="Limites da fazenda"),
+               # PLOT
+            fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
+            
+            # ⬅️ AJUSTE DE LAYOUT PRIMEIRO (cria espaço à direita e centraliza visualmente)
+            plt.subplots_adjust(left=0.35, right=0.78, bottom=0.32, top=0.90)
+            
+            base_fazenda.plot(ax=ax, facecolor=COR_NAO_TRAB, edgecolor="black", linewidth=1.2)
+            gpd.GeoSeries(area_trabalhada, crs=base_fazenda.crs).plot(
+                ax=ax, color=COR_TRABALHADA, alpha=0.9
+            )
+            base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.2)
+            
+            # 🔁 RECALCULA O CENTRO APÓS O AJUSTE
+            pos = ax.get_position()
+            centro_mapa = (pos.x0 + pos.x1) / 2
+            
+            # LEGENDA
+            ax.legend(
+                handles=[
+                    mpatches.Patch(color=COR_TRABALHADA, label="Área trabalhada"),
+                    mpatches.Patch(color=COR_NAO_TRAB, label="Área não trabalhada"),
+                    mpatches.Patch(facecolor="none", edgecolor="black", label="Limites da fazenda"),
                 ],
                 loc="lower center",
                 bbox_to_anchor=(centro_mapa, 0.10),
@@ -233,64 +238,62 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 ncol=3,
                 frameon=True,
                 fontsize=13
-                )
-
-
-                pos = ax.get_position()
-                fig.text(
-                    pos.x1 + 0.015,
-                    0.5,
-                    f"Resumo da operação\n\n"
-                    f"Fazenda: {FAZENDA_ID} – {nome_fazenda}\n\n"
-                    f"Área total: {area_total_ha:.2f} ha\n"
-                    f"Trabalhada: {area_trab_ha:.2f} ha ({pct_trab:.1f}%)\n"
-                    f"Não trabalhada: {area_nao_ha:.2f} ha ({pct_nao:.1f}%)\n\n"
-                    f"Período:\n{periodo_ini} até {periodo_fim}",
-                    fontsize=11,
-                    bbox=dict(boxstyle="round,pad=0.8", facecolor=COR_CAIXA, edgecolor="black")
-                )
-
-                fig.suptitle(
-                    f"Área trabalhada – Fazenda {FAZENDA_ID} – {nome_fazenda}",
-                    fontsize=15
-                )
-
-                brasilia = pytz.timezone("America/Sao_Paulo")
-                hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
-
-                fig.text(
-                    centro_mapa,
-                    0.055,
-                    "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos.",
-                    ha="center",
-                    fontsize=9,
-                    color=COR_RODAPE
-                )
-
-
-                fig.text(
-                    centro_mapa,
-                    0.030,
-                    "Relatório elaborado com base em dados da Solinftec.",
-                    ha="center",
-                    fontsize=10,
-                    color=COR_RODAPE
-                )
-
-                fig.text(
-                    centro_mapa,
-                    0.010,
-                    f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
-                    ha="center",
-                    fontsize=10,
-                    color=COR_RODAPE
-                )
-
-
-                plt.subplots_adjust(left=0.35, right=0.78, bottom=0.32, top=0.90)
-                ax.axis("off")
-
-                st.pyplot(fig)
+            )
+            
+            # RESUMO LATERAL (mantido)
+            fig.text(
+                pos.x1 + 0.015,
+                0.5,
+                f"Resumo da operação\n\n"
+                f"Fazenda: {FAZENDA_ID} – {nome_fazenda}\n\n"
+                f"Área total: {area_total_ha:.2f} ha\n"
+                f"Trabalhada: {area_trab_ha:.2f} ha ({pct_trab:.1f}%)\n"
+                f"Não trabalhada: {area_nao_ha:.2f} ha ({pct_nao:.1f}%)\n\n"
+                f"Período:\n{periodo_ini} até {periodo_fim}",
+                fontsize=11,
+                bbox=dict(boxstyle="round,pad=0.8", facecolor=COR_CAIXA, edgecolor="black")
+            )
+            
+            # TÍTULO ALINHADO AO MAPA
+            fig.suptitle(
+                f"Área trabalhada – Fazenda {FAZENDA_ID} – {nome_fazenda}",
+                fontsize=15,
+                x=centro_mapa
+            )
+            
+            brasilia = pytz.timezone("America/Sao_Paulo")
+            hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
+            
+            # DISCLAIMER + RODAPÉ (AGORA CENTRALIZADOS CORRETAMENTE)
+            fig.text(
+                centro_mapa,
+                0.055,
+                "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos.",
+                ha="center",
+                fontsize=9,
+                color=COR_RODAPE
+            )
+            
+            fig.text(
+                centro_mapa,
+                0.030,
+                "Relatório elaborado com base em dados da Solinftec.",
+                ha="center",
+                fontsize=10,
+                color=COR_RODAPE
+            )
+            
+            fig.text(
+                centro_mapa,
+                0.010,
+                f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
+                ha="center",
+                fontsize=10,
+                color=COR_RODAPE
+            )
+            
+            ax.axis("off")
+            st.pyplot(fig)
 
 else:
     st.info("⬆️ Envie os arquivos e clique em **Gerar mapa**.")
