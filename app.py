@@ -287,7 +287,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 )
 
 
-                plt.subplots_adjust(left=0.10, right=0.78, bottom=0.32, top=0.90)
+                plt.subplots_adjust(left=0.18, right=0.78, bottom=0.32, top=0.90)
                 ax.axis("off")
 
                 st.pyplot(fig)
