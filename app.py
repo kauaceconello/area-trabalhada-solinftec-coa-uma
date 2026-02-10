@@ -273,7 +273,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                     pos.y0 - 0.14,
                     "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos.",
                     ha="center",
-                    fontsize=9,
+                    fontsize=10,
                     color=COR_RODAPE
                 )
 
