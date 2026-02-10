@@ -219,13 +219,18 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
                 fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
 
-                plt.subplots_adjust(left=0.35, right=0.78, bottom=0.32, top=0.88)
+                plt.subplots_adjust(left=0.08, right=0.72, bottom=0.30, top=0.90)
 
                 base_fazenda.plot(ax=ax, facecolor=COR_NAO_TRAB, edgecolor="black", linewidth=1.2)
                 gpd.GeoSeries(area_trabalhada, crs=base_fazenda.crs).plot(
                     ax=ax, color=COR_TRABALHADA, alpha=0.9
                 )
                 base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.2)
+
+                ax.axis("off")
+
+                pos = ax.get_position()
+                centro_mapa = (pos.x0 + pos.x1) / 2
 
                 ax.legend(
                     handles=[
@@ -234,18 +239,16 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                         mpatches.Patch(facecolor="none", edgecolor="black", label="Limites da fazenda"),
                     ],
                     loc="lower center",
-                    bbox_to_anchor=(0.5, 0.14),
+                    bbox_to_anchor=(centro_mapa, pos.y0 - 0.08),
                     bbox_transform=fig.transFigure,
                     ncol=3,
                     frameon=True,
                     fontsize=13
                 )
 
-                pos = ax.get_position()
-
                 fig.text(
-                    pos.x1 + 0.015,
-                    0.5,
+                    pos.x1 + 0.02,
+                    0.50,
                     f"Resumo da operação\n\n"
                     f"Fazenda: {FAZENDA_ID} – {nome_fazenda}\n\n"
                     f"Área total: {area_total_ha:.2f} ha\n"
@@ -259,15 +262,15 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 fig.suptitle(
                     f"Área trabalhada – Fazenda {FAZENDA_ID} – {nome_fazenda}",
                     fontsize=15,
-                    x=0.5
+                    x=centro_mapa
                 )
 
                 brasilia = pytz.timezone("America/Sao_Paulo")
                 hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
 
                 fig.text(
-                    0.5,
-                    0.070,
+                    centro_mapa,
+                    pos.y0 - 0.14,
                     "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos.",
                     ha="center",
                     fontsize=9,
@@ -275,8 +278,8 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 )
 
                 fig.text(
-                    0.5,
-                    0.045,
+                    centro_mapa,
+                    pos.y0 - 0.17,
                     "Relatório elaborado com base em dados da Solinftec.",
                     ha="center",
                     fontsize=10,
@@ -284,15 +287,14 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 )
 
                 fig.text(
-                    0.5,
-                    0.020,
+                    centro_mapa,
+                    pos.y0 - 0.20,
                     f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
                     ha="center",
                     fontsize=10,
                     color=COR_RODAPE
                 )
 
-                ax.axis("off")
                 st.pyplot(fig)
 
 else:
