@@ -107,9 +107,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
     with tempfile.TemporaryDirectory() as tmpdir:
 
-        # -------------------------
-        # Extrai ZIP
-        # -------------------------
         zip_path = os.path.join(tmpdir, "dados.zip")
         with open(zip_path, "wb") as f:
             f.write(uploaded_zip.read())
@@ -124,9 +121,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
         csv_path = os.path.join(tmpdir, csv_files[0])
 
-        # -------------------------
-        # Leitura CSV
-        # -------------------------
         df = pd.read_csv(csv_path, sep=";", encoding="latin1", engine="python")
 
         df["dt_hr_local_inicial"] = pd.to_datetime(df["dt_hr_local_inicial"], errors="coerce")
@@ -140,9 +134,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
         df["cd_fazenda"] = df["cd_fazenda"].astype(str)
 
-        # -------------------------
-        # GPKG
-        # -------------------------
         gpkg_path = os.path.join(tmpdir, "base.gpkg")
         with open(gpkg_path, "wb") as f:
             f.write(uploaded_gpkg.read())
@@ -163,9 +154,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
             nome_fazenda = base_fazenda["PROPRIEDADE"].iloc[0]
 
-            # -------------------------
-            # Projeção
-            # -------------------------
             gdf_pts = gpd.GeoDataFrame(
                 df_faz,
                 geometry=gpd.points_from_xy(
@@ -180,9 +168,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
             geom_fazenda = unary_union(base_fazenda.geometry)
 
-            # -------------------------
-            # Linhas
-            # -------------------------
             linhas = []
             for _, grupo in gdf_pts.groupby("cd_equipamento"):
                 grupo = grupo.sort_values("dt_hr_local_inicial")
@@ -214,9 +199,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             area_trabalhada = unary_union(buffer_linhas).intersection(geom_fazenda)
             area_nao_trabalhada = geom_fazenda.difference(area_trabalhada)
 
-            # -------------------------
-            # Estatísticas
-            # -------------------------
             area_total_ha = base_fazenda.geometry.area.sum() / 10000
             area_trab_ha = area_trabalhada.area / 10000
             area_nao_ha = area_nao_trabalhada.area / 10000
@@ -235,22 +217,15 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
             with st.expander(f"🗺️ Mapa – {nome_fazenda} (clique para expandir)", expanded=False):
 
-                # =========================================================
-                # PLOT
-                # =========================================================
                 fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
 
-                # 🔧 layout primeiro
-                plt.subplots_adjust(left=0.35, right=0.78, bottom=0.32, top=0.90)
+                plt.subplots_adjust(left=0.35, right=0.78, bottom=0.32, top=0.88)
 
                 base_fazenda.plot(ax=ax, facecolor=COR_NAO_TRAB, edgecolor="black", linewidth=1.2)
                 gpd.GeoSeries(area_trabalhada, crs=base_fazenda.crs).plot(
                     ax=ax, color=COR_TRABALHADA, alpha=0.9
                 )
                 base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.2)
-
-                pos = ax.get_position()
-                centro_mapa = (pos.x0 + pos.x1) / 2
 
                 ax.legend(
                     handles=[
@@ -259,12 +234,14 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                         mpatches.Patch(facecolor="none", edgecolor="black", label="Limites da fazenda"),
                     ],
                     loc="lower center",
-                    bbox_to_anchor=(centro_mapa, 0.10),
+                    bbox_to_anchor=(0.5, 0.14),
                     bbox_transform=fig.transFigure,
                     ncol=3,
                     frameon=True,
                     fontsize=13
                 )
+
+                pos = ax.get_position()
 
                 fig.text(
                     pos.x1 + 0.015,
@@ -282,15 +259,15 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 fig.suptitle(
                     f"Área trabalhada – Fazenda {FAZENDA_ID} – {nome_fazenda}",
                     fontsize=15,
-                    x=centro_mapa
+                    x=0.5
                 )
 
                 brasilia = pytz.timezone("America/Sao_Paulo")
                 hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
 
                 fig.text(
-                    centro_mapa,
-                    0.055,
+                    0.5,
+                    0.070,
                     "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos.",
                     ha="center",
                     fontsize=9,
@@ -298,8 +275,8 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 )
 
                 fig.text(
-                    centro_mapa,
-                    0.030,
+                    0.5,
+                    0.045,
                     "Relatório elaborado com base em dados da Solinftec.",
                     ha="center",
                     fontsize=10,
@@ -307,8 +284,8 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 )
 
                 fig.text(
-                    centro_mapa,
-                    0.010,
+                    0.5,
+                    0.020,
                     f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
                     ha="center",
                     fontsize=10,
