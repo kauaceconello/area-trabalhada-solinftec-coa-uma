@@ -1,7 +1,5 @@
-# =========================================================
 # APP STREAMLIT – ÁREA TRABALHADA (SOLINFTEC)
 # Desenvolvido por Kauã Ceconello
-# =========================================================
 
 import streamlit as st
 import pandas as pd
