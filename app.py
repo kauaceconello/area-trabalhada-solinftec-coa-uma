@@ -20,9 +20,7 @@ import os
 import pytz
 from datetime import datetime
 
-# =========================================================
 # CONFIG STREAMLIT
-# =========================================================
 st.set_page_config(
     page_title="Área Trabalhada – Solinftec",
     layout="wide"
@@ -35,9 +33,7 @@ st.markdown(
     "dados operacionais da **Solinftec** e base cartográfica da fazenda."
 )
 
-# =========================================================
 # BOTÃO MAIOR (CSS)
-# =========================================================
 st.markdown(
     """
     <style>
@@ -52,9 +48,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# =========================================================
 # UPLOAD DE ARQUIVOS
-# =========================================================
 uploaded_zip = st.file_uploader(
     "📦 Upload do ZIP contendo o CSV da Solinftec",
     type=["zip"]
@@ -67,9 +61,7 @@ uploaded_gpkg = st.file_uploader(
 
 GERAR = st.button("▶️ Gerar mapa")
 
-# =========================================================
 # SIDEBAR – PARÂMETROS
-# =========================================================
 st.sidebar.header("⚙️ Parâmetros")
 
 TEMPO_MAX_SEG = 60
@@ -89,9 +81,7 @@ AREA_MIN_HA = st.sidebar.number_input(
     step=0.1
 )
 
-# =========================================================
 # CORES E FIGURA
-# =========================================================
 COR_TRABALHADA = "#61b27f"
 COR_NAO_TRAB = "#f8cfc6"
 COR_CAIXA = "#f1f8ff"
@@ -100,9 +90,7 @@ COR_RODAPE = "#7a7a7a"
 FIG_WIDTH = 25
 FIG_HEIGHT = 9
 
-# =========================================================
 # PROCESSAMENTO
-# =========================================================
 if uploaded_zip and uploaded_gpkg and GERAR:
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -141,9 +129,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
         base = gpd.read_file(gpkg_path)
         base["FAZENDA"] = base["FAZENDA"].astype(str)
 
-        # =========================================================
         # LOOP POR FAZENDA
-        # =========================================================
         for FAZENDA_ID in df["cd_fazenda"].dropna().unique():
 
             df_faz = df[df["cd_fazenda"] == FAZENDA_ID].copy()
