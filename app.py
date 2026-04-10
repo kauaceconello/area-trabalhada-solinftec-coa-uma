@@ -17,7 +17,6 @@ import tempfile
 import os
 import pytz
 from datetime import datetime
-from io import BytesIO
 
 # CONFIG STREAMLIT
 st.set_page_config(
@@ -92,7 +91,10 @@ COR_RODAPE = "#7a7a7a"
 FIG_WIDTH = 25
 FIG_HEIGHT = 9
 
+
+# =========================
 # PROCESSAMENTO
+# =========================
 if uploaded_zip and uploaded_gpkg and GERAR:
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -137,6 +139,10 @@ if uploaded_zip and uploaded_gpkg and GERAR:
         if "GLEBA" in base.columns:
             base["GLEBA"] = base["GLEBA"].astype(str)
 
+
+        # =========================
+        # LOOP FAZENDAS
+        # =========================
         for FAZENDA_ID in df["cd_fazenda"].dropna().unique():
 
             df_faz = df[df["cd_fazenda"] == FAZENDA_ID].copy()
@@ -161,7 +167,9 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
             geom_fazenda = unary_union(base_fazenda.geometry)
 
+            # =========================
             # LINHAS
+            # =========================
             linhas = []
             for _, grupo in gdf_pts.groupby("cd_equipamento"):
                 grupo = grupo.sort_values("dt_hr_local_inicial")
@@ -211,11 +219,16 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             pct_trab = round(area_trab_ha / area_total_ha * 100, 1)
             pct_nao = round(area_nao_ha / area_total_ha * 100, 1)
 
+            dt_min = df_faz["dt_hr_local_inicial"].min()
+            dt_max = df_faz["dt_hr_local_inicial"].max()
+
+            periodo_ini = dt_min.strftime("%d/%m/%Y %H:%M")
+            periodo_fim = dt_max.strftime("%d/%m/%Y %H:%M")
+
             # =========================
-            # TALHÕES (DATAFRAME)
+            # TALHÕES (TABELA)
             # =========================
             df_talhoes = None
-            excel_buffer = None
 
             if MOSTRAR_TALHOES and "TALHAO" in base_fazenda.columns and "GLEBA" in base_fazenda.columns:
 
@@ -227,23 +240,19 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
                 if not intersec.empty:
                     intersec["area_trab"] = intersec.geometry.area / 10000
+
                     df_talhoes = intersec.groupby(["GLEBA", "TALHAO"])["area_trab"].sum().reset_index()
-                    df_talhoes["area_trab"] = df_talhoes["area_trab"].round(2)
 
-            # PERÍODO
-            dt_min = df_faz["dt_hr_local_inicial"].min()
-            dt_max = df_faz["dt_hr_local_inicial"].max()
-
-            periodo_ini = dt_min.strftime("%d/%m/%Y %H:%M")
-            periodo_fim = dt_max.strftime("%d/%m/%Y %H:%M")
+                    # deixar bonito
+                    df_talhoes.columns = ["Gleba", "Talhão", "Área Trabalhada (ha)"]
+                    df_talhoes["Área Trabalhada (ha)"] = df_talhoes["Área Trabalhada (ha)"].round(2)
 
             # =========================
-            # MAPA (INALTERADO)
+            # MAPA (INTOCADO VISUALMENTE)
             # =========================
             with st.expander(f"🗺️ Mapa – {nome_fazenda}", expanded=False):
 
                 fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
-
                 plt.subplots_adjust(left=0.15, right=0.85, bottom=0.25, top=0.88)
 
                 base_fazenda.plot(ax=ax, facecolor=COR_NAO_TRAB, edgecolor="black", linewidth=1.2)
@@ -284,13 +293,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                     bbox=dict(boxstyle="round,pad=0.8", facecolor=COR_CAIXA, edgecolor="black")
                 )
 
-                fig.suptitle(
-                    f"Área trabalhada – Fazenda {FAZENDA_ID} – {nome_fazenda}",
-                    fontsize=15,
-                    x=centro_mapa
-                )
-
-                # DISCLAMER (INTACTO)
                 brasilia = pytz.timezone("America/Sao_Paulo")
                 hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
 
@@ -324,24 +326,16 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 st.pyplot(fig)
 
                 # =========================
-                # TABELA STREAMLIT (NOVO)
+                # TABELA BONITA (PRINT FRIENDLY)
                 # =========================
                 if df_talhoes is not None:
 
-                    st.markdown("### 🌾 Gleba / Talhão")
+                    st.markdown("### 🌾 Área por Gleba / Talhão")
 
-                    st.dataframe(df_talhoes, use_container_width=True, hide_index=True)
-
-                    # EXPORT EXCEL
-                    buffer = BytesIO()
-                    df_talhoes.to_excel(buffer, index=False)
-                    buffer.seek(0)
-
-                    st.download_button(
-                        "📥 Exportar planilha de talhões",
-                        data=buffer,
-                        file_name=f"talhoes_{FAZENDA_ID}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    st.dataframe(
+                        df_talhoes,
+                        use_container_width=True,
+                        hide_index=True
                     )
 
 else:
