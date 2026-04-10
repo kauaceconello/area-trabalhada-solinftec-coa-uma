@@ -31,7 +31,6 @@ st.markdown(
     "dados operacionais da **Solinftec** e base cartográfica da Usina Monte Alegre."
 )
 
-# BOTÃO MAIOR (CSS)
 st.markdown(
     """
     <style>
@@ -68,7 +67,7 @@ MULTIPLICADOR_BUFFER = st.sidebar.number_input(
     "Tamanho do Buffer",
     min_value=1.0,
     max_value=10.0,
-    value=1.5,
+    value=2.5,
     step=0.1
 )
 
@@ -210,7 +209,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
                 fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
 
-                # 🔥 CENTRALIZAÇÃO REAL
                 plt.subplots_adjust(left=0.15, right=0.85, bottom=0.25, top=0.88)
 
                 base_fazenda.plot(ax=ax, facecolor=COR_NAO_TRAB, edgecolor="black", linewidth=1.2)
