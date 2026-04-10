@@ -28,7 +28,7 @@ st.title("📍 Área Trabalhada – Solinftec")
 
 st.markdown(
     "Aplicação para cálculo e visualização da **área trabalhada** com base em "
-    "dados operacionais da **Solinftec** e base cartográfica da fazenda."
+    "dados operacionais da **Solinftec** e base cartográfica da Usina Monte Alegre."
 )
 
 # BOTÃO MAIOR (CSS)
