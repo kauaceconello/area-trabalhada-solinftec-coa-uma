@@ -78,6 +78,17 @@ AREA_MIN_HA = st.sidebar.number_input(
     step=0.1
 )
 
+# 🔥 NOVO
+MOSTRAR_TALHOES = st.sidebar.checkbox(
+    "📊 Mostrar área por Gleba/Talhão",
+    value=False
+)
+
+EXPORTAR_EXCEL = st.sidebar.checkbox(
+    "📁 Exportar planilha de talhões",
+    value=False
+)
+
 COR_TRABALHADA = "#62b27f"
 COR_NAO_TRAB = "#f6b1b3"
 COR_CAIXA = "#f1f8ff"
@@ -126,7 +137,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
         base = gpd.read_file(gpkg_path)
         base["FAZENDA"] = base["FAZENDA"].astype(str)
 
-        # 🔥 GARANTIR CAMPOS TALHÃO E GLEBA
         if "TALHAO" in base.columns:
             base["TALHAO"] = base["TALHAO"].astype(str)
         if "GLEBA" in base.columns:
@@ -156,9 +166,13 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
             geom_fazenda = unary_union(base_fazenda.geometry)
 
+            # =========================
+            # LINHAS DE TRABALHO
+            # =========================
             linhas = []
             for _, grupo in gdf_pts.groupby("cd_equipamento"):
                 grupo = grupo.sort_values("dt_hr_local_inicial")
+
                 linha_atual = []
                 ultimo_tempo = None
 
@@ -205,10 +219,12 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             pct_nao = area_nao_ha / area_total_ha * 100
 
             # =========================
-            # 🔥 NOVO: ÁREA POR TALHÃO
+            # TALHÕES (OPCIONAL)
             # =========================
             df_talhoes = None
-            if "TALHAO" in base_fazenda.columns and "GLEBA" in base_fazenda.columns:
+            arquivo_excel = None
+
+            if MOSTRAR_TALHOES and "TALHAO" in base_fazenda.columns and "GLEBA" in base_fazenda.columns:
 
                 base_tmp = base_fazenda.copy()
 
@@ -220,28 +236,37 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
                 if not intersec.empty:
                     intersec["area_trab_ha"] = intersec.geometry.area / 10000
+                    trab = intersec.groupby(["GLEBA", "TALHAO"])["area_trab_ha"].sum().reset_index()
+                else:
+                    trab = pd.DataFrame(columns=["GLEBA", "TALHAO", "area_trab_ha"])
 
-                    df_talhoes = base_tmp.copy()
-                    df_talhoes["area_total_ha"] = df_talhoes.geometry.area / 10000
+                total = base_tmp.copy()
+                total["area_total_ha"] = total.geometry.area / 10000
+                total = total[["GLEBA", "TALHAO", "area_total_ha"]]
 
-                    df_talhoes = df_talhoes.merge(
-                        intersec.groupby(["GLEBA", "TALHAO"])["area_trab_ha"].sum(),
-                        on=["GLEBA", "TALHAO"],
-                        how="left"
-                    )
+                df_talhoes = total.merge(trab, on=["GLEBA", "TALHAO"], how="left")
+                df_talhoes["area_trab_ha"] = df_talhoes["area_trab_ha"].fillna(0)
+                df_talhoes = df_talhoes.sort_values(["GLEBA", "TALHAO"])
 
-                    df_talhoes["area_trab_ha"] = df_talhoes["area_trab_ha"].fillna(0)
+                if EXPORTAR_EXCEL:
+                    excel_path = os.path.join(tmpdir, f"talhoes_{FAZENDA_ID}.xlsx")
+                    df_talhoes.to_excel(excel_path, index=False)
 
+                    with open(excel_path, "rb") as f:
+                        arquivo_excel = f.read()
+
+            # =========================
+            # PERÍODO
+            # =========================
             dt_min = df_faz["dt_hr_local_inicial"].min()
             dt_max = df_faz["dt_hr_local_inicial"].max()
 
             periodo_ini = dt_min.strftime("%d/%m/%Y %H:%M")
             periodo_fim = dt_max.strftime("%d/%m/%Y %H:%M")
 
-            with st.expander(f"🗺️ Mapa – {nome_fazenda} (clique para expandir)", expanded=False):
+            with st.expander(f"🗺️ Mapa – {nome_fazenda}", expanded=False):
 
                 fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
-
                 plt.subplots_adjust(left=0.15, right=0.85, bottom=0.25, top=0.88)
 
                 base_fazenda.plot(ax=ax, facecolor=COR_NAO_TRAB, edgecolor="black", linewidth=1.2)
@@ -256,24 +281,9 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 centro_mapa = (pos.x0 + pos.x1) / 2
                 base_y = pos.y0
 
-                ax.legend(
-                    handles=[
-                        mpatches.Patch(color=COR_TRABALHADA, label="Área trabalhada"),
-                        mpatches.Patch(color=COR_NAO_TRAB, label="Área não trabalhada"),
-                        mpatches.Patch(facecolor="none", edgecolor="black", label="Limites da fazenda"),
-                    ],
-                    loc="lower center",
-                    bbox_to_anchor=(centro_mapa, base_y - 0.06),
-                    bbox_transform=fig.transFigure,
-                    ncol=3,
-                    frameon=True,
-                    fontsize=13
-                )
-
                 fig.text(
                     pos.x1 + 0.02,
                     0.50,
-                    f"Resumo da operação\n\n"
                     f"Fazenda: {FAZENDA_ID} – {nome_fazenda}\n\n"
                     f"Área total: {area_total_ha:.2f} ha\n"
                     f"Trabalhada: {area_trab_ha:.2f} ha ({pct_trab:.1f}%)\n"
@@ -283,25 +293,37 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                     bbox=dict(boxstyle="round,pad=0.8", facecolor=COR_CAIXA, edgecolor="black")
                 )
 
-                # 🔥 NOVO: LISTA TALHÕES
-                if df_talhoes is not None:
-                    st.markdown("### 📍 Área por Gleba / Talhão")
-
-                    st.dataframe(
-                        df_talhoes[["GLEBA", "TALHAO", "area_total_ha", "area_trab_ha"]]
-                        .sort_values(["GLEBA", "TALHAO"])
-                    )
-
                 fig.suptitle(
                     f"Área trabalhada – Fazenda {FAZENDA_ID} – {nome_fazenda}",
                     fontsize=15,
                     x=centro_mapa
                 )
 
-                brasilia = pytz.timezone("America/Sao_Paulo")
-                hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
-
                 st.pyplot(fig)
+
+                # =========================
+                # TALHÕES UI
+                # =========================
+                if df_talhoes is not None:
+
+                    st.markdown("### 🌾 Área por Gleba / Talhão")
+
+                    df_view = df_talhoes.rename(columns={
+                        "GLEBA": "Gleba",
+                        "TALHAO": "Talhão",
+                        "area_total_ha": "Área Total (ha)",
+                        "area_trab_ha": "Área Trabalhada (ha)"
+                    })
+
+                    st.dataframe(df_view, use_container_width=True, hide_index=True)
+
+                if arquivo_excel is not None:
+                    st.download_button(
+                        "📥 Baixar planilha de talhões",
+                        data=arquivo_excel,
+                        file_name=f"talhoes_{FAZENDA_ID}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    )
 
 else:
     st.info("⬆️ Envie os arquivos e clique em **Gerar mapa**.")
