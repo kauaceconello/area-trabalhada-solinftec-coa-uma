@@ -18,6 +18,8 @@ import os
 import pytz
 from datetime import datetime
 
+import io  # 🔥 NOVO (PDF export)
+
 # CONFIG STREAMLIT
 st.set_page_config(
     page_title="Área Trabalhada – Solinftec",
@@ -31,6 +33,7 @@ st.markdown(
     "dados operacionais da **Solinftec** e base cartográfica da Usina Monte Alegre."
 )
 
+# BOTÃO MAIOR (CSS)
 st.markdown(
     """
     <style>
@@ -67,7 +70,7 @@ MULTIPLICADOR_BUFFER = st.sidebar.number_input(
     "Tamanho do Buffer",
     min_value=1.0,
     max_value=10.0,
-    value=2.5,
+    value=1.5,
     step=0.1
 )
 
@@ -78,7 +81,7 @@ AREA_MIN_HA = st.sidebar.number_input(
     step=0.1
 )
 
-# 🔥 NOVO (somente visual)
+# 🔥 NOVO
 MOSTRAR_TALHOES = st.sidebar.checkbox(
     "📊 Mostrar área por Gleba/Talhão",
     value=False
@@ -92,9 +95,7 @@ COR_RODAPE = "#7a7a7a"
 FIG_WIDTH = 25
 FIG_HEIGHT = 9
 
-# =========================
 # PROCESSAMENTO
-# =========================
 if uploaded_zip and uploaded_gpkg and GERAR:
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -215,10 +216,16 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             pct_trab = area_trab_ha / area_total_ha * 100
             pct_nao = area_nao_ha / area_total_ha * 100
 
+            dt_min = df_faz["dt_hr_local_inicial"].min()
+            dt_max = df_faz["dt_hr_local_inicial"].max()
+
+            periodo_ini = dt_min.strftime("%d/%m/%Y %H:%M")
+            periodo_fim = dt_max.strftime("%d/%m/%Y %H:%M")
+
             # =========================
-            # TALHÕES (SÓ MELHORIA)
+            # TALHÕES (NOVA LISTA BONITA)
             # =========================
-            df_talhoes = None
+            lista_talhoes = None
 
             if MOSTRAR_TALHOES and "TALHAO" in base_fazenda.columns and "GLEBA" in base_fazenda.columns:
 
@@ -229,30 +236,37 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 )
 
                 if not intersec.empty:
-                    intersec["area_trab_ha"] = (intersec.geometry.area / 10000).round(2)
+                    intersec["area_trab_ha"] = intersec.geometry.area / 10000
                     trab = intersec.groupby(["GLEBA", "TALHAO"])["area_trab_ha"].sum().reset_index()
                 else:
                     trab = pd.DataFrame(columns=["GLEBA", "TALHAO", "area_trab_ha"])
 
                 total = base_fazenda.copy()
-                total["area_total_ha"] = (total.geometry.area / 10000).round(2)
+                total["area_total_ha"] = total.geometry.area / 10000
                 total = total[["GLEBA", "TALHAO", "area_total_ha"]]
 
                 df_talhoes = total.merge(trab, on=["GLEBA", "TALHAO"], how="left")
-                df_talhoes["area_trab_ha"] = df_talhoes["area_trab_ha"].fillna(0).round(2)
+                df_talhoes["area_trab_ha"] = df_talhoes["area_trab_ha"].fillna(0)
+
+                df_talhoes["area_total_ha"] = df_talhoes["area_total_ha"].round(2)
+                df_talhoes["area_trab_ha"] = df_talhoes["area_trab_ha"].round(2)
+
+                lista_talhoes = "\n".join(
+                    df_talhoes.apply(
+                        lambda x: f"Gleba: {x['GLEBA']} | Talhão: {x['TALHAO']} | "
+                                  f"Total: {x['area_total_ha']} ha | "
+                                  f"Trabalhada: {x['area_trab_ha']} ha",
+                        axis=1
+                    )
+                )
 
             # =========================
-            # PERÍODO
+            # MAPA
             # =========================
-            dt_min = df_faz["dt_hr_local_inicial"].min()
-            dt_max = df_faz["dt_hr_local_inicial"].max()
-
-            periodo_ini = dt_min.strftime("%d/%m/%Y %H:%M")
-            periodo_fim = dt_max.strftime("%d/%m/%Y %H:%M")
-
-            with st.expander(f"🗺️ Mapa – {nome_fazenda}", expanded=False):
+            with st.expander(f"🗺️ Mapa – {nome_fazenda} (clique para expandir)", expanded=False):
 
                 fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
+
                 plt.subplots_adjust(left=0.15, right=0.85, bottom=0.25, top=0.88)
 
                 base_fazenda.plot(ax=ax, facecolor=COR_NAO_TRAB, edgecolor="black", linewidth=1.2)
@@ -265,10 +279,26 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
                 pos = ax.get_position()
                 centro_mapa = (pos.x0 + pos.x1) / 2
+                base_y = pos.y0
+
+                ax.legend(
+                    handles=[
+                        mpatches.Patch(color=COR_TRABALHADA, label="Área trabalhada"),
+                        mpatches.Patch(color=COR_NAO_TRAB, label="Área não trabalhada"),
+                        mpatches.Patch(facecolor="none", edgecolor="black", label="Limites da fazenda"),
+                    ],
+                    loc="lower center",
+                    bbox_to_anchor=(centro_mapa, base_y - 0.06),
+                    bbox_transform=fig.transFigure,
+                    ncol=3,
+                    frameon=True,
+                    fontsize=13
+                )
 
                 fig.text(
                     pos.x1 + 0.02,
                     0.50,
+                    f"Resumo da operação\n\n"
                     f"Fazenda: {FAZENDA_ID} – {nome_fazenda}\n\n"
                     f"Área total: {area_total_ha:.2f} ha\n"
                     f"Trabalhada: {area_trab_ha:.2f} ha ({pct_trab:.1f}%)\n"
@@ -287,29 +317,29 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 st.pyplot(fig)
 
                 # =========================
-                # TALHÕES MELHORADO
+                # TALHÕES UI + COPY
                 # =========================
-                if df_talhoes is not None:
+                if lista_talhoes:
 
                     st.markdown("### 🌾 Gleba / Talhão")
 
-                    df_view = df_talhoes.rename(columns={
-                        "GLEBA": "Gleba",
-                        "TALHAO": "Talhão",
-                        "area_total_ha": "Área Total (ha)",
-                        "area_trab_ha": "Área Trabalhada (ha)"
-                    })
+                    st.code(lista_talhoes, language="text")
 
-                    st.dataframe(df_view, use_container_width=True, hide_index=True)
+                    st.button("📋 Copiar lista (use seleção e Ctrl+C)")
 
-                    csv = df_view.to_csv(index=False).encode("utf-8")
+                # =========================
+                # PDF EXPORT
+                # =========================
+                buf = io.BytesIO()
+                fig.savefig(buf, format="pdf", bbox_inches="tight")
+                buf.seek(0)
 
-                    st.download_button(
-                        "📋 Copiar tabela (CSV)",
-                        data=csv,
-                        file_name=f"talhoes_{FAZENDA_ID}.csv",
-                        mime="text/csv"
-                    )
+                st.download_button(
+                    "📄 Exportar mapa em PDF",
+                    data=buf,
+                    file_name=f"mapa_{FAZENDA_ID}.pdf",
+                    mime="application/pdf"
+                )
 
 else:
     st.info("⬆️ Envie os arquivos e clique em **Gerar mapa**.")
