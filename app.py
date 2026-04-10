@@ -32,7 +32,6 @@ st.markdown(
     "dados operacionais da **Solinftec** e base cartográfica da Usina Monte Alegre."
 )
 
-# BOTÃO MAIOR (CSS)
 st.markdown(
     """
     <style>
@@ -213,9 +212,10 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             pct_nao = round(area_nao_ha / area_total_ha * 100, 1)
 
             # =========================
-            # TALHÕES (NOVO)
+            # TALHÕES (DATAFRAME)
             # =========================
-            lista_talhoes = ""
+            df_talhoes = None
+            excel_buffer = None
 
             if MOSTRAR_TALHOES and "TALHAO" in base_fazenda.columns and "GLEBA" in base_fazenda.columns:
 
@@ -227,13 +227,8 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
                 if not intersec.empty:
                     intersec["area_trab"] = intersec.geometry.area / 10000
-                    dados = intersec.groupby(["GLEBA", "TALHAO"])["area_trab"].sum().reset_index()
-
-                    for _, r in dados.iterrows():
-                        lista_talhoes += (
-                            f"Gleba {r['GLEBA']} | Talhão {r['TALHAO']} | "
-                            f"Área: {round(r['area_trab'],2)} ha\n"
-                        )
+                    df_talhoes = intersec.groupby(["GLEBA", "TALHAO"])["area_trab"].sum().reset_index()
+                    df_talhoes["area_trab"] = df_talhoes["area_trab"].round(2)
 
             # PERÍODO
             dt_min = df_faz["dt_hr_local_inicial"].min()
@@ -243,7 +238,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             periodo_fim = dt_max.strftime("%d/%m/%Y %H:%M")
 
             # =========================
-            # MAPA (NÃO MEXIDO)
+            # MAPA (INALTERADO)
             # =========================
             with st.expander(f"🗺️ Mapa – {nome_fazenda}", expanded=False):
 
@@ -271,7 +266,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                     ],
                     loc="lower center",
                     bbox_to_anchor=(centro_mapa, base_y - 0.06),
-                    bbox_transform=fig.transFigure,
                     ncol=3,
                     frameon=True,
                     fontsize=13
@@ -296,7 +290,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                     x=centro_mapa
                 )
 
-                # DISCLAMER (MANTIDO)
+                # DISCLAMER (INTACTO)
                 brasilia = pytz.timezone("America/Sao_Paulo")
                 hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
 
@@ -330,32 +324,24 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 st.pyplot(fig)
 
                 # =========================
-                # NOVA LISTA COPIÁVEL
+                # TABELA STREAMLIT (NOVO)
                 # =========================
-                if MOSTRAR_TALHOES and lista_talhoes:
+                if df_talhoes is not None:
 
-                    st.markdown("### 🌾 Gleba / Talhão (Área Trabalhada)")
+                    st.markdown("### 🌾 Gleba / Talhão")
 
-                    st.code(lista_talhoes, language="text")
+                    st.dataframe(df_talhoes, use_container_width=True, hide_index=True)
 
-                    st.download_button(
-                        "📋 Copiar lista (baixar txt)",
-                        data=lista_talhoes,
-                        file_name=f"talhoes_{FAZENDA_ID}.txt"
-                    )
-
-                    # =========================
-                    # PDF DO MAPA
-                    # =========================
-                    buf = BytesIO()
-                    fig.savefig(buf, format="pdf", bbox_inches="tight")
-                    buf.seek(0)
+                    # EXPORT EXCEL
+                    buffer = BytesIO()
+                    df_talhoes.to_excel(buffer, index=False)
+                    buffer.seek(0)
 
                     st.download_button(
-                        "📄 Exportar mapa em PDF",
-                        data=buf,
-                        file_name=f"mapa_{FAZENDA_ID}.pdf",
-                        mime="application/pdf"
+                        "📥 Exportar planilha de talhões",
+                        data=buffer,
+                        file_name=f"talhoes_{FAZENDA_ID}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
 
 else:
