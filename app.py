@@ -18,7 +18,9 @@ import os
 import pytz
 from datetime import datetime
 
+# =========================
 # CONFIG STREAMLIT
+# =========================
 st.set_page_config(
     page_title="Área Trabalhada – Solinftec",
     layout="wide"
@@ -31,21 +33,20 @@ st.markdown(
     "dados operacionais da **Solinftec** e base cartográfica da Usina Monte Alegre."
 )
 
-st.markdown(
-    """
-    <style>
-    div.stButton > button {
-        width: 100%;
-        height: 3.2em;
-        font-size: 1.2em;
-        font-weight: 600;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+st.markdown("""
+<style>
+div.stButton > button {
+    width: 100%;
+    height: 3.2em;
+    font-size: 1.2em;
+    font-weight: 600;
+}
+</style>
+""", unsafe_allow_html=True)
 
+# =========================
 # UPLOAD
+# =========================
 uploaded_zips = st.file_uploader(
     "📦 Upload dos ZIPs contendo o CSV da Solinftec",
     type=["zip"],
@@ -59,7 +60,9 @@ uploaded_gpkg = st.file_uploader(
 
 GERAR = st.button("▶️ Gerar mapa")
 
-# SIDEBAR
+# =========================
+# SIDEBAR (NOVO)
+# =========================
 st.sidebar.header("⚙️ Parâmetros")
 
 TEMPO_MAX_SEG = 60
@@ -84,6 +87,25 @@ MOSTRAR_TALHOES = st.sidebar.checkbox(
     value=False
 )
 
+# 👉 NOVO: seleção de mapas
+TIPOS_MAPA = st.sidebar.multiselect(
+    "📊 Tipos de mapa",
+    ["Área Trabalhada", "Velocidade (Heatmap)", "RPM (Heatmap)"],
+    default=["Área Trabalhada"]
+)
+
+# 👉 NOVO: limites heatmap
+st.sidebar.markdown("### 🎛️ Heatmap")
+
+VEL_MIN = st.sidebar.number_input("Velocidade mínima", value=0.0)
+VEL_MAX = st.sidebar.number_input("Velocidade máxima", value=20.0)
+
+RPM_MIN = st.sidebar.number_input("RPM mínimo", value=0.0)
+RPM_MAX = st.sidebar.number_input("RPM máximo", value=3000.0)
+
+# =========================
+# CORES
+# =========================
 COR_TRABALHADA = "#62b27f"
 COR_NAO_TRAB = "#f6b1b3"
 COR_CAIXA = "#f1f8ff"
@@ -93,16 +115,18 @@ FIG_WIDTH = 25
 FIG_HEIGHT = 9
 
 
+# =========================
 # PROCESSAMENTO
+# =========================
 if uploaded_zips and uploaded_gpkg and GERAR:
 
     with tempfile.TemporaryDirectory() as tmpdir:
 
-        # =========================
-        # LEITURA DE MÚLTIPLOS ZIPS
-        # =========================
         dfs = []
 
+        # =========================
+        # LEITURA ZIP
+        # =========================
         for uploaded_zip in uploaded_zips:
 
             zip_path = os.path.join(tmpdir, uploaded_zip.name)
@@ -131,12 +155,18 @@ if uploaded_zips and uploaded_gpkg and GERAR:
         df = pd.concat(dfs, ignore_index=True)
 
         # =========================
-        # TRATAMENTO ORIGINAL
+        # TRATAMENTO
         # =========================
         df["dt_hr_local_inicial"] = pd.to_datetime(df["dt_hr_local_inicial"], errors="coerce")
         df["vl_latitude_inicial"] = pd.to_numeric(df["vl_latitude_inicial"], errors="coerce")
         df["vl_longitude_inicial"] = pd.to_numeric(df["vl_longitude_inicial"], errors="coerce")
         df["vl_largura_implemento"] = pd.to_numeric(df["vl_largura_implemento"], errors="coerce")
+
+        # 👉 NOVO
+        if "vl_velocidade" in df.columns:
+            df["vl_velocidade"] = pd.to_numeric(df["vl_velocidade"], errors="coerce")
+        if "vl_rpm" in df.columns:
+            df["vl_rpm"] = pd.to_numeric(df["vl_rpm"], errors="coerce")
 
         df = df[
             (df["cd_estado"] == "E") &
@@ -160,9 +190,8 @@ if uploaded_zips and uploaded_gpkg and GERAR:
         if "GLEBA" in base.columns:
             base["GLEBA"] = base["GLEBA"].astype(str)
 
-
         # =========================
-        # LOOP FAZENDAS (INALTERADO)
+        # LOOP
         # =========================
         for FAZENDA_ID in df["cd_fazenda"].dropna().unique():
 
@@ -188,6 +217,9 @@ if uploaded_zips and uploaded_gpkg and GERAR:
 
             geom_fazenda = unary_union(base_fazenda.geometry)
 
+            # =========================
+            # LINHAS (ORIGINAL)
+            # =========================
             linhas = []
             for _, grupo in gdf_pts.groupby("cd_equipamento"):
                 grupo = grupo.sort_values("dt_hr_local_inicial")
@@ -221,7 +253,6 @@ if uploaded_zips and uploaded_gpkg and GERAR:
                 continue
 
             largura_final = largura_media * MULTIPLICADOR_BUFFER
-
             buffer_linhas = gdf_linhas.buffer(largura_final / 2)
 
             area_trabalhada = unary_union(buffer_linhas).intersection(geom_fazenda)
@@ -240,149 +271,100 @@ if uploaded_zips and uploaded_gpkg and GERAR:
             dt_min = df_faz["dt_hr_local_inicial"].min()
             dt_max = df_faz["dt_hr_local_inicial"].max()
 
-            periodo_ini = dt_min.strftime("%d/%m/%Y %H:%M")
-            periodo_fim = dt_max.strftime("%d/%m/%Y %H:%M")
+            # =========================
+            # MÉTRICAS NOVAS
+            # =========================
+            vel_stats = None
+            rpm_stats = None
 
-            df_talhoes = None
+            if "vl_velocidade" in df_faz:
+                vel_stats = df_faz["vl_velocidade"].agg(["min", "max", "mean"])
+            if "vl_rpm" in df_faz:
+                rpm_stats = df_faz["vl_rpm"].agg(["min", "max", "mean"])
 
-            if MOSTRAR_TALHOES and "TALHAO" in base_fazenda.columns and "GLEBA" in base_fazenda.columns:
-
-                base_tmp = base_fazenda.copy()
-
-                base_tmp["Área total (ha)"] = base_tmp.geometry.area / 10000
-
-                total = base_tmp[["GLEBA", "TALHAO", "Área total (ha)"]]
-
-                intersec = gpd.overlay(
-                    base_tmp,
-                    gpd.GeoDataFrame(geometry=[area_trabalhada], crs=base_tmp.crs),
-                    how="intersection"
-                )
-
-                if not intersec.empty:
-                    intersec["Área trabalhada (ha)"] = intersec.geometry.area / 10000
-                    trab = intersec.groupby(["GLEBA", "TALHAO"])["Área trabalhada (ha)"].sum().reset_index()
-                else:
-                    trab = pd.DataFrame(columns=["GLEBA", "TALHAO", "Área trabalhada (ha)"])
-
-                df_talhoes = total.merge(trab, on=["GLEBA", "TALHAO"], how="left")
-
-                df_talhoes["Área trabalhada (ha)"] = df_talhoes["Área trabalhada (ha)"].fillna(0)
-
-                df_talhoes = df_talhoes.rename(columns={
-                    "GLEBA": "Gleba",
-                    "TALHAO": "Talhão"
-                })
-
-                df_talhoes = df_talhoes[
-                    ["Gleba", "Talhão", "Área total (ha)", "Área trabalhada (ha)"]
-                ]
-
-                total_row = pd.DataFrame({
-                    "Gleba": ["TOTAL"],
-                    "Talhão": [""],
-                    "Área total (ha)": [df_talhoes["Área total (ha)"].sum().round(2)],
-                    "Área trabalhada (ha)": [df_talhoes["Área trabalhada (ha)"].sum().round(2)]
-                })
-
-                df_talhoes = pd.concat([df_talhoes, total_row], ignore_index=True)
-
+            # =========================
+            # MAPAS
+            # =========================
             with st.expander(f"🗺️ Mapa – {nome_fazenda}", expanded=False):
 
-                fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
-                plt.subplots_adjust(left=0.15, right=0.85, bottom=0.25, top=0.88)
+                # -------------------------
+                # MAPA ÁREA (ORIGINAL)
+                # -------------------------
+                if "Área Trabalhada" in TIPOS_MAPA:
 
-                base_fazenda.plot(ax=ax, facecolor=COR_NAO_TRAB, edgecolor="black", linewidth=1.2)
-                gpd.GeoSeries(area_trabalhada, crs=base_fazenda.crs).plot(
-                    ax=ax, color=COR_TRABALHADA, alpha=0.9
-                )
-                base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.2)
+                    fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
 
-                if "TALHAO" in base_fazenda.columns:
-                    for _, row in base_fazenda.iterrows():
-                        if row.geometry.is_empty:
-                            continue
+                    base_fazenda.plot(ax=ax, facecolor=COR_NAO_TRAB, edgecolor="black", linewidth=1.2)
+                    gpd.GeoSeries(area_trabalhada, crs=base_fazenda.crs).plot(ax=ax, color=COR_TRABALHADA)
 
-                        centroid = row.geometry.centroid
+                    base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.2)
+                    ax.axis("off")
 
-                        ax.text(
-                            centroid.x,
-                            centroid.y,
-                            str(row["TALHAO"]),
-                            fontsize=7,
-                            ha="center",
-                            va="center",
-                            color="black",
-                            weight="bold"
-                        )
+                    ax.set_title("Área Trabalhada")
 
-                ax.axis("off")
+                    st.pyplot(fig)
 
-                pos = ax.get_position()
-                centro_mapa = (pos.x0 + pos.x1) / 2
-                base_y = pos.y0
+                # -------------------------
+                # HEATMAP VELOCIDADE
+                # -------------------------
+                if "Velocidade (Heatmap)" in TIPOS_MAPA and "vl_velocidade" in df_faz:
 
-                ax.legend(
-                    handles=[
-                        mpatches.Patch(color=COR_TRABALHADA, label="Área trabalhada"),
-                        mpatches.Patch(color=COR_NAO_TRAB, label="Área não trabalhada"),
-                        mpatches.Patch(facecolor="none", edgecolor="black", label="Limites da fazenda"),
-                    ],
-                    loc="lower center",
-                    bbox_to_anchor=(centro_mapa, base_y - 0.35),
-                    ncol=3,
-                    frameon=True,
-                    fontsize=13
-                )
+                    fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
 
-                fig.text(
-                    pos.x1 + 0.02,
-                    0.50,
-                    f"Resumo da operação\n\n"
-                    f"Fazenda: {FAZENDA_ID} – {nome_fazenda}\n\n"
-                    f"Área total: {area_total_ha} ha\n"
-                    f"Trabalhada: {area_trab_ha} ha ({pct_trab}%)\n"
-                    f"Não trabalhada: {area_nao_ha} ha ({pct_nao}%)\n\n"
-                    f"Período:\n{periodo_ini} até {periodo_fim}",
-                    fontsize=11,
-                    bbox=dict(boxstyle="round,pad=0.8", facecolor=COR_CAIXA, edgecolor="black")
-                )
+                    base_fazenda.plot(ax=ax, color="lightgrey")
 
-                brasilia = pytz.timezone("America/Sao_Paulo")
-                hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
+                    gdf_pts.plot(
+                        ax=ax,
+                        column="vl_velocidade",
+                        cmap="coolwarm",
+                        markersize=5,
+                        vmin=VEL_MIN,
+                        vmax=VEL_MAX,
+                        legend=True
+                    )
 
-                fig.text(
-                    centro_mapa,
-                    base_y - 0.11,
-                    "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos.",
-                    ha="center",
-                    fontsize=10,
-                    color=COR_RODAPE
-                )
+                    ax.set_title("Velocidade (Heatmap)")
+                    ax.axis("off")
 
-                fig.text(
-                    centro_mapa,
-                    base_y - 0.14,
-                    "Relatório elaborado com base em dados da Solinftec.",
-                    ha="center",
-                    fontsize=10,
-                    color=COR_RODAPE
-                )
+                    st.pyplot(fig)
 
-                fig.text(
-                    centro_mapa,
-                    base_y - 0.17,
-                    f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
-                    ha="center",
-                    fontsize=10,
-                    color=COR_RODAPE
-                )
+                # -------------------------
+                # HEATMAP RPM
+                # -------------------------
+                if "RPM (Heatmap)" in TIPOS_MAPA and "vl_rpm" in df_faz:
 
-                st.pyplot(fig)
+                    fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
 
-                if df_talhoes is not None:
-                    st.markdown("### 🌾 Área por Gleba / Talhão")
-                    st.dataframe(df_talhoes, use_container_width=True, hide_index=True)
+                    base_fazenda.plot(ax=ax, color="lightgrey")
+
+                    gdf_pts.plot(
+                        ax=ax,
+                        column="vl_rpm",
+                        cmap="viridis",
+                        markersize=5,
+                        vmin=RPM_MIN,
+                        vmax=RPM_MAX,
+                        legend=True
+                    )
+
+                    ax.set_title("RPM (Heatmap)")
+                    ax.axis("off")
+
+                    st.pyplot(fig)
+
+                # =========================
+                # RESUMO (EXPANDIDO)
+                # =========================
+                st.markdown("### 📊 Resumo da Operação")
+
+                st.write(f"Área total: {area_total_ha} ha")
+                st.write(f"Área trabalhada: {area_trab_ha} ha ({pct_trab}%)")
+
+                if vel_stats is not None:
+                    st.write("Velocidade min/max/média:", vel_stats.to_dict())
+
+                if rpm_stats is not None:
+                    st.write("RPM min/max/média:", rpm_stats.to_dict())
 
 else:
     st.info("⬆️ Envie os arquivos e clique em **Gerar mapa**.")
