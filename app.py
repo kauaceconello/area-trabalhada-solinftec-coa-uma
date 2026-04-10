@@ -17,7 +17,6 @@ import tempfile
 import os
 import pytz
 from datetime import datetime
-import io
 
 # CONFIG STREAMLIT
 st.set_page_config(
@@ -32,12 +31,34 @@ st.markdown(
     "dados operacionais da **Solinftec** e base cartográfica da Usina Monte Alegre."
 )
 
-# UPLOAD
-uploaded_zip = st.file_uploader("📦 Upload ZIP (CSV Solinftec)", type=["zip"])
-uploaded_gpkg = st.file_uploader("🗺️ Upload GPKG (base cartográfica)", type=["gpkg"])
+st.markdown(
+    """
+    <style>
+    div.stButton > button {
+        width: 100%;
+        height: 3.2em;
+        font-size: 1.2em;
+        font-weight: 600;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+# UPLOAD DE ARQUIVOS
+uploaded_zip = st.file_uploader(
+    "📦 Upload do ZIP contendo o CSV da Solinftec",
+    type=["zip"]
+)
+
+uploaded_gpkg = st.file_uploader(
+    "🗺️ Upload da base cartográfica (GPKG)",
+    type=["gpkg"]
+)
+
 GERAR = st.button("▶️ Gerar mapa")
 
-# SIDEBAR
+# SIDEBAR – PARÂMETROS
 st.sidebar.header("⚙️ Parâmetros")
 
 TEMPO_MAX_SEG = 60
@@ -57,21 +78,26 @@ AREA_MIN_HA = st.sidebar.number_input(
     step=0.1
 )
 
+# 🔥 NOVO
 MOSTRAR_TALHOES = st.sidebar.checkbox(
     "📊 Mostrar área por Gleba/Talhão",
+    value=False
+)
+
+EXPORTAR_EXCEL = st.sidebar.checkbox(
+    "📁 Exportar planilha de talhões",
     value=False
 )
 
 COR_TRABALHADA = "#62b27f"
 COR_NAO_TRAB = "#f6b1b3"
 COR_CAIXA = "#f1f8ff"
+COR_RODAPE = "#7a7a7a"
 
 FIG_WIDTH = 25
 FIG_HEIGHT = 9
 
-# =========================
 # PROCESSAMENTO
-# =========================
 if uploaded_zip and uploaded_gpkg and GERAR:
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -85,18 +111,23 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
         csv_files = [f for f in os.listdir(tmpdir) if f.lower().endswith(".csv")]
         if not csv_files:
-            st.error("❌ Nenhum CSV encontrado.")
+            st.error("❌ Nenhum CSV encontrado dentro do ZIP.")
             st.stop()
 
-        df = pd.read_csv(os.path.join(tmpdir, csv_files[0]),
-                         sep=";", encoding="latin1", engine="python")
+        csv_path = os.path.join(tmpdir, csv_files[0])
+
+        df = pd.read_csv(csv_path, sep=";", encoding="latin1", engine="python")
 
         df["dt_hr_local_inicial"] = pd.to_datetime(df["dt_hr_local_inicial"], errors="coerce")
         df["vl_latitude_inicial"] = pd.to_numeric(df["vl_latitude_inicial"], errors="coerce")
         df["vl_longitude_inicial"] = pd.to_numeric(df["vl_longitude_inicial"], errors="coerce")
         df["vl_largura_implemento"] = pd.to_numeric(df["vl_largura_implemento"], errors="coerce")
 
-        df = df[(df["cd_estado"] == "E") & (df["cd_operacao_parada"] == -1)].copy()
+        df = df[
+            (df["cd_estado"] == "E") &
+            (df["cd_operacao_parada"] == -1)
+        ].copy()
+
         df["cd_fazenda"] = df["cd_fazenda"].astype(str)
 
         gpkg_path = os.path.join(tmpdir, "base.gpkg")
@@ -111,9 +142,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
         if "GLEBA" in base.columns:
             base["GLEBA"] = base["GLEBA"].astype(str)
 
-        # =========================
-        # LOOP FAZENDAS
-        # =========================
         for FAZENDA_ID in df["cd_fazenda"].dropna().unique():
 
             df_faz = df[df["cd_fazenda"] == FAZENDA_ID].copy()
@@ -133,33 +161,33 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 crs="EPSG:4326"
             )
 
-            base_fazenda = base_fazenda.to_crs(31983)
-            gdf_pts = gdf_pts.to_crs(31983)
+            base_fazenda = base_fazenda.to_crs(epsg=31983)
+            gdf_pts = gdf_pts.to_crs(epsg=31983)
 
             geom_fazenda = unary_union(base_fazenda.geometry)
 
             # =========================
-            # LINHAS
+            # LINHAS DE TRABALHO
             # =========================
             linhas = []
             for _, grupo in gdf_pts.groupby("cd_equipamento"):
                 grupo = grupo.sort_values("dt_hr_local_inicial")
 
                 linha_atual = []
-                ultimo = None
+                ultimo_tempo = None
 
                 for _, row in grupo.iterrows():
-                    if ultimo is None:
+                    if ultimo_tempo is None:
                         linha_atual = [row.geometry]
                     else:
-                        dt = (row["dt_hr_local_inicial"] - ultimo).total_seconds()
-                        if dt <= TEMPO_MAX_SEG:
+                        delta = (row["dt_hr_local_inicial"] - ultimo_tempo).total_seconds()
+                        if delta <= TEMPO_MAX_SEG:
                             linha_atual.append(row.geometry)
                         else:
                             if len(linha_atual) >= 2:
                                 linhas.append(LineString(linha_atual))
                             linha_atual = [row.geometry]
-                    ultimo = row["dt_hr_local_inicial"]
+                    ultimo_tempo = row["dt_hr_local_inicial"]
 
                 if len(linha_atual) >= 2:
                     linhas.append(LineString(linha_atual))
@@ -169,68 +197,116 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
             gdf_linhas = gpd.GeoDataFrame(geometry=linhas, crs=base_fazenda.crs)
 
-            largura = df_faz["vl_largura_implemento"].dropna().mean()
-            if pd.isna(largura):
+            largura_media = df_faz["vl_largura_implemento"].dropna().mean()
+            if pd.isna(largura_media):
                 continue
 
-            buffer_linhas = gdf_linhas.buffer((largura * MULTIPLICADOR_BUFFER) / 2)
+            largura_final = largura_media * MULTIPLICADOR_BUFFER
+
+            buffer_linhas = gdf_linhas.buffer(largura_final / 2)
 
             area_trabalhada = unary_union(buffer_linhas).intersection(geom_fazenda)
             area_nao_trabalhada = geom_fazenda.difference(area_trabalhada)
 
-            area_total_ha = round(base_fazenda.geometry.area.sum() / 10000, 2)
-            area_trab_ha = round(area_trabalhada.area / 10000, 2)
-            area_nao_ha = round(area_nao_trabalhada.area / 10000, 2)
+            area_total_ha = base_fazenda.geometry.area.sum() / 10000
+            area_trab_ha = area_trabalhada.area / 10000
+            area_nao_ha = area_nao_trabalhada.area / 10000
 
             if area_trab_ha < AREA_MIN_HA:
                 continue
 
+            pct_trab = area_trab_ha / area_total_ha * 100
+            pct_nao = area_nao_ha / area_total_ha * 100
+
             # =========================
-            # TALHÕES
+            # TALHÕES (OPCIONAL)
             # =========================
             df_talhoes = None
+            arquivo_excel = None
 
             if MOSTRAR_TALHOES and "TALHAO" in base_fazenda.columns and "GLEBA" in base_fazenda.columns:
 
+                base_tmp = base_fazenda.copy()
+
                 intersec = gpd.overlay(
-                    base_fazenda,
-                    gpd.GeoDataFrame(geometry=[area_trabalhada], crs=base_fazenda.crs),
+                    base_tmp,
+                    gpd.GeoDataFrame(geometry=[area_trabalhada], crs=base_tmp.crs),
                     how="intersection"
                 )
 
                 if not intersec.empty:
-                    intersec["area_trab_ha"] = (intersec.geometry.area / 10000).round(2)
+                    intersec["area_trab_ha"] = intersec.geometry.area / 10000
                     trab = intersec.groupby(["GLEBA", "TALHAO"])["area_trab_ha"].sum().reset_index()
                 else:
                     trab = pd.DataFrame(columns=["GLEBA", "TALHAO", "area_trab_ha"])
 
-                total = base_fazenda.copy()
-                total["area_total_ha"] = (total.geometry.area / 10000).round(2)
+                total = base_tmp.copy()
+                total["area_total_ha"] = total.geometry.area / 10000
                 total = total[["GLEBA", "TALHAO", "area_total_ha"]]
 
                 df_talhoes = total.merge(trab, on=["GLEBA", "TALHAO"], how="left")
-                df_talhoes["area_trab_ha"] = df_talhoes["area_trab_ha"].fillna(0).round(2)
+                df_talhoes["area_trab_ha"] = df_talhoes["area_trab_ha"].fillna(0)
+                df_talhoes = df_talhoes.sort_values(["GLEBA", "TALHAO"])
+
+                if EXPORTAR_EXCEL:
+                    excel_path = os.path.join(tmpdir, f"talhoes_{FAZENDA_ID}.xlsx")
+                    df_talhoes.to_excel(excel_path, index=False)
+
+                    with open(excel_path, "rb") as f:
+                        arquivo_excel = f.read()
 
             # =========================
-            # MAPA
+            # PERÍODO
             # =========================
+            dt_min = df_faz["dt_hr_local_inicial"].min()
+            dt_max = df_faz["dt_hr_local_inicial"].max()
+
+            periodo_ini = dt_min.strftime("%d/%m/%Y %H:%M")
+            periodo_fim = dt_max.strftime("%d/%m/%Y %H:%M")
+
             with st.expander(f"🗺️ Mapa – {nome_fazenda}", expanded=False):
 
                 fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
+                plt.subplots_adjust(left=0.15, right=0.85, bottom=0.25, top=0.88)
 
-                base_fazenda.plot(ax=ax, facecolor=COR_NAO_TRAB, edgecolor="black")
-                gpd.GeoSeries(area_trabalhada, crs=base_fazenda.crs).plot(ax=ax, color=COR_TRABALHADA)
+                base_fazenda.plot(ax=ax, facecolor=COR_NAO_TRAB, edgecolor="black", linewidth=1.2)
+                gpd.GeoSeries(area_trabalhada, crs=base_fazenda.crs).plot(
+                    ax=ax, color=COR_TRABALHADA, alpha=0.9
+                )
+                base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.2)
 
                 ax.axis("off")
+
+                pos = ax.get_position()
+                centro_mapa = (pos.x0 + pos.x1) / 2
+                base_y = pos.y0
+
+                fig.text(
+                    pos.x1 + 0.02,
+                    0.50,
+                    f"Fazenda: {FAZENDA_ID} – {nome_fazenda}\n\n"
+                    f"Área total: {area_total_ha:.2f} ha\n"
+                    f"Trabalhada: {area_trab_ha:.2f} ha ({pct_trab:.1f}%)\n"
+                    f"Não trabalhada: {area_nao_ha:.2f} ha ({pct_nao:.1f}%)\n\n"
+                    f"Período:\n{periodo_ini} até {periodo_fim}",
+                    fontsize=11,
+                    bbox=dict(boxstyle="round,pad=0.8", facecolor=COR_CAIXA, edgecolor="black")
+                )
+
+                fig.suptitle(
+                    f"Área trabalhada – Fazenda {FAZENDA_ID} – {nome_fazenda}",
+                    fontsize=15,
+                    x=centro_mapa
+                )
 
                 st.pyplot(fig)
 
                 # =========================
-                # TALHÕES UI MELHORADO
+                # TALHÕES UI
                 # =========================
                 if df_talhoes is not None:
 
-                    st.markdown("### 🌾 Gleba / Talhão")
+                    st.markdown("### 🌾 Área por Gleba / Talhão")
 
                     df_view = df_talhoes.rename(columns={
                         "GLEBA": "Gleba",
@@ -241,28 +317,13 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
                     st.dataframe(df_view, use_container_width=True, hide_index=True)
 
-                    csv = df_view.to_csv(index=False).encode("utf-8")
-
+                if arquivo_excel is not None:
                     st.download_button(
-                        "📋 Copiar tabela (CSV)",
-                        data=csv,
-                        file_name=f"talhoes_{FAZENDA_ID}.csv",
-                        mime="text/csv"
+                        "📥 Baixar planilha de talhões",
+                        data=arquivo_excel,
+                        file_name=f"talhoes_{FAZENDA_ID}.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                     )
-
-                # =========================
-                # PDF MAPA
-                # =========================
-                pdf_buffer = io.BytesIO()
-                fig.savefig(pdf_buffer, format="pdf", bbox_inches="tight")
-                pdf_buffer.seek(0)
-
-                st.download_button(
-                    "📄 Exportar mapa em PDF",
-                    data=pdf_buffer,
-                    file_name=f"mapa_{FAZENDA_ID}.pdf",
-                    mime="application/pdf"
-                )
 
 else:
     st.info("⬆️ Envie os arquivos e clique em **Gerar mapa**.")
