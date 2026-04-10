@@ -78,14 +78,9 @@ AREA_MIN_HA = st.sidebar.number_input(
     step=0.1
 )
 
-# 🔥 NOVO
+# 🔥 NOVO (somente visual)
 MOSTRAR_TALHOES = st.sidebar.checkbox(
     "📊 Mostrar área por Gleba/Talhão",
-    value=False
-)
-
-EXPORTAR_EXCEL = st.sidebar.checkbox(
-    "📁 Exportar planilha de talhões",
     value=False
 )
 
@@ -97,7 +92,9 @@ COR_RODAPE = "#7a7a7a"
 FIG_WIDTH = 25
 FIG_HEIGHT = 9
 
+# =========================
 # PROCESSAMENTO
+# =========================
 if uploaded_zip and uploaded_gpkg and GERAR:
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -219,41 +216,30 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             pct_nao = area_nao_ha / area_total_ha * 100
 
             # =========================
-            # TALHÕES (OPCIONAL)
+            # TALHÕES (SÓ MELHORIA)
             # =========================
             df_talhoes = None
-            arquivo_excel = None
 
             if MOSTRAR_TALHOES and "TALHAO" in base_fazenda.columns and "GLEBA" in base_fazenda.columns:
 
-                base_tmp = base_fazenda.copy()
-
                 intersec = gpd.overlay(
-                    base_tmp,
-                    gpd.GeoDataFrame(geometry=[area_trabalhada], crs=base_tmp.crs),
+                    base_fazenda,
+                    gpd.GeoDataFrame(geometry=[area_trabalhada], crs=base_fazenda.crs),
                     how="intersection"
                 )
 
                 if not intersec.empty:
-                    intersec["area_trab_ha"] = intersec.geometry.area / 10000
+                    intersec["area_trab_ha"] = (intersec.geometry.area / 10000).round(2)
                     trab = intersec.groupby(["GLEBA", "TALHAO"])["area_trab_ha"].sum().reset_index()
                 else:
                     trab = pd.DataFrame(columns=["GLEBA", "TALHAO", "area_trab_ha"])
 
-                total = base_tmp.copy()
-                total["area_total_ha"] = total.geometry.area / 10000
+                total = base_fazenda.copy()
+                total["area_total_ha"] = (total.geometry.area / 10000).round(2)
                 total = total[["GLEBA", "TALHAO", "area_total_ha"]]
 
                 df_talhoes = total.merge(trab, on=["GLEBA", "TALHAO"], how="left")
-                df_talhoes["area_trab_ha"] = df_talhoes["area_trab_ha"].fillna(0)
-                df_talhoes = df_talhoes.sort_values(["GLEBA", "TALHAO"])
-
-                if EXPORTAR_EXCEL:
-                    excel_path = os.path.join(tmpdir, f"talhoes_{FAZENDA_ID}.xlsx")
-                    df_talhoes.to_excel(excel_path, index=False)
-
-                    with open(excel_path, "rb") as f:
-                        arquivo_excel = f.read()
+                df_talhoes["area_trab_ha"] = df_talhoes["area_trab_ha"].fillna(0).round(2)
 
             # =========================
             # PERÍODO
@@ -279,7 +265,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
                 pos = ax.get_position()
                 centro_mapa = (pos.x0 + pos.x1) / 2
-                base_y = pos.y0
 
                 fig.text(
                     pos.x1 + 0.02,
@@ -302,11 +287,11 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 st.pyplot(fig)
 
                 # =========================
-                # TALHÕES UI
+                # TALHÕES MELHORADO
                 # =========================
                 if df_talhoes is not None:
 
-                    st.markdown("### 🌾 Área por Gleba / Talhão")
+                    st.markdown("### 🌾 Gleba / Talhão")
 
                     df_view = df_talhoes.rename(columns={
                         "GLEBA": "Gleba",
@@ -317,12 +302,13 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
                     st.dataframe(df_view, use_container_width=True, hide_index=True)
 
-                if arquivo_excel is not None:
+                    csv = df_view.to_csv(index=False).encode("utf-8")
+
                     st.download_button(
-                        "📥 Baixar planilha de talhões",
-                        data=arquivo_excel,
-                        file_name=f"talhoes_{FAZENDA_ID}.xlsx",
-                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        "📋 Copiar tabela (CSV)",
+                        data=csv,
+                        file_name=f"talhoes_{FAZENDA_ID}.csv",
+                        mime="text/csv"
                     )
 
 else:
