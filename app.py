@@ -64,12 +64,13 @@ st.sidebar.header("⚙️ Parâmetros")
 
 TEMPO_MAX_SEG = 60
 
-LARGURA_IMPLEMENTO = st.sidebar.number_input(
-    "Largura do implemento (metros)",
-    min_value=1.0,
-    max_value=30.0,
-    value=6.0,
-    step=0.5
+# 🔥 ALTERADO (agora é multiplicador)
+MULTIPLICADOR_BUFFER = st.sidebar.number_input(
+    "Largura do buffer",
+    min_value=1.5,
+    max_value=10.0,
+    value=1.5,
+    step=0.1
 )
 
 AREA_MIN_HA = st.sidebar.number_input(
@@ -112,6 +113,9 @@ if uploaded_zip and uploaded_gpkg and GERAR:
         df["dt_hr_local_inicial"] = pd.to_datetime(df["dt_hr_local_inicial"], errors="coerce")
         df["vl_latitude_inicial"] = pd.to_numeric(df["vl_latitude_inicial"], errors="coerce")
         df["vl_longitude_inicial"] = pd.to_numeric(df["vl_longitude_inicial"], errors="coerce")
+
+        # 🔥 NOVO: garantir coluna de largura
+        df["vl_largura_implemento"] = pd.to_numeric(df["vl_largura_implemento"], errors="coerce")
 
         df = df[
             (df["cd_estado"] == "E") &
@@ -179,7 +183,16 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
             gdf_linhas = gpd.GeoDataFrame(geometry=linhas, crs=base_fazenda.crs)
 
-            buffer_linhas = gdf_linhas.buffer(LARGURA_IMPLEMENTO / 2)
+            # 🔥 ALTERAÇÃO PRINCIPAL
+            largura_media = df_faz["vl_largura_implemento"].dropna().mean()
+
+            if pd.isna(largura_media):
+                continue
+
+            largura_final = largura_media * MULTIPLICADOR_BUFFER
+
+            buffer_linhas = gdf_linhas.buffer(largura_final / 2)
+
             area_trabalhada = unary_union(buffer_linhas).intersection(geom_fazenda)
             area_nao_trabalhada = geom_fazenda.difference(area_trabalhada)
 
