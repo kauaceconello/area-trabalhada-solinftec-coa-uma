@@ -59,9 +59,7 @@ uploaded_gpkg = st.file_uploader(
 
 GERAR = st.button("▶️ Gerar mapa")
 
-# =========================
 # SIDEBAR
-# =========================
 st.sidebar.header("⚙️ Parâmetros")
 
 TEMPO_MAX_SEG = 60
@@ -86,25 +84,6 @@ MOSTRAR_TALHOES = st.sidebar.checkbox(
     value=False
 )
 
-TIPO_MAPA = st.sidebar.multiselect(
-    "📊 Tipo de mapa",
-    ["Área trabalhada", "Velocidade", "RPM"],
-    default=["Área trabalhada"]
-)
-
-VEL_MIN = VEL_MAX = None
-RPM_MIN = RPM_MAX = None
-
-if "Velocidade" in TIPO_MAPA:
-    st.sidebar.markdown("### 🚜 Velocidade")
-    VEL_MIN = st.sidebar.number_input("Velocidade mínima", value=0.0)
-    VEL_MAX = st.sidebar.number_input("Velocidade máxima", value=30.0)
-
-if "RPM" in TIPO_MAPA:
-    st.sidebar.markdown("### ⚙️ RPM")
-    RPM_MIN = st.sidebar.number_input("RPM mínima", value=0)
-    RPM_MAX = st.sidebar.number_input("RPM máxima", value=3000)
-
 COR_TRABALHADA = "#62b27f"
 COR_NAO_TRAB = "#f6b1b3"
 COR_CAIXA = "#f1f8ff"
@@ -114,13 +93,14 @@ FIG_WIDTH = 25
 FIG_HEIGHT = 9
 
 
-# =========================
 # PROCESSAMENTO
-# =========================
 if uploaded_zips and uploaded_gpkg and GERAR:
 
     with tempfile.TemporaryDirectory() as tmpdir:
 
+        # =========================
+        # LEITURA DE MÚLTIPLOS ZIPS
+        # =========================
         dfs = []
 
         for uploaded_zip in uploaded_zips:
@@ -140,21 +120,7 @@ if uploaded_zips and uploaded_gpkg and GERAR:
 
             csv_path = os.path.join(tmpdir, csv_files[0])
 
-            df_temp = pd.read_csv(
-                csv_path,
-                sep=";",
-                encoding="latin1",
-                usecols=[
-                    "dt_hr_local_inicial",
-                    "vl_latitude_inicial",
-                    "vl_longitude_inicial",
-                    "vl_largura_implemento",
-                    "cd_estado",
-                    "cd_operacao_parada",
-                    "cd_fazenda",
-                    "cd_equipamento"
-                ]
-            )
+            df_temp = pd.read_csv(csv_path, sep=";", encoding="latin1", engine="python")
 
             dfs.append(df_temp)
 
@@ -164,6 +130,9 @@ if uploaded_zips and uploaded_gpkg and GERAR:
 
         df = pd.concat(dfs, ignore_index=True)
 
+        # =========================
+        # TRATAMENTO ORIGINAL
+        # =========================
         df["dt_hr_local_inicial"] = pd.to_datetime(df["dt_hr_local_inicial"], errors="coerce")
         df["vl_latitude_inicial"] = pd.to_numeric(df["vl_latitude_inicial"], errors="coerce")
         df["vl_longitude_inicial"] = pd.to_numeric(df["vl_longitude_inicial"], errors="coerce")
@@ -176,6 +145,9 @@ if uploaded_zips and uploaded_gpkg and GERAR:
 
         df["cd_fazenda"] = df["cd_fazenda"].astype(str)
 
+        # =========================
+        # GPKG
+        # =========================
         gpkg_path = os.path.join(tmpdir, "base.gpkg")
         with open(gpkg_path, "wb") as f:
             f.write(uploaded_gpkg.read())
@@ -190,7 +162,7 @@ if uploaded_zips and uploaded_gpkg and GERAR:
 
 
         # =========================
-        # LOOP FAZENDAS
+        # LOOP FAZENDAS (INALTERADO)
         # =========================
         for FAZENDA_ID in df["cd_fazenda"].dropna().unique():
 
@@ -271,131 +243,146 @@ if uploaded_zips and uploaded_gpkg and GERAR:
             periodo_ini = dt_min.strftime("%d/%m/%Y %H:%M")
             periodo_fim = dt_max.strftime("%d/%m/%Y %H:%M")
 
-            # =========================
-            # EXPANDER
-            # =========================
+            df_talhoes = None
+
+            if MOSTRAR_TALHOES and "TALHAO" in base_fazenda.columns and "GLEBA" in base_fazenda.columns:
+
+                base_tmp = base_fazenda.copy()
+
+                base_tmp["Área total (ha)"] = base_tmp.geometry.area / 10000
+
+                total = base_tmp[["GLEBA", "TALHAO", "Área total (ha)"]]
+
+                intersec = gpd.overlay(
+                    base_tmp,
+                    gpd.GeoDataFrame(geometry=[area_trabalhada], crs=base_tmp.crs),
+                    how="intersection"
+                )
+
+                if not intersec.empty:
+                    intersec["Área trabalhada (ha)"] = intersec.geometry.area / 10000
+                    trab = intersec.groupby(["GLEBA", "TALHAO"])["Área trabalhada (ha)"].sum().reset_index()
+                else:
+                    trab = pd.DataFrame(columns=["GLEBA", "TALHAO", "Área trabalhada (ha)"])
+
+                df_talhoes = total.merge(trab, on=["GLEBA", "TALHAO"], how="left")
+
+                df_talhoes["Área trabalhada (ha)"] = df_talhoes["Área trabalhada (ha)"].fillna(0)
+
+                df_talhoes = df_talhoes.rename(columns={
+                    "GLEBA": "Gleba",
+                    "TALHAO": "Talhão"
+                })
+
+                df_talhoes = df_talhoes[
+                    ["Gleba", "Talhão", "Área total (ha)", "Área trabalhada (ha)"]
+                ]
+
+                total_row = pd.DataFrame({
+                    "Gleba": ["TOTAL"],
+                    "Talhão": [""],
+                    "Área total (ha)": [df_talhoes["Área total (ha)"].sum().round(2)],
+                    "Área trabalhada (ha)": [df_talhoes["Área trabalhada (ha)"].sum().round(2)]
+                })
+
+                df_talhoes = pd.concat([df_talhoes, total_row], ignore_index=True)
+
             with st.expander(f"🗺️ Mapa – {nome_fazenda}", expanded=False):
 
-                def base_plot():
-                    fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
-                    plt.subplots_adjust(left=0.15, right=0.85, bottom=0.25, top=0.88)
+                fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
+                plt.subplots_adjust(left=0.15, right=0.85, bottom=0.25, top=0.88)
 
-                    base_fazenda.plot(ax=ax, facecolor=COR_NAO_TRAB, edgecolor="black", linewidth=1.2)
-                    base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.2)
+                base_fazenda.plot(ax=ax, facecolor=COR_NAO_TRAB, edgecolor="black", linewidth=1.2)
+                gpd.GeoSeries(area_trabalhada, crs=base_fazenda.crs).plot(
+                    ax=ax, color=COR_TRABALHADA, alpha=0.9
+                )
+                base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.2)
 
-                    minx, miny, maxx, maxy = base_fazenda.total_bounds
-                    pad_x = (maxx - minx) * 0.05
-                    pad_y = (maxy - miny) * 0.05
-                    ax.set_xlim(minx - pad_x, maxx + pad_x)
-                    ax.set_ylim(miny - pad_y, maxy + pad_y)
+                if "TALHAO" in base_fazenda.columns:
+                    for _, row in base_fazenda.iterrows():
+                        if row.geometry.is_empty:
+                            continue
 
-                    ax.axis("off")
-                    return fig, ax
+                        centroid = row.geometry.centroid
 
-                # =========================
-                # ÁREA TRABALHADA (ORIGINAL)
-                # =========================
-                if "Área trabalhada" in TIPO_MAPA:
+                        ax.text(
+                            centroid.x,
+                            centroid.y,
+                            str(row["TALHAO"]),
+                            fontsize=7,
+                            ha="center",
+                            va="center",
+                            color="black",
+                            weight="bold"
+                        )
 
-                    fig, ax = base_plot()
+                ax.axis("off")
 
-                    gpd.GeoSeries(area_trabalhada, crs=base_fazenda.crs).plot(
-                        ax=ax, color=COR_TRABALHADA, alpha=0.9
-                    )
+                pos = ax.get_position()
+                centro_mapa = (pos.x0 + pos.x1) / 2
+                base_y = pos.y0
 
-                    ax.legend(
-                        handles=[
-                            mpatches.Patch(color=COR_TRABALHADA, label="Área trabalhada"),
-                            mpatches.Patch(color=COR_NAO_TRAB, label="Área não trabalhada"),
-                            mpatches.Patch(facecolor="none", edgecolor="black", label="Limites da fazenda"),
-                        ],
-                        loc="lower center",
-                        bbox_to_anchor=(0.5, -0.2),
-                        ncol=3,
-                        frameon=True,
-                        fontsize=12
-                    )
+                ax.legend(
+                    handles=[
+                        mpatches.Patch(color=COR_TRABALHADA, label="Área trabalhada"),
+                        mpatches.Patch(color=COR_NAO_TRAB, label="Área não trabalhada"),
+                        mpatches.Patch(facecolor="none", edgecolor="black", label="Limites da fazenda"),
+                    ],
+                    loc="lower center",
+                    bbox_to_anchor=(centro_mapa, base_y - 0.35),
+                    ncol=3,
+                    frameon=True,
+                    fontsize=13
+                )
 
-                    st.pyplot(fig)
+                fig.text(
+                    pos.x1 + 0.02,
+                    0.50,
+                    f"Resumo da operação\n\n"
+                    f"Fazenda: {FAZENDA_ID} – {nome_fazenda}\n\n"
+                    f"Área total: {area_total_ha} ha\n"
+                    f"Trabalhada: {area_trab_ha} ha ({pct_trab}%)\n"
+                    f"Não trabalhada: {area_nao_ha} ha ({pct_nao}%)\n\n"
+                    f"Período:\n{periodo_ini} até {periodo_fim}",
+                    fontsize=11,
+                    bbox=dict(boxstyle="round,pad=0.8", facecolor=COR_CAIXA, edgecolor="black")
+                )
 
-                # =========================
-                # VELOCIDADE
-                # =========================
-                if "Velocidade" in TIPO_MAPA and "vl_velocidade" in df_faz.columns:
-
-                    df_v = df_faz.copy()
-                    df_v = df_v[
-                        (df_v["vl_velocidade"] >= VEL_MIN) &
-                        (df_v["vl_velocidade"] <= VEL_MAX)
-                    ]
-
-                    fig, ax = base_plot()
-
-                    gpd.GeoDataFrame(
-                        df_v,
-                        geometry=gpd.points_from_xy(
-                            df_v["vl_longitude_inicial"],
-                            df_v["vl_latitude_inicial"]
-                        ),
-                        crs="EPSG:4326"
-                    ).to_crs(base_fazenda.crs).plot(
-                        ax=ax,
-                        column="vl_velocidade",
-                        cmap="RdYlGn",
-                        markersize=5,
-                        legend=True
-                    )
-
-                    st.pyplot(fig)
-
-                # =========================
-                # RPM
-                # =========================
-                if "RPM" in TIPO_MAPA and "vl_rpm" in df_faz.columns:
-
-                    df_r = df_faz.copy()
-                    df_r = df_r[
-                        (df_r["vl_rpm"] >= RPM_MIN) &
-                        (df_r["vl_rpm"] <= RPM_MAX)
-                    ]
-
-                    fig, ax = base_plot()
-
-                    gpd.GeoDataFrame(
-                        df_r,
-                        geometry=gpd.points_from_xy(
-                            df_r["vl_longitude_inicial"],
-                            df_r["vl_latitude_inicial"]
-                        ),
-                        crs="EPSG:4326"
-                    ).to_crs(base_fazenda.crs).plot(
-                        ax=ax,
-                        column="vl_rpm",
-                        cmap="coolwarm",
-                        markersize=5,
-                        legend=True
-                    )
-
-                    st.pyplot(fig)
-
-                # =========================
-                # RESUMO (INALTERADO)
-                # =========================
                 brasilia = pytz.timezone("America/Sao_Paulo")
                 hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
 
-                fig, ax = base_plot()
+                fig.text(
+                    centro_mapa,
+                    base_y - 0.11,
+                    "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos.",
+                    ha="center",
+                    fontsize=10,
+                    color=COR_RODAPE
+                )
 
                 fig.text(
-                    0.75, 0.5,
-                    f"Fazenda: {FAZENDA_ID} – {nome_fazenda}\n"
-                    f"Área total: {area_total_ha} ha\n"
-                    f"Trabalhada: {area_trab_ha} ha ({pct_trab}%)\n"
-                    f"Período: {periodo_ini} até {periodo_fim}",
-                    bbox=dict(boxstyle="round,pad=0.8", facecolor=COR_CAIXA)
+                    centro_mapa,
+                    base_y - 0.14,
+                    "Relatório elaborado com base em dados da Solinftec.",
+                    ha="center",
+                    fontsize=10,
+                    color=COR_RODAPE
+                )
+
+                fig.text(
+                    centro_mapa,
+                    base_y - 0.17,
+                    f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
+                    ha="center",
+                    fontsize=10,
+                    color=COR_RODAPE
                 )
 
                 st.pyplot(fig)
+
+                if df_talhoes is not None:
+                    st.markdown("### 🌾 Área por Gleba / Talhão")
+                    st.dataframe(df_talhoes, use_container_width=True, hide_index=True)
 
 else:
     st.info("⬆️ Envie os arquivos e clique em **Gerar mapa**.")
