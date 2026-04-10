@@ -34,7 +34,9 @@ st.markdown(
     "dados operacionais da **Solinftec** e base cartográfica da Usina Monte Alegre."
 )
 
+# =========================
 # UPLOAD
+# =========================
 uploaded_zips = st.file_uploader(
     "📦 Upload dos ZIPs contendo o CSV da Solinftec",
     type=["zip"],
@@ -50,7 +52,7 @@ GERAR = st.button("▶️ Gerar mapa")
 
 
 # =========================
-# SIDEBAR CONTROLES
+# SIDEBAR
 # =========================
 st.sidebar.header("⚙️ Parâmetros")
 
@@ -77,18 +79,23 @@ TIPO_MAPA = st.sidebar.multiselect(
     default=["Área Trabalhada"]
 )
 
-# caixas separadas
+# parâmetros condicionais
+VEL_MIN = VEL_MAX = RPM_MIN = RPM_MAX = None
+
 if "Velocidade" in TIPO_MAPA:
-    st.sidebar.subheader("🚜 Velocidade (km/h)")
+    st.sidebar.subheader("🚜 Velocidade")
     VEL_MIN = st.sidebar.number_input("Velocidade mínima", 0.0, 50.0, 0.0)
     VEL_MAX = st.sidebar.number_input("Velocidade máxima", 0.0, 50.0, 20.0)
 
 if "RPM" in TIPO_MAPA:
     st.sidebar.subheader("⚙️ RPM")
-    RPM_MIN = st.sidebar.number_input("RPM mínimo", 0.0, 5000.0, 800.0)
-    RPM_MAX = st.sidebar.number_input("RPM máximo", 0.0, 5000.0, 2500.0)
+    RPM_MIN = st.sidebar.number_input("RPM mínima", 0.0, 5000.0, 800.0)
+    RPM_MAX = st.sidebar.number_input("RPM máxima", 0.0, 5000.0, 2500.0)
 
 
+# =========================
+# CORES
+# =========================
 COR_TRABALHADA = "#62b27f"
 COR_NAO_TRAB = "#f6b1b3"
 COR_CAIXA = "#f1f8ff"
@@ -99,30 +106,32 @@ FIG_HEIGHT = 9
 
 
 # =========================
-# FUNÇÃO HEATMAP LINHA
+# HEATMAP EM LINHA (CORRIGIDO)
 # =========================
-def add_colored_line(ax, gdf, value_col, cmap="viridis", vmin=None, vmax=None):
+def add_colored_line(ax, gdf, value_col, vmin=None, vmax=None, cmap="viridis"):
 
-    norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+    if value_col not in gdf.columns:
+        return
+
+    norm = mcolors.Normalize(vmin=vmin if vmin is not None else gdf[value_col].min(),
+                             vmax=vmax if vmax is not None else gdf[value_col].max())
+
     cmap = cm.get_cmap(cmap)
 
     for _, grupo in gdf.groupby("cd_equipamento"):
         grupo = grupo.sort_values("dt_hr_local_inicial")
 
-        coords = list(grupo.geometry)
-        values = grupo[value_col].fillna(method="ffill").values
+        coords = grupo.geometry.tolist()
+        values = grupo[value_col].astype(float).ffill().values
 
         if len(coords) < 2:
             continue
 
         for i in range(len(coords) - 1):
-            seg = [coords[i], coords[i + 1]]
-            val = values[i]
-
             ax.plot(
-                [seg[0].x, seg[1].x],
-                [seg[0].y, seg[1].y],
-                color=cmap(norm(val)),
+                [coords[i].x, coords[i+1].x],
+                [coords[i].y, coords[i+1].y],
+                color=cmap(norm(values[i])),
                 linewidth=2
             )
 
@@ -149,22 +158,38 @@ if uploaded_zips and uploaded_gpkg and GERAR:
             if not csv_files:
                 continue
 
-            df_temp = pd.read_csv(os.path.join(tmpdir, csv_files[0]),
-                                   sep=";", encoding="latin1", engine="python")
+            df_temp = pd.read_csv(
+                os.path.join(tmpdir, csv_files[0]),
+                sep=";",
+                encoding="latin1",
+                engine="python"
+            )
 
             dfs.append(df_temp)
 
+        if not dfs:
+            st.stop()
+
         df = pd.concat(dfs, ignore_index=True)
 
-        # tratamento
+        # =========================
+        # TRATAMENTO
+        # =========================
         df["dt_hr_local_inicial"] = pd.to_datetime(df["dt_hr_local_inicial"], errors="coerce")
         df["vl_latitude_inicial"] = pd.to_numeric(df["vl_latitude_inicial"], errors="coerce")
         df["vl_longitude_inicial"] = pd.to_numeric(df["vl_longitude_inicial"], errors="coerce")
         df["vl_largura_implemento"] = pd.to_numeric(df["vl_largura_implemento"], errors="coerce")
 
+        # garantir colunas opcionais
+        df["vl_velocidade"] = pd.to_numeric(df.get("vl_velocidade", np.nan), errors="coerce")
+        df["vl_rpm"] = pd.to_numeric(df.get("vl_rpm", np.nan), errors="coerce")
+
         df = df[(df["cd_estado"] == "E") & (df["cd_operacao_parada"] == -1)].copy()
         df["cd_fazenda"] = df["cd_fazenda"].astype(str)
 
+        # =========================
+        # GPKG
+        # =========================
         gpkg_path = os.path.join(tmpdir, "base.gpkg")
         with open(gpkg_path, "wb") as f:
             f.write(uploaded_gpkg.read())
@@ -174,7 +199,6 @@ if uploaded_zips and uploaded_gpkg and GERAR:
 
         if "TALHAO" in base.columns:
             base["TALHAO"] = base["TALHAO"].astype(str)
-
         if "GLEBA" in base.columns:
             base["GLEBA"] = base["GLEBA"].astype(str)
 
@@ -204,7 +228,7 @@ if uploaded_zips and uploaded_gpkg and GERAR:
             linhas = []
             for _, grupo in gdf_pts.groupby("cd_equipamento"):
                 grupo = grupo.sort_values("dt_hr_local_inicial")
-                pts = list(grupo.geometry)
+                pts = grupo.geometry.tolist()
 
                 if len(pts) > 1:
                     linhas.append(LineString(pts))
@@ -222,22 +246,22 @@ if uploaded_zips and uploaded_gpkg and GERAR:
             if area_trab < AREA_MIN_HA:
                 continue
 
+            # =========================
+            # MÉTRICAS
+            # =========================
+            vel_min = df_faz["vl_velocidade"].min()
+            vel_max = df_faz["vl_velocidade"].max()
+            vel_med = df_faz["vl_velocidade"].mean()
+
+            rpm_min = df_faz["vl_rpm"].min()
+            rpm_max = df_faz["vl_rpm"].max()
+            rpm_med = df_faz["vl_rpm"].mean()
+
             dt_min = df_faz["dt_hr_local_inicial"].min()
             dt_max = df_faz["dt_hr_local_inicial"].max()
 
             periodo_ini = dt_min.strftime("%d/%m/%Y %H:%M")
             periodo_fim = dt_max.strftime("%d/%m/%Y %H:%M")
-
-            # =========================
-            # RESUMO MÉTRICAS
-            # =========================
-            vel_min = df_faz.get("vl_velocidade", pd.Series()).min()
-            vel_max = df_faz.get("vl_velocidade", pd.Series()).max()
-            vel_med = df_faz.get("vl_velocidade", pd.Series()).mean()
-
-            rpm_min = df_faz.get("vl_rpm", pd.Series()).min()
-            rpm_max = df_faz.get("vl_rpm", pd.Series()).max()
-            rpm_med = df_faz.get("vl_rpm", pd.Series()).mean()
 
             # =========================
             # PLOT
@@ -246,10 +270,9 @@ if uploaded_zips and uploaded_gpkg and GERAR:
 
                 fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
 
-                base_fazenda.plot(ax=ax, color=COR_NAO_TRAB, edgecolor="black")
+                base_fazenda.plot(ax=ax, facecolor=COR_NAO_TRAB, edgecolor="black")
 
-                if "Área Trabalhada" in TIPO_MAPA:
-                    gpd.GeoSeries(area_trabalhada).plot(ax=ax, color=COR_TRABALHADA)
+                gpd.GeoSeries(area_trabalhada).plot(ax=ax, color=COR_TRABALHADA)
 
                 if "Velocidade" in TIPO_MAPA:
                     add_colored_line(ax, gdf_pts, "vl_velocidade",
@@ -267,8 +290,8 @@ if uploaded_zips and uploaded_gpkg and GERAR:
                     pos.x1 + 0.02, 0.5,
                     f"Fazenda {FAZENDA_ID}\n"
                     f"Área: {area_trab} ha\n"
-                    f"Vel min/max/méd: {vel_min:.1f}/{vel_max:.1f}/{vel_med:.1f}\n"
-                    f"RPM min/max/méd: {rpm_min:.0f}/{rpm_max:.0f}/{rpm_med:.0f}\n"
+                    f"Vel: {vel_min:.1f}/{vel_max:.1f}/{vel_med:.1f}\n"
+                    f"RPM: {rpm_min:.0f}/{rpm_max:.0f}/{rpm_med:.0f}\n"
                     f"{periodo_ini} até {periodo_fim}",
                     bbox=dict(boxstyle="round", facecolor=COR_CAIXA)
                 )
@@ -283,4 +306,4 @@ if uploaded_zips and uploaded_gpkg and GERAR:
                 st.pyplot(fig)
 
 else:
-    st.info("Envie arquivos e gere o mapa.")
+    st.info("Envie os arquivos e gere o mapa.")
