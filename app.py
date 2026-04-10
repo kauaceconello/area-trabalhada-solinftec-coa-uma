@@ -45,7 +45,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# UPLOAD DE ARQUIVOS
+# UPLOAD
 uploaded_zip = st.file_uploader(
     "📦 Upload do ZIP contendo o CSV da Solinftec",
     type=["zip"]
@@ -58,7 +58,7 @@ uploaded_gpkg = st.file_uploader(
 
 GERAR = st.button("▶️ Gerar mapa")
 
-# SIDEBAR – PARÂMETROS
+# SIDEBAR
 st.sidebar.header("⚙️ Parâmetros")
 
 TEMPO_MAX_SEG = 60
@@ -78,6 +78,11 @@ AREA_MIN_HA = st.sidebar.number_input(
     step=0.1
 )
 
+MOSTRAR_TALHOES = st.sidebar.checkbox(
+    "📊 Mostrar Gleba / Talhão",
+    value=False
+)
+
 COR_TRABALHADA = "#62b27f"
 COR_NAO_TRAB = "#f6b1b3"
 COR_CAIXA = "#f1f8ff"
@@ -86,7 +91,10 @@ COR_RODAPE = "#7a7a7a"
 FIG_WIDTH = 25
 FIG_HEIGHT = 9
 
+
+# =========================
 # PROCESSAMENTO
+# =========================
 if uploaded_zip and uploaded_gpkg and GERAR:
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -126,6 +134,15 @@ if uploaded_zip and uploaded_gpkg and GERAR:
         base = gpd.read_file(gpkg_path)
         base["FAZENDA"] = base["FAZENDA"].astype(str)
 
+        if "TALHAO" in base.columns:
+            base["TALHAO"] = base["TALHAO"].astype(str)
+        if "GLEBA" in base.columns:
+            base["GLEBA"] = base["GLEBA"].astype(str)
+
+
+        # =========================
+        # LOOP FAZENDAS
+        # =========================
         for FAZENDA_ID in df["cd_fazenda"].dropna().unique():
 
             df_faz = df[df["cd_fazenda"] == FAZENDA_ID].copy()
@@ -150,7 +167,9 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
             geom_fazenda = unary_union(base_fazenda.geometry)
 
+            # =========================
             # LINHAS
+            # =========================
             linhas = []
             for _, grupo in gdf_pts.groupby("cd_equipamento"):
                 grupo = grupo.sort_values("dt_hr_local_inicial")
@@ -190,51 +209,16 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             area_trabalhada = unary_union(buffer_linhas).intersection(geom_fazenda)
             area_nao_trabalhada = geom_fazenda.difference(area_trabalhada)
 
-            area_total_ha = base_fazenda.geometry.area.sum() / 10000
-            area_trab_ha = area_trabalhada.area / 10000
-            area_nao_ha = area_nao_trabalhada.area / 10000
+            area_total_ha = round(base_fazenda.geometry.area.sum() / 10000, 2)
+            area_trab_ha = round(area_trabalhada.area / 10000, 2)
+            area_nao_ha = round(area_nao_trabalhada.area / 10000, 2)
 
             if area_trab_ha < AREA_MIN_HA:
                 continue
 
-            pct_trab = area_trab_ha / area_total_ha * 100
-            pct_nao = area_nao_ha / area_total_ha * 100
+            pct_trab = round(area_trab_ha / area_total_ha * 100, 1)
+            pct_nao = round(area_nao_ha / area_total_ha * 100, 1)
 
-            # =========================
-            # TALHÕES (CORRIGIDO)
-            # =========================
-            df_talhoes = None
-
-            if "TALHAO" in base_fazenda.columns:
-
-                base_t = base_fazenda.copy()
-
-                base_t["area_total_talhao"] = base_t.geometry.area / 10000
-
-                intersec = gpd.overlay(
-                    base_t,
-                    gpd.GeoDataFrame(geometry=[area_trabalhada], crs=base_fazenda.crs),
-                    how="intersection"
-                )
-
-                if not intersec.empty:
-                    intersec["area_trab"] = intersec.geometry.area / 10000
-                    trab = intersec.groupby("TALHAO")["area_trab"].sum().reset_index()
-                else:
-                    trab = pd.DataFrame(columns=["TALHAO", "area_trab"])
-
-                base_final = base_t[["TALHAO", "area_total_talhao"]].drop_duplicates()
-
-                df_talhoes = base_final.merge(trab, on="TALHAO", how="left")
-                df_talhoes["area_trab"] = df_talhoes["area_trab"].fillna(0)
-
-                df_talhoes = df_talhoes.rename(columns={
-                    "area_total_talhao": "Área Total (ha)",
-                    "area_trab": "Área Colhida (ha)",
-                    "TALHAO": "Talhão"
-                })
-
-            # PERÍODO
             dt_min = df_faz["dt_hr_local_inicial"].min()
             dt_max = df_faz["dt_hr_local_inicial"].max()
 
@@ -242,12 +226,34 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             periodo_fim = dt_max.strftime("%d/%m/%Y %H:%M")
 
             # =========================
-            # MAPA (SÓ AJUSTE DE LEGENDAS)
+            # TALHÕES (TABELA)
+            # =========================
+            df_talhoes = None
+
+            if MOSTRAR_TALHOES and "TALHAO" in base_fazenda.columns and "GLEBA" in base_fazenda.columns:
+
+                intersec = gpd.overlay(
+                    base_fazenda,
+                    gpd.GeoDataFrame(geometry=[area_trabalhada], crs=base_fazenda.crs),
+                    how="intersection"
+                )
+
+                if not intersec.empty:
+                    intersec["area_trab"] = intersec.geometry.area / 10000
+
+                    df_talhoes = intersec.groupby(["GLEBA", "TALHAO"])["area_trab"].sum().reset_index()
+
+                    # deixar bonito
+                    df_talhoes.columns = ["Gleba", "Talhão", "Área Trabalhada (ha)"]
+                    df_talhoes["Área Trabalhada (ha)"] = df_talhoes["Área Trabalhada (ha)"].round(2)
+
+            # =========================
+            # MAPA (INTOCADO VISUALMENTE)
             # =========================
             with st.expander(f"🗺️ Mapa – {nome_fazenda}", expanded=False):
 
                 fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
-                plt.subplots_adjust(left=0.15, right=0.85, bottom=0.28, top=0.88)
+                plt.subplots_adjust(left=0.15, right=0.85, bottom=0.25, top=0.88)
 
                 base_fazenda.plot(ax=ax, facecolor=COR_NAO_TRAB, edgecolor="black", linewidth=1.2)
                 gpd.GeoSeries(area_trabalhada, crs=base_fazenda.crs).plot(
@@ -261,7 +267,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 centro_mapa = (pos.x0 + pos.x1) / 2
                 base_y = pos.y0
 
-                # LEGEND = MAIS PRA CIMA (NÃO SOBREPOR MAPA)
                 ax.legend(
                     handles=[
                         mpatches.Patch(color=COR_TRABALHADA, label="Área trabalhada"),
@@ -269,7 +274,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                         mpatches.Patch(facecolor="none", edgecolor="black", label="Limites da fazenda"),
                     ],
                     loc="lower center",
-                    bbox_to_anchor=(centro_mapa, base_y - 0.02),
+                    bbox_to_anchor=(centro_mapa, base_y - 0.06),
                     ncol=3,
                     frameon=True,
                     fontsize=13
@@ -280,24 +285,17 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                     0.50,
                     f"Resumo da operação\n\n"
                     f"Fazenda: {FAZENDA_ID} – {nome_fazenda}\n\n"
-                    f"Área total: {area_total_ha:.2f} ha\n"
-                    f"Trabalhada: {area_trab_ha:.2f} ha ({pct_trab:.1f}%)\n"
-                    f"Não trabalhada: {area_nao_ha:.2f} ha ({pct_nao:.1f}%)\n\n"
+                    f"Área total: {area_total_ha} ha\n"
+                    f"Trabalhada: {area_trab_ha} ha ({pct_trab}%)\n"
+                    f"Não trabalhada: {area_nao_ha} ha ({pct_nao}%)\n\n"
                     f"Período:\n{periodo_ini} até {periodo_fim}",
                     fontsize=11,
                     bbox=dict(boxstyle="round,pad=0.8", facecolor=COR_CAIXA, edgecolor="black")
                 )
 
-                fig.suptitle(
-                    f"Área trabalhada – Fazenda {FAZENDA_ID} – {nome_fazenda}",
-                    fontsize=15,
-                    x=centro_mapa
-                )
-
                 brasilia = pytz.timezone("America/Sao_Paulo")
                 hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
 
-                # DISCLAMER
                 fig.text(
                     centro_mapa,
                     base_y - 0.11,
@@ -328,11 +326,17 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 st.pyplot(fig)
 
                 # =========================
-                # TABELA
+                # TABELA BONITA (PRINT FRIENDLY)
                 # =========================
                 if df_talhoes is not None:
-                    st.markdown("### 🌾 Talhões da Fazenda")
-                    st.dataframe(df_talhoes, use_container_width=True)
+
+                    st.markdown("### 🌾 Área por Gleba / Talhão")
+
+                    st.dataframe(
+                        df_talhoes,
+                        use_container_width=True,
+                        hide_index=True
+                    )
 
 else:
     st.info("⬆️ Envie os arquivos e clique em **Gerar mapa**.")
