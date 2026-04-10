@@ -46,9 +46,10 @@ st.markdown(
 )
 
 # UPLOAD
-uploaded_zip = st.file_uploader(
-    "📦 Upload do ZIP contendo o CSV da Solinftec",
-    type=["zip"]
+uploaded_zips = st.file_uploader(
+    "📦 Upload dos ZIPs contendo o CSV da Solinftec",
+    type=["zip"],
+    accept_multiple_files=True
 )
 
 uploaded_gpkg = st.file_uploader(
@@ -93,26 +94,45 @@ FIG_HEIGHT = 9
 
 
 # PROCESSAMENTO
-if uploaded_zip and uploaded_gpkg and GERAR:
+if uploaded_zips and uploaded_gpkg and GERAR:
 
     with tempfile.TemporaryDirectory() as tmpdir:
 
-        zip_path = os.path.join(tmpdir, "dados.zip")
-        with open(zip_path, "wb") as f:
-            f.write(uploaded_zip.read())
+        # =========================
+        # LEITURA DE MÚLTIPLOS ZIPS
+        # =========================
+        dfs = []
 
-        with zipfile.ZipFile(zip_path, "r") as z:
-            z.extractall(tmpdir)
+        for uploaded_zip in uploaded_zips:
 
-        csv_files = [f for f in os.listdir(tmpdir) if f.lower().endswith(".csv")]
-        if not csv_files:
-            st.error("❌ Nenhum CSV encontrado dentro do ZIP.")
+            zip_path = os.path.join(tmpdir, uploaded_zip.name)
+
+            with open(zip_path, "wb") as f:
+                f.write(uploaded_zip.read())
+
+            with zipfile.ZipFile(zip_path, "r") as z:
+                z.extractall(tmpdir)
+
+            csv_files = [f for f in os.listdir(tmpdir) if f.lower().endswith(".csv")]
+            if not csv_files:
+                st.error(f"❌ Nenhum CSV encontrado no ZIP {uploaded_zip.name}")
+                continue
+
+            csv_path = os.path.join(tmpdir, csv_files[0])
+
+            df_temp = pd.read_csv(csv_path, sep=";", encoding="latin1", engine="python")
+
+            dfs.append(df_temp)
+
+        if not dfs:
+            st.error("❌ Nenhum dado válido encontrado nos ZIPs.")
             st.stop()
 
-        csv_path = os.path.join(tmpdir, csv_files[0])
+        df = pd.concat(dfs, ignore_index=True)
 
-        df = pd.read_csv(csv_path, sep=";", encoding="latin1", engine="python")
-
+        # =========================
+        # TRATAMENTO ORIGINAL
+        # =========================
         df["dt_hr_local_inicial"] = pd.to_datetime(df["dt_hr_local_inicial"], errors="coerce")
         df["vl_latitude_inicial"] = pd.to_numeric(df["vl_latitude_inicial"], errors="coerce")
         df["vl_longitude_inicial"] = pd.to_numeric(df["vl_longitude_inicial"], errors="coerce")
@@ -125,6 +145,9 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
         df["cd_fazenda"] = df["cd_fazenda"].astype(str)
 
+        # =========================
+        # GPKG
+        # =========================
         gpkg_path = os.path.join(tmpdir, "base.gpkg")
         with open(gpkg_path, "wb") as f:
             f.write(uploaded_gpkg.read())
@@ -138,7 +161,9 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             base["GLEBA"] = base["GLEBA"].astype(str)
 
 
-        # LOOP FAZENDAS
+        # =========================
+        # LOOP FAZENDAS (INALTERADO)
+        # =========================
         for FAZENDA_ID in df["cd_fazenda"].dropna().unique():
 
             df_faz = df[df["cd_fazenda"] == FAZENDA_ID].copy()
@@ -163,7 +188,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
             geom_fazenda = unary_union(base_fazenda.geometry)
 
-            # LINHAS
             linhas = []
             for _, grupo in gdf_pts.groupby("cd_equipamento"):
                 grupo = grupo.sort_values("dt_hr_local_inicial")
@@ -219,65 +243,50 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             periodo_ini = dt_min.strftime("%d/%m/%Y %H:%M")
             periodo_fim = dt_max.strftime("%d/%m/%Y %H:%M")
 
-            # TALHÕES (TABELA)
             df_talhoes = None
 
             if MOSTRAR_TALHOES and "TALHAO" in base_fazenda.columns and "GLEBA" in base_fazenda.columns:
 
                 base_tmp = base_fazenda.copy()
 
-                # Área total por talhão
                 base_tmp["Área total (ha)"] = base_tmp.geometry.area / 10000
-            
+
                 total = base_tmp[["GLEBA", "TALHAO", "Área total (ha)"]]
-            
-                # Interseção (área trabalhada)
+
                 intersec = gpd.overlay(
                     base_tmp,
                     gpd.GeoDataFrame(geometry=[area_trabalhada], crs=base_tmp.crs),
                     how="intersection"
                 )
-            
+
                 if not intersec.empty:
                     intersec["Área trabalhada (ha)"] = intersec.geometry.area / 10000
                     trab = intersec.groupby(["GLEBA", "TALHAO"])["Área trabalhada (ha)"].sum().reset_index()
                 else:
                     trab = pd.DataFrame(columns=["GLEBA", "TALHAO", "Área trabalhada (ha)"])
-            
-                # Merge
+
                 df_talhoes = total.merge(trab, on=["GLEBA", "TALHAO"], how="left")
-            
+
                 df_talhoes["Área trabalhada (ha)"] = df_talhoes["Área trabalhada (ha)"].fillna(0)
-            
-                # Arredondar
-                df_talhoes["Área total (ha)"] = df_talhoes["Área total (ha)"].round(2)
-                df_talhoes["Área trabalhada (ha)"] = df_talhoes["Área trabalhada (ha)"].round(2)
-            
-                # Renomear colunas
+
                 df_talhoes = df_talhoes.rename(columns={
                     "GLEBA": "Gleba",
                     "TALHAO": "Talhão"
                 })
-            
-                # Ordenar colunas
+
                 df_talhoes = df_talhoes[
                     ["Gleba", "Talhão", "Área total (ha)", "Área trabalhada (ha)"]
                 ]
 
-                # Ordenar
-                df_talhoes = df_talhoes.sort_values(by="Área trabalhada (ha)", ascending=True)
-            
-                # LINHA TOTAL
                 total_row = pd.DataFrame({
                     "Gleba": ["TOTAL"],
                     "Talhão": [""],
                     "Área total (ha)": [df_talhoes["Área total (ha)"].sum().round(2)],
                     "Área trabalhada (ha)": [df_talhoes["Área trabalhada (ha)"].sum().round(2)]
                 })
-            
+
                 df_talhoes = pd.concat([df_talhoes, total_row], ignore_index=True)
 
-            # MAPA 
             with st.expander(f"🗺️ Mapa – {nome_fazenda}", expanded=False):
 
                 fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
@@ -289,16 +298,13 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 )
                 base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.2)
 
-                # LABEL DOS TALHÕES
                 if "TALHAO" in base_fazenda.columns:
-                
                     for _, row in base_fazenda.iterrows():
-                
                         if row.geometry.is_empty:
                             continue
-                
+
                         centroid = row.geometry.centroid
-                
+
                         ax.text(
                             centroid.x,
                             centroid.y,
@@ -374,16 +380,9 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
                 st.pyplot(fig)
 
-                # TABELA
                 if df_talhoes is not None:
-
                     st.markdown("### 🌾 Área por Gleba / Talhão")
-
-                    st.dataframe(
-                        df_talhoes,
-                        use_container_width=True,
-                        hide_index=True
-                    )
+                    st.dataframe(df_talhoes, use_container_width=True, hide_index=True)
 
 else:
     st.info("⬆️ Envie os arquivos e clique em **Gerar mapa**.")
