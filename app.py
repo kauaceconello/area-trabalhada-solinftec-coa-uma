@@ -79,7 +79,7 @@ AREA_MIN_HA = st.sidebar.number_input(
 )
 
 MOSTRAR_TALHOES = st.sidebar.checkbox(
-    "📊 Mostrar Gleba / Talhão",
+    "📊 Mostrar área por Gleba / Talhão",
     value=False
 )
 
