@@ -112,7 +112,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
         df["vl_latitude_inicial"] = pd.to_numeric(df["vl_latitude_inicial"], errors="coerce")
         df["vl_longitude_inicial"] = pd.to_numeric(df["vl_longitude_inicial"], errors="coerce")
 
-        # 🔥 NOVO: garantir coluna de largura
         df["vl_largura_implemento"] = pd.to_numeric(df["vl_largura_implemento"], errors="coerce")
 
         df = df[
@@ -129,7 +128,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
         base = gpd.read_file(gpkg_path)
         base["FAZENDA"] = base["FAZENDA"].astype(str)
 
-        # LOOP POR FAZENDA
         for FAZENDA_ID in df["cd_fazenda"].dropna().unique():
 
             df_faz = df[df["cd_fazenda"] == FAZENDA_ID].copy()
@@ -181,9 +179,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
             gdf_linhas = gpd.GeoDataFrame(geometry=linhas, crs=base_fazenda.crs)
 
-            # 🔥 ALTERAÇÃO PRINCIPAL
             largura_media = df_faz["vl_largura_implemento"].dropna().mean()
-
             if pd.isna(largura_media):
                 continue
 
@@ -214,7 +210,8 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
                 fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
 
-                plt.subplots_adjust(left=0.08, right=0.72, bottom=0.30, top=0.90)
+                # 🔥 CENTRALIZAÇÃO REAL
+                plt.subplots_adjust(left=0.15, right=0.85, bottom=0.25, top=0.88)
 
                 base_fazenda.plot(ax=ax, facecolor=COR_NAO_TRAB, edgecolor="black", linewidth=1.2)
                 gpd.GeoSeries(area_trabalhada, crs=base_fazenda.crs).plot(
@@ -226,6 +223,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
                 pos = ax.get_position()
                 centro_mapa = (pos.x0 + pos.x1) / 2
+                base_y = pos.y0
 
                 ax.legend(
                     handles=[
@@ -234,7 +232,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                         mpatches.Patch(facecolor="none", edgecolor="black", label="Limites da fazenda"),
                     ],
                     loc="lower center",
-                    bbox_to_anchor=(centro_mapa, pos.y0 - 0.08),
+                    bbox_to_anchor=(centro_mapa, base_y - 0.06),
                     bbox_transform=fig.transFigure,
                     ncol=3,
                     frameon=True,
@@ -265,7 +263,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
                 fig.text(
                     centro_mapa,
-                    pos.y0 - 0.14,
+                    base_y - 0.11,
                     "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos.",
                     ha="center",
                     fontsize=10,
@@ -274,7 +272,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
                 fig.text(
                     centro_mapa,
-                    pos.y0 - 0.17,
+                    base_y - 0.14,
                     "Relatório elaborado com base em dados da Solinftec.",
                     ha="center",
                     fontsize=10,
@@ -283,7 +281,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
                 fig.text(
                     centro_mapa,
-                    pos.y0 - 0.20,
+                    base_y - 0.17,
                     f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
                     ha="center",
                     fontsize=10,
