@@ -92,9 +92,7 @@ FIG_WIDTH = 25
 FIG_HEIGHT = 9
 
 
-# =========================
 # PROCESSAMENTO
-# =========================
 if uploaded_zip and uploaded_gpkg and GERAR:
 
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -140,9 +138,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             base["GLEBA"] = base["GLEBA"].astype(str)
 
 
-        # =========================
         # LOOP FAZENDAS
-        # =========================
         for FAZENDA_ID in df["cd_fazenda"].dropna().unique():
 
             df_faz = df[df["cd_fazenda"] == FAZENDA_ID].copy()
@@ -167,9 +163,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
             geom_fazenda = unary_union(base_fazenda.geometry)
 
-            # =========================
             # LINHAS
-            # =========================
             linhas = []
             for _, grupo in gdf_pts.groupby("cd_equipamento"):
                 grupo = grupo.sort_values("dt_hr_local_inicial")
@@ -225,9 +219,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             periodo_ini = dt_min.strftime("%d/%m/%Y %H:%M")
             periodo_fim = dt_max.strftime("%d/%m/%Y %H:%M")
 
-            # =========================
             # TALHÕES (TABELA)
-            # =========================
             df_talhoes = None
 
             if MOSTRAR_TALHOES and "TALHAO" in base_fazenda.columns and "GLEBA" in base_fazenda.columns:
@@ -252,7 +244,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 else:
                     trab = pd.DataFrame(columns=["GLEBA", "TALHAO", "Área trabalhada (ha)"])
             
-                # Merge → garante TODOS os talhões
+                # Merge
                 df_talhoes = total.merge(trab, on=["GLEBA", "TALHAO"], how="left")
             
                 df_talhoes["Área trabalhada (ha)"] = df_talhoes["Área trabalhada (ha)"].fillna(0)
@@ -272,9 +264,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                     ["Gleba", "Talhão", "Área total (ha)", "Área trabalhada (ha)"]
                 ]
             
-                # =========================
                 # LINHA TOTAL
-                # =========================
                 total_row = pd.DataFrame({
                     "Gleba": ["TOTAL"],
                     "Talhão": [""],
@@ -284,9 +274,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             
                 df_talhoes = pd.concat([df_talhoes, total_row], ignore_index=True)
 
-            # =========================
-            # MAPA (INTOCADO VISUALMENTE)
-            # =========================
+            # MAPA 
             with st.expander(f"🗺️ Mapa – {nome_fazenda}", expanded=False):
 
                 fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
@@ -362,12 +350,10 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
                 st.pyplot(fig)
 
-                # =========================
-                # TABELA BONITA (PRINT FRIENDLY)
-                # =========================
+                # TABELA
                 if df_talhoes is not None:
 
-                    st.markdown("### 🌾 Área por Gleba / Talhão")
+                    st.markdown("### 🌾 Área área por Gleba / Talhão")
 
                     st.dataframe(
                         df_talhoes,
