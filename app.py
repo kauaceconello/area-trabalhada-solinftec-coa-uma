@@ -263,6 +263,9 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 df_talhoes = df_talhoes[
                     ["Gleba", "Talhão", "Área total (ha)", "Área trabalhada (ha)"]
                 ]
+
+                # Ordenar
+                df_talhoes = df_talhoes.sort_values(by="Área trabalhada (ha)", ascending=True)
             
                 # LINHA TOTAL
                 total_row = pd.DataFrame({
