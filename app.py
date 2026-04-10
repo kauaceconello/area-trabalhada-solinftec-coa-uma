@@ -386,4 +386,3 @@ if uploaded_zips and uploaded_gpkg and GERAR:
 
 else:
     st.info("⬆️ Envie os arquivos e clique em **Gerar mapa**.")
-faça as alterações e mantenha o que já tem escrito
