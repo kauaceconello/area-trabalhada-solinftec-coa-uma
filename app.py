@@ -64,10 +64,9 @@ st.sidebar.header("⚙️ Parâmetros")
 
 TEMPO_MAX_SEG = 60
 
-# 🔥 ALTERADO (agora é multiplicador)
 MULTIPLICADOR_BUFFER = st.sidebar.number_input(
-    "Largura do buffer",
-    min_value=1.5,
+    "Tamanho do Buffer",
+    min_value=1.0,
     max_value=10.0,
     value=1.5,
     step=0.1
@@ -80,9 +79,8 @@ AREA_MIN_HA = st.sidebar.number_input(
     step=0.1
 )
 
-# CORES E FIGURA
-COR_TRABALHADA = "#61b27f"
-COR_NAO_TRAB = "#f8cfc6"
+COR_TRABALHADA = "#62b27f"
+COR_NAO_TRAB = "#f6b1b3"
 COR_CAIXA = "#f1f8ff"
 COR_RODAPE = "#7a7a7a"
 
