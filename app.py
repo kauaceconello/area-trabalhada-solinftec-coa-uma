@@ -120,7 +120,21 @@ if uploaded_zips and uploaded_gpkg and GERAR:
 
             csv_path = os.path.join(tmpdir, csv_files[0])
 
-            df_temp = pd.read_csv(csv_path, sep=";", encoding="latin1", engine="python")
+            df_temp = pd.read_csv(
+                        csv_path,
+                        sep=";",
+                        encoding="latin1",
+                        usecols=[
+                            "dt_hr_local_inicial",
+                            "vl_latitude_inicial",
+                            "vl_longitude_inicial",
+                            "vl_largura_implemento",
+                            "cd_estado",
+                            "cd_operacao_parada",
+                            "cd_fazenda",
+                            "cd_equipamento"
+                        ]
+                    )
 
             dfs.append(df_temp)
 
