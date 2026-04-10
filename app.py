@@ -11,8 +11,8 @@ from shapely.ops import unary_union
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-from matplotlib.collections import LineCollection
-import matplotlib as mpl
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
 
 import zipfile
 import tempfile
@@ -21,9 +21,7 @@ import pytz
 from datetime import datetime
 
 
-# =========================
-# CONFIG
-# =========================
+# CONFIG STREAMLIT
 st.set_page_config(
     page_title="Área Trabalhada – Solinftec",
     layout="wide"
@@ -36,24 +34,7 @@ st.markdown(
     "dados operacionais da **Solinftec** e base cartográfica da Usina Monte Alegre."
 )
 
-st.markdown(
-    """
-    <style>
-    div.stButton > button {
-        width: 100%;
-        height: 3.2em;
-        font-size: 1.2em;
-        font-weight: 600;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
-
-# =========================
 # UPLOAD
-# =========================
 uploaded_zips = st.file_uploader(
     "📦 Upload dos ZIPs contendo o CSV da Solinftec",
     type=["zip"],
@@ -69,51 +50,45 @@ GERAR = st.button("▶️ Gerar mapa")
 
 
 # =========================
-# SIDEBAR
+# SIDEBAR CONTROLES
 # =========================
 st.sidebar.header("⚙️ Parâmetros")
-
-TIPOS_MAPA = st.sidebar.multiselect(
-    "Selecione os mapas",
-    ["Área trabalhada", "Velocidade", "RPM", "Heatmap"],
-    default=["Área trabalhada"]
-)
 
 TEMPO_MAX_SEG = 60
 
 MULTIPLICADOR_BUFFER = st.sidebar.number_input(
     "Tamanho do Buffer",
-    min_value=1.0,
-    max_value=10.0,
-    value=2.5,
-    step=0.1
+    1.0, 10.0, 2.5, 0.1
 )
 
 AREA_MIN_HA = st.sidebar.number_input(
     "Área mínima trabalhada (ha)",
-    min_value=0.0,
-    value=0.50,
-    step=0.1
+    0.0, 50.0, 0.5, 0.1
 )
-
-# aparece SOMENTE se necessário
-if "Velocidade" in TIPOS_MAPA:
-    VEL_MIN = st.sidebar.number_input("Velocidade mínima (termômetro)", value=0.0)
-    VEL_MAX = st.sidebar.number_input("Velocidade máxima (termômetro)", value=20.0)
-
-if "RPM" in TIPOS_MAPA:
-    RPM_MIN = st.sidebar.number_input("RPM mínimo (termômetro)", value=0.0)
-    RPM_MAX = st.sidebar.number_input("RPM máxima (termômetro)", value=2500.0)
 
 MOSTRAR_TALHOES = st.sidebar.checkbox(
     "📊 Mostrar área por Gleba / Talhão",
-    value=False
+    False
 )
 
+TIPO_MAPA = st.sidebar.multiselect(
+    "🗺️ Tipo de mapa",
+    ["Área Trabalhada", "Velocidade", "RPM"],
+    default=["Área Trabalhada"]
+)
 
-# =========================
-# CORES
-# =========================
+# caixas separadas
+if "Velocidade" in TIPO_MAPA:
+    st.sidebar.subheader("🚜 Velocidade (km/h)")
+    VEL_MIN = st.sidebar.number_input("Velocidade mínima", 0.0, 50.0, 0.0)
+    VEL_MAX = st.sidebar.number_input("Velocidade máxima", 0.0, 50.0, 20.0)
+
+if "RPM" in TIPO_MAPA:
+    st.sidebar.subheader("⚙️ RPM")
+    RPM_MIN = st.sidebar.number_input("RPM mínimo", 0.0, 5000.0, 800.0)
+    RPM_MAX = st.sidebar.number_input("RPM máximo", 0.0, 5000.0, 2500.0)
+
+
 COR_TRABALHADA = "#62b27f"
 COR_NAO_TRAB = "#f6b1b3"
 COR_CAIXA = "#f1f8ff"
@@ -124,53 +99,32 @@ FIG_HEIGHT = 9
 
 
 # =========================
-# TERMÔMETRO DINÂMICO
+# FUNÇÃO HEATMAP LINHA
 # =========================
-def plot_termometro(ax, valor, vmin, vmax, titulo):
-    ax.set_xlim(vmin, vmax)
-    ax.set_ylim(0, 1)
+def add_colored_line(ax, gdf, value_col, cmap="viridis", vmin=None, vmax=None):
 
-    cmap = mpl.cm.get_cmap("viridis")
-    norm = mpl.colors.Normalize(vmin=vmin, vmax=vmax)
-
-    ax.barh(0.5, vmax - vmin, left=vmin, color="#e0e0e0")
-    ax.barh(0.5, valor - vmin, left=vmin, color=cmap(norm(valor)))
-
-    ax.axvline(valor, color="black", linewidth=2)
-    ax.set_yticks([])
-    ax.set_title(titulo, fontsize=10)
-
-
-# =========================
-# LINE HEAT (VELOCIDADE / RPM)
-# =========================
-def add_colored_line(ax, gdf, value_col, cmap_name="viridis"):
-    cmap = plt.get_cmap(cmap_name)
+    norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+    cmap = cm.get_cmap(cmap)
 
     for _, grupo in gdf.groupby("cd_equipamento"):
         grupo = grupo.sort_values("dt_hr_local_inicial")
 
-        if len(grupo) < 2:
-            continue
-
-        coords = list(zip(grupo.geometry.x, grupo.geometry.y))
+        coords = list(grupo.geometry)
         values = grupo[value_col].fillna(method="ffill").values
 
-        segments = []
-        seg_colors = []
+        if len(coords) < 2:
+            continue
 
         for i in range(len(coords) - 1):
-            segments.append([coords[i], coords[i + 1]])
-            seg_colors.append(values[i])
+            seg = [coords[i], coords[i + 1]]
+            val = values[i]
 
-        lc = LineCollection(
-            segments,
-            cmap=cmap,
-            norm=plt.Normalize(np.nanmin(values), np.nanmax(values)),
-            linewidth=2.5
-        )
-        lc.set_array(np.array(seg_colors))
-        ax.add_collection(lc)
+            ax.plot(
+                [seg[0].x, seg[1].x],
+                [seg[0].y, seg[1].y],
+                color=cmap(norm(val)),
+                linewidth=2
+            )
 
 
 # =========================
@@ -195,33 +149,34 @@ if uploaded_zips and uploaded_gpkg and GERAR:
             if not csv_files:
                 continue
 
-            csv_path = os.path.join(tmpdir, csv_files[0])
-            dfs.append(pd.read_csv(csv_path, sep=";", encoding="latin1", engine="python"))
+            df_temp = pd.read_csv(os.path.join(tmpdir, csv_files[0]),
+                                   sep=";", encoding="latin1", engine="python")
+
+            dfs.append(df_temp)
 
         df = pd.concat(dfs, ignore_index=True)
 
-        # =========================
-        # TRATAMENTO
-        # =========================
+        # tratamento
         df["dt_hr_local_inicial"] = pd.to_datetime(df["dt_hr_local_inicial"], errors="coerce")
         df["vl_latitude_inicial"] = pd.to_numeric(df["vl_latitude_inicial"], errors="coerce")
         df["vl_longitude_inicial"] = pd.to_numeric(df["vl_longitude_inicial"], errors="coerce")
-
-        df["vl_velocidade"] = pd.to_numeric(df.get("vl_velocidade", np.nan), errors="coerce")
-        df["vl_rpm"] = pd.to_numeric(df.get("vl_rpm", np.nan), errors="coerce")
+        df["vl_largura_implemento"] = pd.to_numeric(df["vl_largura_implemento"], errors="coerce")
 
         df = df[(df["cd_estado"] == "E") & (df["cd_operacao_parada"] == -1)].copy()
         df["cd_fazenda"] = df["cd_fazenda"].astype(str)
 
-        # =========================
-        # GPKG
-        # =========================
         gpkg_path = os.path.join(tmpdir, "base.gpkg")
         with open(gpkg_path, "wb") as f:
             f.write(uploaded_gpkg.read())
 
         base = gpd.read_file(gpkg_path)
         base["FAZENDA"] = base["FAZENDA"].astype(str)
+
+        if "TALHAO" in base.columns:
+            base["TALHAO"] = base["TALHAO"].astype(str)
+
+        if "GLEBA" in base.columns:
+            base["GLEBA"] = base["GLEBA"].astype(str)
 
         # =========================
         # LOOP
@@ -234,11 +189,10 @@ if uploaded_zips and uploaded_gpkg and GERAR:
             if df_faz.empty:
                 continue
 
-            nome_fazenda = base_fazenda["PROPRIEDADE"].iloc[0]
-
             gdf_pts = gpd.GeoDataFrame(
                 df_faz,
-                geometry=gpd.points_from_xy(df_faz["vl_longitude_inicial"], df_faz["vl_latitude_inicial"]),
+                geometry=gpd.points_from_xy(df_faz["vl_longitude_inicial"],
+                                            df_faz["vl_latitude_inicial"]),
                 crs="EPSG:4326"
             )
 
@@ -247,121 +201,86 @@ if uploaded_zips and uploaded_gpkg and GERAR:
 
             geom_fazenda = unary_union(base_fazenda.geometry)
 
-            # =========================
-            # LINHAS (ÁREA)
-            # =========================
             linhas = []
             for _, grupo in gdf_pts.groupby("cd_equipamento"):
                 grupo = grupo.sort_values("dt_hr_local_inicial")
+                pts = list(grupo.geometry)
 
-                linha = []
-                last = None
-
-                for _, row in grupo.iterrows():
-                    if last is None:
-                        linha = [row.geometry]
-                    else:
-                        if (row["dt_hr_local_inicial"] - last).total_seconds() <= TEMPO_MAX_SEG:
-                            linha.append(row.geometry)
-                        else:
-                            if len(linha) >= 2:
-                                linhas.append(LineString(linha))
-                            linha = [row.geometry]
-                    last = row["dt_hr_local_inicial"]
-
-                if len(linha) >= 2:
-                    linhas.append(LineString(linha))
+                if len(pts) > 1:
+                    linhas.append(LineString(pts))
 
             gdf_linhas = gpd.GeoDataFrame(geometry=linhas, crs=base_fazenda.crs)
 
             largura = df_faz["vl_largura_implemento"].mean()
             buffer = gdf_linhas.buffer(largura * MULTIPLICADOR_BUFFER / 2)
 
-            area_trab = unary_union(buffer).intersection(geom_fazenda)
+            area_trabalhada = unary_union(buffer).intersection(geom_fazenda)
 
-            area_total = base_fazenda.area.sum() / 10000
-            area_trab_ha = area_trab.area / 10000
+            area_total = round(base_fazenda.geometry.area.sum() / 10000, 2)
+            area_trab = round(area_trabalhada.area / 10000, 2)
 
-            if area_trab_ha < AREA_MIN_HA:
+            if area_trab < AREA_MIN_HA:
                 continue
-
-            # =========================
-            # MÉTRICAS
-            # =========================
-            vel_min = df_faz["vl_velocidade"].min()
-            vel_max = df_faz["vl_velocidade"].max()
-            vel_med = df_faz["vl_velocidade"].mean()
-
-            rpm_min = df_faz["vl_rpm"].min()
-            rpm_max = df_faz["vl_rpm"].max()
-            rpm_med = df_faz["vl_rpm"].mean()
 
             dt_min = df_faz["dt_hr_local_inicial"].min()
             dt_max = df_faz["dt_hr_local_inicial"].max()
 
-            hora = datetime.now(pytz.timezone("America/Sao_Paulo")).strftime("%d/%m/%Y %H:%M")
+            periodo_ini = dt_min.strftime("%d/%m/%Y %H:%M")
+            periodo_fim = dt_max.strftime("%d/%m/%Y %H:%M")
+
+            # =========================
+            # RESUMO MÉTRICAS
+            # =========================
+            vel_min = df_faz.get("vl_velocidade", pd.Series()).min()
+            vel_max = df_faz.get("vl_velocidade", pd.Series()).max()
+            vel_med = df_faz.get("vl_velocidade", pd.Series()).mean()
+
+            rpm_min = df_faz.get("vl_rpm", pd.Series()).min()
+            rpm_max = df_faz.get("vl_rpm", pd.Series()).max()
+            rpm_med = df_faz.get("vl_rpm", pd.Series()).mean()
 
             # =========================
             # PLOT
             # =========================
-            with st.expander(f"🗺️ {nome_fazenda}", expanded=False):
+            with st.expander(f"Mapa {FAZENDA_ID}", expanded=False):
 
                 fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
-                plt.subplots_adjust(bottom=0.25)
 
-                # ================= AREA =================
-                if "Área trabalhada" in TIPOS_MAPA:
+                base_fazenda.plot(ax=ax, color=COR_NAO_TRAB, edgecolor="black")
 
-                    base_fazenda.plot(ax=ax, facecolor=COR_NAO_TRAB)
-                    gpd.GeoSeries(area_trab, crs=base_fazenda.crs).plot(ax=ax, color=COR_TRABALHADA)
+                if "Área Trabalhada" in TIPO_MAPA:
+                    gpd.GeoSeries(area_trabalhada).plot(ax=ax, color=COR_TRABALHADA)
 
-                # ================= VELOCIDADE =================
-                if "Velocidade" in TIPOS_MAPA:
-                    add_colored_line(ax, gdf_pts, "vl_velocidade")
+                if "Velocidade" in TIPO_MAPA:
+                    add_colored_line(ax, gdf_pts, "vl_velocidade",
+                                     vmin=VEL_MIN, vmax=VEL_MAX)
 
-                    ax2 = fig.add_axes([0.25, 0.10, 0.5, 0.04])
-                    plot_termometro(ax2, vel_med, VEL_MIN, VEL_MAX, "Velocidade")
-
-                # ================= RPM =================
-                if "RPM" in TIPOS_MAPA:
-                    add_colored_line(ax, gdf_pts, "vl_rpm")
-
-                    ax2 = fig.add_axes([0.25, 0.06, 0.5, 0.04])
-                    plot_termometro(ax2, rpm_med, RPM_MIN, RPM_MAX, "RPM")
-
-                # ================= HEATMAP =================
-                if "Heatmap" in TIPOS_MAPA:
-                    ax.hexbin(
-                        gdf_pts.geometry.x,
-                        gdf_pts.geometry.y,
-                        gridsize=50,
-                        cmap="inferno",
-                        alpha=0.7
-                    )
+                if "RPM" in TIPO_MAPA:
+                    add_colored_line(ax, gdf_pts, "vl_rpm",
+                                     vmin=RPM_MIN, vmax=RPM_MAX)
 
                 ax.axis("off")
 
-                # ================= LEGEND =================
-                ax.legend(handles=[
-                    mpatches.Patch(color=COR_TRABALHADA, label="Trabalhado"),
-                    mpatches.Patch(color=COR_NAO_TRAB, label="Não trabalhado"),
-                ])
+                pos = ax.get_position()
 
-                # ================= RESUMO =================
                 fig.text(
-                    0.82, 0.5,
-                    f"Fazenda: {FAZENDA_ID}\n"
-                    f"Área: {area_trab_ha:.2f} ha\n"
-                    f"Vel: {vel_min:.1f}/{vel_med:.1f}/{vel_max:.1f}\n"
-                    f"RPM: {rpm_min:.0f}/{rpm_med:.0f}/{rpm_max:.0f}"
+                    pos.x1 + 0.02, 0.5,
+                    f"Fazenda {FAZENDA_ID}\n"
+                    f"Área: {area_trab} ha\n"
+                    f"Vel min/max/méd: {vel_min:.1f}/{vel_max:.1f}/{vel_med:.1f}\n"
+                    f"RPM min/max/méd: {rpm_min:.0f}/{rpm_max:.0f}/{rpm_med:.0f}\n"
+                    f"{periodo_ini} até {periodo_fim}",
+                    bbox=dict(boxstyle="round", facecolor=COR_CAIXA)
                 )
 
-                # ================= RODAPÉ =================
-                fig.text(0.5, 0.05,
-                         "Solinftec • Desenvolvido por Kauã Ceconello",
-                         ha="center")
+                brasilia = pytz.timezone("America/Sao_Paulo")
+                hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
+
+                fig.text(0.5, 0.02,
+                         f"Gerado em {hora} • Solinftec",
+                         ha="center", color=COR_RODAPE)
 
                 st.pyplot(fig)
 
 else:
-    st.info("Envie os arquivos e clique em gerar.")
+    st.info("Envie arquivos e gere o mapa.")
