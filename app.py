@@ -110,7 +110,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
         df["dt_hr_local_inicial"] = pd.to_datetime(df["dt_hr_local_inicial"], errors="coerce")
         df["vl_latitude_inicial"] = pd.to_numeric(df["vl_latitude_inicial"], errors="coerce")
         df["vl_longitude_inicial"] = pd.to_numeric(df["vl_longitude_inicial"], errors="coerce")
-
         df["vl_largura_implemento"] = pd.to_numeric(df["vl_largura_implemento"], errors="coerce")
 
         df = df[
@@ -126,6 +125,12 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
         base = gpd.read_file(gpkg_path)
         base["FAZENDA"] = base["FAZENDA"].astype(str)
+
+        # 🔥 GARANTIR CAMPOS TALHÃO E GLEBA
+        if "TALHAO" in base.columns:
+            base["TALHAO"] = base["TALHAO"].astype(str)
+        if "GLEBA" in base.columns:
+            base["GLEBA"] = base["GLEBA"].astype(str)
 
         for FAZENDA_ID in df["cd_fazenda"].dropna().unique():
 
@@ -199,6 +204,34 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             pct_trab = area_trab_ha / area_total_ha * 100
             pct_nao = area_nao_ha / area_total_ha * 100
 
+            # =========================
+            # 🔥 NOVO: ÁREA POR TALHÃO
+            # =========================
+            df_talhoes = None
+            if "TALHAO" in base_fazenda.columns and "GLEBA" in base_fazenda.columns:
+
+                base_tmp = base_fazenda.copy()
+
+                intersec = gpd.overlay(
+                    base_tmp,
+                    gpd.GeoDataFrame(geometry=[area_trabalhada], crs=base_tmp.crs),
+                    how="intersection"
+                )
+
+                if not intersec.empty:
+                    intersec["area_trab_ha"] = intersec.geometry.area / 10000
+
+                    df_talhoes = base_tmp.copy()
+                    df_talhoes["area_total_ha"] = df_talhoes.geometry.area / 10000
+
+                    df_talhoes = df_talhoes.merge(
+                        intersec.groupby(["GLEBA", "TALHAO"])["area_trab_ha"].sum(),
+                        on=["GLEBA", "TALHAO"],
+                        how="left"
+                    )
+
+                    df_talhoes["area_trab_ha"] = df_talhoes["area_trab_ha"].fillna(0)
+
             dt_min = df_faz["dt_hr_local_inicial"].min()
             dt_max = df_faz["dt_hr_local_inicial"].max()
 
@@ -250,6 +283,15 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                     bbox=dict(boxstyle="round,pad=0.8", facecolor=COR_CAIXA, edgecolor="black")
                 )
 
+                # 🔥 NOVO: LISTA TALHÕES
+                if df_talhoes is not None:
+                    st.markdown("### 📍 Área por Gleba / Talhão")
+
+                    st.dataframe(
+                        df_talhoes[["GLEBA", "TALHAO", "area_total_ha", "area_trab_ha"]]
+                        .sort_values(["GLEBA", "TALHAO"])
+                    )
+
                 fig.suptitle(
                     f"Área trabalhada – Fazenda {FAZENDA_ID} – {nome_fazenda}",
                     fontsize=15,
@@ -258,33 +300,6 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
                 brasilia = pytz.timezone("America/Sao_Paulo")
                 hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
-
-                fig.text(
-                    centro_mapa,
-                    base_y - 0.11,
-                    "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos.",
-                    ha="center",
-                    fontsize=10,
-                    color=COR_RODAPE
-                )
-
-                fig.text(
-                    centro_mapa,
-                    base_y - 0.14,
-                    "Relatório elaborado com base em dados da Solinftec.",
-                    ha="center",
-                    fontsize=10,
-                    color=COR_RODAPE
-                )
-
-                fig.text(
-                    centro_mapa,
-                    base_y - 0.17,
-                    f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
-                    ha="center",
-                    fontsize=10,
-                    color=COR_RODAPE
-                )
 
                 st.pyplot(fig)
 
