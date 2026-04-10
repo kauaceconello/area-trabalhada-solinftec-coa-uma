@@ -289,6 +289,27 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 )
                 base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.2)
 
+                # LABEL DOS TALHÕES
+                if "TALHAO" in base_fazenda.columns:
+                
+                    for _, row in base_fazenda.iterrows():
+                
+                        if row.geometry.is_empty:
+                            continue
+                
+                        centroid = row.geometry.centroid
+                
+                        ax.text(
+                            centroid.x,
+                            centroid.y,
+                            str(row["TALHAO"]),
+                            fontsize=8,
+                            ha="center",
+                            va="center",
+                            color="black",
+                            weight="bold"
+                        )
+
                 ax.axis("off")
 
                 pos = ax.get_position()
@@ -356,7 +377,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 # TABELA
                 if df_talhoes is not None:
 
-                    st.markdown("### 🌾 Área área por Gleba / Talhão")
+                    st.markdown("### 🌾 Área por Gleba / Talhão")
 
                     st.dataframe(
                         df_talhoes,
