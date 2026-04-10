@@ -18,7 +18,7 @@ import os
 import pytz
 from datetime import datetime
 
-import io  # 🔥 NOVO (PDF export)
+import io  # PDF export
 
 # CONFIG STREAMLIT
 st.set_page_config(
@@ -33,7 +33,7 @@ st.markdown(
     "dados operacionais da **Solinftec** e base cartográfica da Usina Monte Alegre."
 )
 
-# BOTÃO MAIOR (CSS)
+# CSS botão
 st.markdown(
     """
     <style>
@@ -48,7 +48,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# UPLOAD DE ARQUIVOS
+# UPLOAD
 uploaded_zip = st.file_uploader(
     "📦 Upload do ZIP contendo o CSV da Solinftec",
     type=["zip"]
@@ -61,7 +61,7 @@ uploaded_gpkg = st.file_uploader(
 
 GERAR = st.button("▶️ Gerar mapa")
 
-# SIDEBAR – PARÂMETROS
+# SIDEBAR
 st.sidebar.header("⚙️ Parâmetros")
 
 TEMPO_MAX_SEG = 60
@@ -81,7 +81,6 @@ AREA_MIN_HA = st.sidebar.number_input(
     step=0.1
 )
 
-# 🔥 NOVO
 MOSTRAR_TALHOES = st.sidebar.checkbox(
     "📊 Mostrar área por Gleba/Talhão",
     value=False
@@ -100,6 +99,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
     with tempfile.TemporaryDirectory() as tmpdir:
 
+        # ZIP
         zip_path = os.path.join(tmpdir, "dados.zip")
         with open(zip_path, "wb") as f:
             f.write(uploaded_zip.read())
@@ -128,6 +128,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
         df["cd_fazenda"] = df["cd_fazenda"].astype(str)
 
+        # GPKG
         gpkg_path = os.path.join(tmpdir, "base.gpkg")
         with open(gpkg_path, "wb") as f:
             f.write(uploaded_gpkg.read())
@@ -164,9 +165,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
             geom_fazenda = unary_union(base_fazenda.geometry)
 
-            # =========================
-            # LINHAS DE TRABALHO
-            # =========================
+            # LINHAS
             linhas = []
             for _, grupo in gdf_pts.groupby("cd_equipamento"):
                 grupo = grupo.sort_values("dt_hr_local_inicial")
@@ -222,9 +221,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
             periodo_ini = dt_min.strftime("%d/%m/%Y %H:%M")
             periodo_fim = dt_max.strftime("%d/%m/%Y %H:%M")
 
-            # =========================
-            # TALHÕES (NOVA LISTA BONITA)
-            # =========================
+            # TALHÕES
             lista_talhoes = None
 
             if MOSTRAR_TALHOES and "TALHAO" in base_fazenda.columns and "GLEBA" in base_fazenda.columns:
@@ -248,8 +245,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                 df_talhoes = total.merge(trab, on=["GLEBA", "TALHAO"], how="left")
                 df_talhoes["area_trab_ha"] = df_talhoes["area_trab_ha"].fillna(0)
 
-                df_talhoes["area_total_ha"] = df_talhoes["area_total_ha"].round(2)
-                df_talhoes["area_trab_ha"] = df_talhoes["area_trab_ha"].round(2)
+                df_talhoes = df_talhoes.round(2)
 
                 lista_talhoes = "\n".join(
                     df_talhoes.apply(
@@ -260,13 +256,10 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                     )
                 )
 
-            # =========================
             # MAPA
-            # =========================
-            with st.expander(f"🗺️ Mapa – {nome_fazenda} (clique para expandir)", expanded=False):
+            with st.expander(f"🗺️ Mapa – {nome_fazenda}", expanded=False):
 
                 fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
-
                 plt.subplots_adjust(left=0.15, right=0.85, bottom=0.25, top=0.88)
 
                 base_fazenda.plot(ax=ax, facecolor=COR_NAO_TRAB, edgecolor="black", linewidth=1.2)
@@ -289,47 +282,50 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                     ],
                     loc="lower center",
                     bbox_to_anchor=(centro_mapa, base_y - 0.06),
-                    bbox_transform=fig.transFigure,
                     ncol=3,
                     frameon=True,
                     fontsize=13
                 )
 
+                # DISCALIMER (RESTAURADO)
+                brasilia = pytz.timezone("America/Sao_Paulo")
+                hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
+
                 fig.text(
-                    pos.x1 + 0.02,
-                    0.50,
-                    f"Resumo da operação\n\n"
-                    f"Fazenda: {FAZENDA_ID} – {nome_fazenda}\n\n"
-                    f"Área total: {area_total_ha:.2f} ha\n"
-                    f"Trabalhada: {area_trab_ha:.2f} ha ({pct_trab:.1f}%)\n"
-                    f"Não trabalhada: {area_nao_ha:.2f} ha ({pct_nao:.1f}%)\n\n"
-                    f"Período:\n{periodo_ini} até {periodo_fim}",
-                    fontsize=11,
-                    bbox=dict(boxstyle="round,pad=0.8", facecolor=COR_CAIXA, edgecolor="black")
+                    centro_mapa,
+                    base_y - 0.11,
+                    "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos.",
+                    ha="center",
+                    fontsize=10,
+                    color=COR_RODAPE
                 )
 
-                fig.suptitle(
-                    f"Área trabalhada – Fazenda {FAZENDA_ID} – {nome_fazenda}",
-                    fontsize=15,
-                    x=centro_mapa
+                fig.text(
+                    centro_mapa,
+                    base_y - 0.14,
+                    "Relatório elaborado com base em dados da Solinftec.",
+                    ha="center",
+                    fontsize=10,
+                    color=COR_RODAPE
+                )
+
+                fig.text(
+                    centro_mapa,
+                    base_y - 0.17,
+                    f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
+                    ha="center",
+                    fontsize=10,
+                    color=COR_RODAPE
                 )
 
                 st.pyplot(fig)
 
-                # =========================
-                # TALHÕES UI + COPY
-                # =========================
+                # TALHÕES UI
                 if lista_talhoes:
-
                     st.markdown("### 🌾 Gleba / Talhão")
+                    st.code(lista_talhoes)
 
-                    st.code(lista_talhoes, language="text")
-
-                    st.button("📋 Copiar lista (use seleção e Ctrl+C)")
-
-                # =========================
                 # PDF EXPORT
-                # =========================
                 buf = io.BytesIO()
                 fig.savefig(buf, format="pdf", bbox_inches="tight")
                 buf.seek(0)
