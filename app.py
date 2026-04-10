@@ -232,20 +232,57 @@ if uploaded_zip and uploaded_gpkg and GERAR:
 
             if MOSTRAR_TALHOES and "TALHAO" in base_fazenda.columns and "GLEBA" in base_fazenda.columns:
 
-                intersec = gpd.overlay(
-                    base_fazenda,
-                    gpd.GeoDataFrame(geometry=[area_trabalhada], crs=base_fazenda.crs),
-                    how="intersection"
-                )
+    base_tmp = base_fazenda.copy()
 
-                if not intersec.empty:
-                    intersec["area_trab"] = intersec.geometry.area / 10000
+    # Área total por talhão
+    base_tmp["Área total (ha)"] = base_tmp.geometry.area / 10000
 
-                    df_talhoes = intersec.groupby(["GLEBA", "TALHAO"])["area_trab"].sum().reset_index()
+    total = base_tmp[["GLEBA", "TALHAO", "Área total (ha)"]]
 
-                    # deixar bonito
-                    df_talhoes.columns = ["Gleba", "Talhão", "Área Trabalhada (ha)"]
-                    df_talhoes["Área Trabalhada (ha)"] = df_talhoes["Área Trabalhada (ha)"].round(2)
+    # Interseção (área trabalhada)
+    intersec = gpd.overlay(
+        base_tmp,
+        gpd.GeoDataFrame(geometry=[area_trabalhada], crs=base_tmp.crs),
+        how="intersection"
+    )
+
+    if not intersec.empty:
+        intersec["Área trabalhada (ha)"] = intersec.geometry.area / 10000
+        trab = intersec.groupby(["GLEBA", "TALHAO"])["Área trabalhada (ha)"].sum().reset_index()
+    else:
+        trab = pd.DataFrame(columns=["GLEBA", "TALHAO", "Área trabalhada (ha)"])
+
+    # Merge → garante TODOS os talhões
+    df_talhoes = total.merge(trab, on=["GLEBA", "TALHAO"], how="left")
+
+    df_talhoes["Área trabalhada (ha)"] = df_talhoes["Área trabalhada (ha)"].fillna(0)
+
+    # Arredondar
+    df_talhoes["Área total (ha)"] = df_talhoes["Área total (ha)"].round(2)
+    df_talhoes["Área trabalhada (ha)"] = df_talhoes["Área trabalhada (ha)"].round(2)
+
+    # Renomear colunas
+    df_talhoes = df_talhoes.rename(columns={
+        "GLEBA": "Gleba",
+        "TALHAO": "Talhão"
+    })
+
+    # Ordenar colunas
+    df_talhoes = df_talhoes[
+        ["Gleba", "Talhão", "Área total (ha)", "Área trabalhada (ha)"]
+    ]
+
+    # =========================
+    # LINHA TOTAL
+    # =========================
+    total_row = pd.DataFrame({
+        "Gleba": ["TOTAL"],
+        "Talhão": [""],
+        "Área total (ha)": [df_talhoes["Área total (ha)"].sum().round(2)],
+        "Área trabalhada (ha)": [df_talhoes["Área trabalhada (ha)"].sum().round(2)]
+    })
+
+    df_talhoes = pd.concat([df_talhoes, total_row], ignore_index=True)
 
             # =========================
             # MAPA (INTOCADO VISUALMENTE)
