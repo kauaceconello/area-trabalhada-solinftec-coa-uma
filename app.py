@@ -303,7 +303,7 @@ if uploaded_zip and uploaded_gpkg and GERAR:
                             centroid.x,
                             centroid.y,
                             str(row["TALHAO"]),
-                            fontsize=5,
+                            fontsize=7,
                             ha="center",
                             va="center",
                             color="black",
