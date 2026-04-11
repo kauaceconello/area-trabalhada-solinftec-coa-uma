@@ -1,29 +1,30 @@
 # APP STREAMLIT – ÁREA TRABALHADA (SOLINFTEC)
 # Desenvolvido por Kauã Ceconello
 
-import streamlit as st
+import io
+import os
+import zipfile
+import tempfile
+from datetime import datetime
+
+import numpy as np
 import pandas as pd
 import geopandas as gpd
-import numpy as np
-import io
-
-from shapely.geometry import LineString
-from shapely.ops import unary_union
+import streamlit as st
+import pytz
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.colors import LinearSegmentedColormap, to_hex
 from matplotlib.patches import FancyBboxPatch
 
-import zipfile
-import tempfile
-import os
-import pytz
-from datetime import datetime
+from shapely.geometry import LineString
+from shapely.ops import unary_union
 
-# =========================
+
+# =========================================================
 # CONFIG STREAMLIT
-# =========================
+# =========================================================
 st.set_page_config(
     page_title="Área Trabalhada – Solinftec",
     layout="wide"
@@ -32,9 +33,9 @@ st.set_page_config(
 if "mapas_gerados" not in st.session_state:
     st.session_state["mapas_gerados"] = False
 
-# =========================
+# =========================================================
 # ESTILO GLOBAL
-# =========================
+# =========================================================
 st.markdown(
     """
     <style>
@@ -73,8 +74,8 @@ st.markdown(
 
     section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] {
         border-radius: 12px;
-        border: 1px solid rgba(255,255,255,0.09);
-        background: rgba(255,255,255,0.02);
+        border: 1px solid rgba(255,255,255,0.10);
+        background: rgba(255,255,255,0.025);
         padding: 4px;
         box-shadow: 0 4px 12px rgba(0,0,0,0.10);
     }
@@ -95,14 +96,17 @@ st.markdown(
     "dados operacionais da **Solinftec** e base cartográfica da Usina Monte Alegre."
 )
 
-# =========================
+
+# =========================================================
 # FUNÇÕES AUXILIARES
-# =========================
+# =========================================================
 def arredondar_para_baixo(valor, base):
     return np.floor(valor / base) * base
 
+
 def arredondar_para_cima(valor, base):
     return np.ceil(valor / base) * base
+
 
 def formatar_numero(valor, casas=0):
     if pd.isna(valor):
@@ -111,7 +115,12 @@ def formatar_numero(valor, casas=0):
         return f"{int(round(valor))}"
     return f"{valor:.{casas}f}".replace(".", ",")
 
+
 def gerar_faixas(vmin, vmax, passo, casas=0):
+    """
+    Gera faixas arredondadas:
+    ex. RPM -> 1700 a 1800, 1800 a 1900, ..., 2000+
+    """
     inicio = arredondar_para_baixo(vmin, passo)
     fim = arredondar_para_cima(vmax, passo)
 
@@ -135,7 +144,11 @@ def gerar_faixas(vmin, vmax, passo, casas=0):
 
     return faixas
 
+
 def criar_cmap_suave(tipo="rpm"):
+    """
+    Paletas mais vivas e harmoniosas.
+    """
     if tipo == "rpm":
         cores = [
             "#0B4F8A",
@@ -163,11 +176,13 @@ def criar_cmap_suave(tipo="rpm"):
         ]
     return LinearSegmentedColormap.from_list(f"cmap_{tipo}", cores, N=256)
 
+
 def amostrar_cores_classes(cmap, n_classes):
     if n_classes <= 1:
         return [to_hex(cmap(0.55))]
     pontos = np.linspace(0.10, 0.98, n_classes)
     return [to_hex(cmap(x)) for x in pontos]
+
 
 def classificar_valor(valor, faixas):
     if pd.isna(valor):
@@ -182,7 +197,18 @@ def classificar_valor(valor, faixas):
                 return label
     return None
 
-def desenhar_base_mapa(ax, base_fazenda, facecolor="#F8FAFC", mostrar_talhoes=True, margem_rel_x=0.016, margem_rel_y=0.036):
+
+def desenhar_base_mapa(
+    ax,
+    base_fazenda,
+    facecolor="#F8FAFC",
+    mostrar_talhoes=True,
+    margem_rel_x=0.016,
+    margem_rel_y=0.036
+):
+    """
+    Desenha a fazenda com zoom equilibrado.
+    """
     ax.set_facecolor("#EEF2F7")
 
     base_fazenda.plot(ax=ax, facecolor=facecolor, edgecolor="#1F2937", linewidth=1.15, zorder=1)
@@ -217,6 +243,7 @@ def desenhar_base_mapa(ax, base_fazenda, facecolor="#F8FAFC", mostrar_talhoes=Tr
     ax.set_aspect("equal")
     ax.axis("off")
 
+
 def adicionar_resumo(fig, x, y, texto, cor_caixa):
     fig.text(
         x,
@@ -226,8 +253,11 @@ def adicionar_resumo(fig, x, y, texto, cor_caixa):
         bbox=dict(boxstyle="round,pad=0.8", facecolor=cor_caixa, edgecolor="black")
     )
 
+
 def adicionar_titulo_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_ini, periodo_fim):
-    # centralizado de verdade
+    """
+    Título centralizado no topo.
+    """
     fig.text(
         0.50,
         0.952,
@@ -256,7 +286,11 @@ def adicionar_titulo_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_in
         ha="center"
     )
 
+
 def adicionar_footer(fig, cor_rodape="#334155"):
+    """
+    Rodapé centralizado na figura inteira.
+    """
     brasilia = pytz.timezone("America/Sao_Paulo")
     hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
 
@@ -287,7 +321,11 @@ def adicionar_footer(fig, cor_rodape="#334155"):
         color=cor_rodape
     )
 
+
 def figura_para_pdf_bytes(fig):
+    """
+    Exporta a figura em PDF vetorial.
+    """
     buffer = io.BytesIO()
     fig.savefig(
         buffer,
@@ -297,6 +335,7 @@ def figura_para_pdf_bytes(fig):
     )
     buffer.seek(0)
     return buffer.getvalue()
+
 
 def ler_csvs_de_zip(uploaded_zip, tmpdir, idx_zip):
     zip_path = os.path.join(tmpdir, uploaded_zip.name)
@@ -316,6 +355,7 @@ def ler_csvs_de_zip(uploaded_zip, tmpdir, idx_zip):
                 csv_files.append(os.path.join(root, file))
 
     return csv_files
+
 
 def adicionar_segmento_clipado(
     linhas_saida,
@@ -359,7 +399,12 @@ def adicionar_segmento_clipado(
             "duracao_seg": duracao_seg
         })
 
+
 def criar_poligonos_display(gdf_linhas, geom_fazenda):
+    """
+    Cria a faixa real da operação usando apenas a largura do implemento (em metros),
+    sem multiplicador extra.
+    """
     registros = []
 
     for _, row in gdf_linhas.iterrows():
@@ -393,6 +438,7 @@ def criar_poligonos_display(gdf_linhas, geom_fazenda):
         return gpd.GeoDataFrame(columns=["geometry"], geometry="geometry", crs=gdf_linhas.crs)
 
     return gpd.GeoDataFrame(registros, geometry="geometry", crs=gdf_linhas.crs)
+
 
 def calcular_legenda_percentual(gdf_display, coluna_classe, faixas, mapa_cores):
     if gdf_display is None or gdf_display.empty:
@@ -433,6 +479,7 @@ def calcular_legenda_percentual(gdf_display, coluna_classe, faixas, mapa_cores):
 
     return pd.DataFrame(linhas)
 
+
 def plotar_mapa_classes(ax, base_fazenda, gdf_plot, coluna_classe, mapa_cores, mostrar_talhoes=True):
     desenhar_base_mapa(
         ax,
@@ -464,6 +511,7 @@ def plotar_mapa_classes(ax, base_fazenda, gdf_plot, coluna_classe, mapa_cores, m
                 alpha=1.0,
                 zorder=2
             )
+
 
 def desenhar_box_legenda_tematica(
     fig,
@@ -549,13 +597,12 @@ def desenhar_box_legenda_tematica(
             y_sep = topo - i * row_h
             ax_box.plot([0.06, 0.94], [y_sep, y_sep], color=cor_linha, linewidth=0.7, zorder=2)
 
-        # bolinha perfeitamente redonda e sólida via scatter
+        # bolinha perfeitamente redonda e sólida
         ax_box.scatter(
             [0.12], [y],
             s=55,
             color=row["cor"],
             edgecolors="none",
-            transform=ax_box.transAxes,
             zorder=3
         )
 
@@ -569,6 +616,7 @@ def desenhar_box_legenda_tematica(
         ax_box.text(0.23, y, inicio, fontsize=fonte, va="center", color=cor_texto, zorder=3)
         ax_box.text(0.53, y, str(fim), fontsize=fonte, va="center", color=cor_texto, zorder=3)
         ax_box.text(0.80, y, percentual, fontsize=fonte, va="center", color=cor_texto, zorder=3)
+
 
 def criar_figura_tematica(
     base_fazenda,
@@ -587,12 +635,12 @@ def criar_figura_tematica(
     casas
 ):
     """
-    Figura temática com painéis sutis tipo software/relatório técnico.
+    Figura temática com painéis sutis tipo software / relatório técnico.
     """
     fig = plt.figure(figsize=(14.0, 8.6))
     fig.patch.set_facecolor("#E9EDF3")
 
-    # moldura externa bem sutil
+    # moldura externa sutil
     moldura = FancyBboxPatch(
         (0.015, 0.01),
         0.97,
@@ -663,9 +711,10 @@ def criar_figura_tematica(
 
     return fig
 
-# =========================
+
+# =========================================================
 # UPLOAD
-# =========================
+# =========================================================
 uploaded_zips = st.file_uploader(
     "📦 Upload dos ZIPs contendo o CSV da Solinftec",
     type=["zip"],
@@ -685,9 +734,10 @@ if GERAR:
 if not uploaded_zips or not uploaded_gpkg:
     st.session_state["mapas_gerados"] = False
 
-# =========================
+
+# =========================================================
 # SIDEBAR
-# =========================
+# =========================================================
 st.sidebar.header("⚙️ Parâmetros")
 
 with st.sidebar.container(border=True):
@@ -799,9 +849,10 @@ if MAPA_VEL and VEL_MAX <= VEL_MIN:
 if not (MAPA_AREA or MAPA_RPM or MAPA_VEL):
     st.sidebar.warning("Selecione pelo menos um tipo de mapa.")
 
-# =========================
+
+# =========================================================
 # PROCESSAMENTO
-# =========================
+# =========================================================
 if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", False):
 
     if MAPA_RPM and RPM_MAX <= RPM_MIN:
@@ -846,6 +897,9 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
 
             df = pd.concat(dfs, ignore_index=True)
 
+            # =========================
+            # TRATAMENTO
+            # =========================
             df["dt_hr_local_inicial"] = pd.to_datetime(df["dt_hr_local_inicial"], errors="coerce")
             df["vl_latitude_inicial"] = pd.to_numeric(df["vl_latitude_inicial"], errors="coerce")
             df["vl_longitude_inicial"] = pd.to_numeric(df["vl_longitude_inicial"], errors="coerce")
@@ -870,6 +924,9 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                 st.error("❌ Nenhum ponto válido encontrado após o tratamento dos dados.")
                 st.stop()
 
+            # =========================
+            # GPKG
+            # =========================
             gpkg_path = os.path.join(tmpdir, "base.gpkg")
             with open(gpkg_path, "wb") as f:
                 f.write(uploaded_gpkg.read())
@@ -882,6 +939,9 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
             if "GLEBA" in base.columns:
                 base["GLEBA"] = base["GLEBA"].astype(str)
 
+            # =========================
+            # CORES E FAIXAS
+            # =========================
             rpm_faixas = gerar_faixas(RPM_MIN, RPM_MAX, RPM_PASSO, casas=0) if MAPA_RPM else []
             vel_faixas = gerar_faixas(VEL_MIN, VEL_MAX, VEL_PASSO, casas=1) if MAPA_VEL else []
 
@@ -894,6 +954,9 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
             rpm_cores = dict(zip(rpm_labels, amostrar_cores_classes(rpm_cmap, len(rpm_labels)))) if MAPA_RPM else {}
             vel_cores = dict(zip(vel_labels, amostrar_cores_classes(vel_cmap, len(vel_labels)))) if MAPA_VEL else {}
 
+            # =========================
+            # LOOP FAZENDAS
+            # =========================
             for FAZENDA_ID in df["cd_fazenda"].dropna().unique():
 
                 df_faz = df[df["cd_fazenda"] == FAZENDA_ID].copy()
@@ -918,6 +981,9 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
 
                 geom_fazenda = unary_union(base_fazenda.geometry)
 
+                # =========================
+                # LINHAS CLIPADAS
+                # =========================
                 linhas = []
 
                 for _, grupo in gdf_pts.groupby("cd_equipamento"):
@@ -983,6 +1049,9 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
 
                 gdf_linhas = gpd.GeoDataFrame(linhas, geometry="geometry", crs=base_fazenda.crs)
 
+                # =========================
+                # CÁLCULO DE ÁREA
+                # =========================
                 largura_media = df_faz["vl_largura_implemento"].dropna().mean()
                 if pd.isna(largura_media):
                     continue
@@ -1009,6 +1078,9 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                 periodo_ini = dt_min.strftime("%d/%m/%Y %H:%M")
                 periodo_fim = dt_max.strftime("%d/%m/%Y %H:%M")
 
+                # =========================
+                # TABELA TALHÕES
+                # =========================
                 df_talhoes = None
 
                 if MOSTRAR_TALHOES and "TALHAO" in base_fazenda.columns and "GLEBA" in base_fazenda.columns:
@@ -1056,6 +1128,9 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                 rpm_med_real = round(rpm_validos.mean(), 0) if not rpm_validos.empty else np.nan
                 vel_med_real = round(vel_validos.mean(), 1) if not vel_validos.empty else np.nan
 
+                # =========================
+                # DISPLAY RPM / VEL
+                # =========================
                 gdf_display = None
                 if MAPA_RPM or MAPA_VEL:
                     gdf_display = criar_poligonos_display(gdf_linhas, geom_fazenda)
@@ -1090,8 +1165,14 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                             vel_cores
                         )
 
+                # =========================
+                # EXPANDER
+                # =========================
                 with st.expander(f"🗺️ Mapa – {nome_fazenda}", expanded=False):
 
+                    # -----------------------------------
+                    # 1) ÁREA TRABALHADA
+                    # -----------------------------------
                     if MAPA_AREA:
                         fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
                         plt.subplots_adjust(left=0.15, right=0.85, bottom=0.25, top=0.88)
@@ -1188,6 +1269,9 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                         )
                         plt.close(fig)
 
+                    # -----------------------------------
+                    # 2) RPM
+                    # -----------------------------------
                     if MAPA_RPM:
                         fig_rpm = criar_figura_tematica(
                             base_fazenda=base_fazenda,
@@ -1217,8 +1301,44 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                         )
                         plt.close(fig_rpm)
 
+                    # -----------------------------------
+                    # 3) VELOCIDADE
+                    # -----------------------------------
                     if MAPA_VEL:
                         fig_vel = criar_figura_tematica(
                             base_fazenda=base_fazenda,
                             gdf_display=gdf_display,
-                            coluna_cl
+                            coluna_classe="classe_vel",
+                            mapa_cores=vel_cores,
+                            df_legenda=df_leg_vel,
+                            titulo_mapa="Mapa de Velocidade",
+                            titulo_box="Legenda de Velocidade",
+                            faixa_exibida_txt=f"{formatar_numero(arredondar_para_baixo(VEL_MIN, VEL_PASSO), 1)} até {formatar_numero(arredondar_para_cima(VEL_MAX, VEL_PASSO), 1)}+ km/h",
+                            media_txt=f"Velocidade média trabalhada: {formatar_numero(vel_med_real, 1)} km/h",
+                            periodo_ini=periodo_ini,
+                            periodo_fim=periodo_fim,
+                            fazenda_id=FAZENDA_ID,
+                            nome_fazenda=nome_fazenda,
+                            casas=1
+                        )
+
+                        st.pyplot(fig_vel)
+                        pdf_vel = figura_para_pdf_bytes(fig_vel)
+                        st.download_button(
+                            "⬇️ Baixar PDF vetorial – Velocidade",
+                            data=pdf_vel,
+                            file_name=f"mapa_velocidade_{FAZENDA_ID}.pdf",
+                            mime="application/pdf",
+                            key=f"pdf_vel_{FAZENDA_ID}"
+                        )
+                        plt.close(fig_vel)
+
+                    # -----------------------------------
+                    # TABELA TALHÕES
+                    # -----------------------------------
+                    if df_talhoes is not None:
+                        st.markdown("### 🌾 Área por Gleba / Talhão")
+                        st.dataframe(df_talhoes, use_container_width=True, hide_index=True)
+
+else:
+    st.info("⬆️ Envie os arquivos e clique em **Gerar mapa**.")
