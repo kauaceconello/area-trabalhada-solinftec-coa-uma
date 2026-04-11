@@ -374,8 +374,8 @@ def desenhar_base_mapa(
     base_fazenda,
     facecolor="#F8FAFC",
     mostrar_talhoes=True,
-    margem_rel_x=0.008,
-    margem_rel_y=0.020
+    margem_rel_x=0.005,
+    margem_rel_y=0.014
 ):
     """
     Mapa com zoom mais próximo e melhor leitura.
@@ -394,7 +394,7 @@ def desenhar_base_mapa(
                 centroid.x,
                 centroid.y,
                 str(row["TALHAO"]),
-                fontsize=8.2,
+                fontsize=8.1,
                 ha="center",
                 va="center",
                 color="#111827",
@@ -406,8 +406,8 @@ def desenhar_base_mapa(
     dx = maxx - minx
     dy = maxy - miny
 
-    margem_x = max(dx * margem_rel_x, 0.8)
-    margem_y = max(dy * margem_rel_y, 1.2)
+    margem_x = max(dx * margem_rel_x, 0.35)
+    margem_y = max(dy * margem_rel_y, 0.70)
 
     ax.set_xlim(minx - margem_x, maxx + margem_x)
     ax.set_ylim(miny - margem_y, maxy + margem_y)
@@ -421,8 +421,8 @@ def plotar_mapa_classes(ax, base_fazenda, gdf_plot, coluna_classe, mapa_cores, m
         base_fazenda,
         facecolor="#F8FAFC",
         mostrar_talhoes=mostrar_talhoes,
-        margem_rel_x=0.008,
-        margem_rel_y=0.020
+        margem_rel_x=0.005,
+        margem_rel_y=0.014
     )
 
     if gdf_plot.empty:
@@ -450,12 +450,12 @@ def plotar_mapa_classes(ax, base_fazenda, gdf_plot, coluna_classe, mapa_cores, m
 
 def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_ini, periodo_fim):
     """
-    Cabeçalho superior centralizado.
+    Cabeçalho superior centralizado, com melhor espaçamento entre as linhas.
     """
     header = FancyBboxPatch(
-        (0.02, 0.905),
+        (0.02, 0.902),
         0.96,
-        0.085,
+        0.090,
         boxstyle="round,pad=0.004,rounding_size=0.008",
         transform=fig.transFigure,
         facecolor=(0.965, 0.972, 0.980, 0.97),
@@ -467,7 +467,7 @@ def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_in
 
     fig.text(
         0.50,
-        0.958,
+        0.962,
         titulo_mapa,
         fontsize=15.5,
         weight="bold",
@@ -488,7 +488,7 @@ def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_in
 
     fig.text(
         0.50,
-        0.916,
+        0.912,
         f"Período: {periodo_ini} até {periodo_fim}",
         fontsize=9.4,
         color="#64748B",
@@ -539,7 +539,7 @@ def desenhar_box_legenda_tematica(
     media_txt,
     df_legenda,
     casas=0,
-    reserve_pos=(0.75, 0.20, 0.20, 0.58)
+    reserve_pos=(0.75, 0.19, 0.21, 0.60)
 ):
     """
     Apenas uma caixa de legenda, centralizada no espaço da direita.
@@ -593,13 +593,35 @@ def desenhar_box_legenda_tematica(
     )
     ax_box.add_patch(caixa)
 
-    # tudo centralizado na caixa
-    ax_box.text(0.50, 0.93, titulo_box, fontsize=11.6, weight="bold", color=cor_titulo,
-                va="top", ha="center", zorder=2)
-    ax_box.text(0.50, 0.865, f"Faixa exibida: {faixa_exibida_txt}", fontsize=8.7, color=cor_sec,
-                va="top", ha="center", zorder=2)
-    ax_box.text(0.50, 0.805, media_txt, fontsize=9.5, color=cor_destaque,
-                va="top", ha="center", weight="bold", zorder=2)
+    ax_box.text(
+        0.50, 0.93,
+        titulo_box,
+        fontsize=11.6,
+        weight="bold",
+        color=cor_titulo,
+        va="top",
+        ha="center",
+        zorder=2
+    )
+    ax_box.text(
+        0.50, 0.865,
+        f"Faixa exibida: {faixa_exibida_txt}",
+        fontsize=8.7,
+        color=cor_sec,
+        va="top",
+        ha="center",
+        zorder=2
+    )
+    ax_box.text(
+        0.50, 0.805,
+        media_txt,
+        fontsize=9.5,
+        color=cor_destaque,
+        va="top",
+        ha="center",
+        weight="bold",
+        zorder=2
+    )
 
     ax_box.plot([0.08, 0.94], [0.74, 0.74], color=cor_borda, linewidth=0.9, zorder=2)
 
@@ -690,7 +712,7 @@ def criar_figura_tematica(
 
     painel_mapa = FancyBboxPatch(
         (0.03, 0.11),
-        0.70,
+        0.69,
         0.79,
         boxstyle="round,pad=0.004,rounding_size=0.012",
         transform=fig.transFigure,
@@ -701,7 +723,7 @@ def criar_figura_tematica(
     )
     fig.add_artist(painel_mapa)
 
-    ax = fig.add_axes([0.12, 0.15, 0.42, 0.67])
+    ax = fig.add_axes([0.11, 0.18, 0.43, 0.62])
 
     if gdf_display is not None and not gdf_display.empty:
         plotar_mapa_classes(
@@ -718,8 +740,8 @@ def criar_figura_tematica(
             base_fazenda,
             facecolor="#F8FAFC",
             mostrar_talhoes=True,
-            margem_rel_x=0.008,
-            margem_rel_y=0.020
+            margem_rel_x=0.005,
+            margem_rel_y=0.014
         )
 
     adicionar_header_topo(
@@ -738,7 +760,7 @@ def criar_figura_tematica(
         media_txt=media_txt,
         df_legenda=df_legenda,
         casas=casas,
-        reserve_pos=(0.75, 0.20, 0.20, 0.58)
+        reserve_pos=(0.75, 0.19, 0.21, 0.60)
     )
 
     adicionar_footer(fig, "#2F3B4A")
@@ -767,7 +789,7 @@ def criar_figura_area(
 ):
     """
     Mesmo modelo visual para o mapa de área trabalhada,
-    com legenda centralizada sob o mapa e resumo alinhado.
+    com resumo e legenda centralizados.
     """
     fig = plt.figure(figsize=(14.0, 8.6))
     fig.patch.set_facecolor("#E9EDF3")
@@ -796,7 +818,7 @@ def criar_figura_area(
 
     painel_mapa = FancyBboxPatch(
         (0.03, 0.11),
-        0.68,
+        0.69,
         0.79,
         boxstyle="round,pad=0.004,rounding_size=0.012",
         transform=fig.transFigure,
@@ -807,20 +829,7 @@ def criar_figura_area(
     )
     fig.add_artist(painel_mapa)
 
-    painel_resumo = FancyBboxPatch(
-        (0.75, 0.24),
-        0.18,
-        0.40,
-        boxstyle="round,pad=0.004,rounding_size=0.012",
-        transform=fig.transFigure,
-        facecolor=(0.93, 0.94, 0.96, 0.18),
-        edgecolor="#D1D9E2",
-        linewidth=0.8,
-        zorder=0
-    )
-    fig.add_artist(painel_resumo)
-
-    ax = fig.add_axes([0.12, 0.19, 0.43, 0.60])
+    ax = fig.add_axes([0.11, 0.18, 0.45, 0.62])
 
     base_fazenda.plot(ax=ax, facecolor=cor_nao_trab, edgecolor="black", linewidth=1.1, zorder=1)
     gpd.GeoSeries(area_trabalhada, crs=base_fazenda.crs).plot(
@@ -848,16 +857,18 @@ def criar_figura_area(
     minx, miny, maxx, maxy = base_fazenda.total_bounds
     dx = maxx - minx
     dy = maxy - miny
-    margem_x = max(dx * 0.006, 0.5)
-    margem_y = max(dy * 0.016, 0.9)
+    margem_x = max(dx * 0.005, 0.35)
+    margem_y = max(dy * 0.014, 0.70)
 
     ax.set_xlim(minx - margem_x, maxx + margem_x)
     ax.set_ylim(miny - margem_y, maxy + margem_y)
     ax.set_aspect("equal")
     ax.axis("off")
 
-    # resumo
-    resumo_ax = fig.add_axes([0.775, 0.305, 0.13, 0.30])
+    # apenas uma caixa de resumo
+    resumo_ax = fig.add_axes([0.765, 0.295, 0.15, 0.31])
+    resumo_ax.set_facecolor("none")
+    resumo_ax.patch.set_alpha(0)
     resumo_ax.axis("off")
 
     resumo_box = FancyBboxPatch(
@@ -865,28 +876,51 @@ def criar_figura_area(
         1,
         1,
         boxstyle="round,pad=0.018,rounding_size=0.028",
-        facecolor=(0.87, 0.89, 0.92, 0.95),
+        facecolor=(0.94, 0.95, 0.97, 0.96),
         edgecolor="#7B8794",
         linewidth=1.2
     )
     resumo_ax.add_patch(resumo_box)
 
     resumo_ax.text(
-        0.50, 0.92,
+        0.50, 0.90,
         "Resumo da Operação",
         ha="center",
         va="top",
-        fontsize=11.0,
+        fontsize=10.8,
         fontweight="bold",
         color="#0F172A"
     )
 
-    resumo_ax.text(0.12, 0.76, f"Área total: {area_total_ha} ha", fontsize=9.3, color="#0F172A", va="center")
-    resumo_ax.text(0.12, 0.62, f"Trabalhada: {area_trab_ha} ha ({pct_trab}%)", fontsize=9.3, color="#0F172A", va="center")
-    resumo_ax.text(0.12, 0.48, f"Não trabalhada: {area_nao_ha} ha ({pct_nao}%)", fontsize=9.3, color="#0F172A", va="center")
+    resumo_ax.text(
+        0.50, 0.70,
+        f"Área total: {area_total_ha} ha",
+        fontsize=9.1,
+        color="#0F172A",
+        va="center",
+        ha="center"
+    )
+    resumo_ax.text(
+        0.50, 0.53,
+        f"Trabalhada: {area_trab_ha} ha ({pct_trab}%)",
+        fontsize=9.1,
+        color="#0F172A",
+        va="center",
+        ha="center"
+    )
+    resumo_ax.text(
+        0.50, 0.36,
+        f"Não trabalhada: {area_nao_ha} ha ({pct_nao}%)",
+        fontsize=9.1,
+        color="#0F172A",
+        va="center",
+        ha="center"
+    )
 
     # legenda centralizada sob o mapa
-    leg_ax = fig.add_axes([0.12, 0.105, 0.43, 0.060])
+    leg_ax = fig.add_axes([0.11, 0.105, 0.45, 0.060])
+    leg_ax.set_facecolor("none")
+    leg_ax.patch.set_alpha(0)
     leg_ax.axis("off")
 
     legenda_box = FancyBboxPatch(
@@ -894,7 +928,7 @@ def criar_figura_area(
         1,
         1,
         boxstyle="round,pad=0.012,rounding_size=0.020",
-        facecolor=(0.93, 0.94, 0.97, 0.92),
+        facecolor=(0.93, 0.94, 0.97, 0.94),
         edgecolor="#7B8794",
         linewidth=1.0
     )
