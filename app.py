@@ -128,6 +128,10 @@ def formatar_numero(valor, casas=0):
 
 
 def gerar_faixas(vmin, vmax, passo, casas=0):
+    """
+    Gera faixas arredondadas:
+    ex. RPM -> 1700 a 1800, 1800 a 1900, ..., 2000+
+    """
     inicio = arredondar_para_baixo(vmin, passo)
     fim = arredondar_para_cima(vmax, passo)
 
@@ -442,9 +446,9 @@ def plotar_mapa_classes(ax, base_fazenda, gdf_plot, coluna_classe, mapa_cores, m
             )
 
 
-def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_ini, periodo_fim, accent_color):
+def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_ini, periodo_fim):
     """
-    Cabeçalho superior centralizado, totalmente contido dentro da faixa branca.
+    Cabeçalho superior centralizado.
     """
     header = FancyBboxPatch(
         (0.02, 0.905),
@@ -459,7 +463,6 @@ def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_in
     )
     fig.add_artist(header)
 
-    # Sem linha sublinhando
     fig.text(
         0.50,
         0.958,
@@ -491,18 +494,40 @@ def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_in
         va="center"
     )
 
-    # detalhe sutil de cor
-    detalhe = FancyBboxPatch(
-        (0.035, 0.928),
-        0.06,
-        0.012,
-        boxstyle="round,pad=0.001,rounding_size=0.003",
-        transform=fig.transFigure,
-        facecolor=accent_color,
-        edgecolor="none",
-        zorder=1
+
+def adicionar_footer(fig, cor_rodape="#2F3B4A"):
+    """
+    Rodapé mais escuro e centralizado.
+    """
+    brasilia = pytz.timezone("America/Sao_Paulo")
+    hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
+
+    fig.text(
+        0.50,
+        0.060,
+        "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos.",
+        ha="center",
+        fontsize=9.7,
+        color=cor_rodape
     )
-    fig.add_artist(detalhe)
+
+    fig.text(
+        0.50,
+        0.038,
+        "Relatório elaborado com base em dados da Solinftec.",
+        ha="center",
+        fontsize=9.7,
+        color=cor_rodape
+    )
+
+    fig.text(
+        0.50,
+        0.016,
+        f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
+        ha="center",
+        fontsize=9.7,
+        color=cor_rodape
+    )
 
 
 def desenhar_box_legenda_tematica(
@@ -522,9 +547,9 @@ def desenhar_box_legenda_tematica(
 
     n = max(len(df_legenda), 1)
 
-    # box com tamanho dinâmico
-    box_h = min(0.18 + (n * 0.040), rh * 0.92)
-    box_w = rw * 0.96
+    # Box um pouco maior para melhorar leitura
+    box_h = min(0.20 + (n * 0.042), rh * 0.94)
+    box_w = rw * 0.97
 
     box_x = rx + (rw - box_w) / 2
     box_y = ry + (rh - box_h) / 2
@@ -567,7 +592,7 @@ def desenhar_box_legenda_tematica(
     )
     ax_box.add_patch(caixa)
 
-    # Texto centralizado na caixa
+    # Tudo centralizado na caixa
     ax_box.text(0.50, 0.93, titulo_box, fontsize=11.4, weight="bold", color=cor_titulo,
                 va="top", ha="center", zorder=2)
     ax_box.text(0.50, 0.865, f"Faixa exibida: {faixa_exibida_txt}", fontsize=8.6, color=cor_sec,
@@ -577,7 +602,6 @@ def desenhar_box_legenda_tematica(
 
     ax_box.plot([0.08, 0.94], [0.74, 0.74], color=cor_borda, linewidth=0.9, zorder=2)
 
-    # Cabeçalho das colunas
     ax_box.text(0.32, 0.705, "Início", fontsize=8.5, color=cor_sec, va="bottom", ha="center", zorder=2)
     ax_box.text(0.62, 0.705, "Fim", fontsize=8.5, color=cor_sec, va="bottom", ha="center", zorder=2)
     ax_box.text(0.86, 0.705, "%", fontsize=8.5, color=cor_sec, va="bottom", ha="center", zorder=2)
@@ -642,8 +666,7 @@ def criar_figura_tematica(
     periodo_fim,
     fazenda_id,
     nome_fazenda,
-    casas,
-    accent_color
+    casas
 ):
     """
     Figura temática com layout fechado, mapa com mais zoom
@@ -722,8 +745,7 @@ def criar_figura_tematica(
         fazenda_id=fazenda_id,
         nome_fazenda=nome_fazenda,
         periodo_ini=periodo_ini,
-        periodo_fim=periodo_fim,
-        accent_color=accent_color
+        periodo_fim=periodo_fim
     )
 
     desenhar_box_legenda_tematica(
@@ -761,8 +783,8 @@ def criar_figura_area(
     cor_nao_trab
 ):
     """
-    Aplica o mesmo modelo visual aos mapas de área trabalhada,
-    mantendo resumo e legenda da área.
+    Mesmo modelo visual para o mapa de área trabalhada,
+    mantendo resumo e legenda.
     """
     fig = plt.figure(figsize=(14.0, 8.6))
     fig.patch.set_facecolor("#E9EDF3")
@@ -781,21 +803,19 @@ def criar_figura_area(
     )
     fig.add_artist(moldura)
 
-    # header
     adicionar_header_topo(
         fig,
         titulo_mapa="Mapa de Área Trabalhada",
         fazenda_id=fazenda_id,
         nome_fazenda=nome_fazenda,
         periodo_ini=periodo_ini,
-        periodo_fim=periodo_fim,
-        accent_color="#62b27f"
+        periodo_fim=periodo_fim
     )
 
     # painel do mapa
     painel_mapa = FancyBboxPatch(
         (0.03, 0.11),
-        0.66,
+        0.68,
         0.79,
         boxstyle="round,pad=0.004,rounding_size=0.012",
         transform=fig.transFigure,
@@ -806,22 +826,21 @@ def criar_figura_area(
     )
     fig.add_artist(painel_mapa)
 
-    # painel resumo à direita
+    # painel do resumo
     painel_resumo = FancyBboxPatch(
-        (0.73, 0.26),
-        0.20,
-        0.42,
+        (0.75, 0.24),
+        0.18,
+        0.40,
         boxstyle="round,pad=0.004,rounding_size=0.012",
         transform=fig.transFigure,
-        facecolor=(0.93, 0.94, 0.96, 0.22),
+        facecolor=(0.93, 0.94, 0.96, 0.18),
         edgecolor="#D1D9E2",
         linewidth=0.8,
         zorder=0
     )
     fig.add_artist(painel_resumo)
 
-    # eixo do mapa
-    ax = fig.add_axes([0.11, 0.20, 0.42, 0.58])
+    ax = fig.add_axes([0.12, 0.20, 0.42, 0.58])
 
     base_fazenda.plot(ax=ax, facecolor=cor_nao_trab, edgecolor="black", linewidth=1.1, zorder=1)
     gpd.GeoSeries(area_trabalhada, crs=base_fazenda.crs).plot(
@@ -849,15 +868,15 @@ def criar_figura_area(
     minx, miny, maxx, maxy = base_fazenda.total_bounds
     dx = maxx - minx
     dy = maxy - miny
-    margem_x = max(dx * 0.010, 0.8)
+    margem_x = max(dx * 0.008, 0.8)
     margem_y = max(dy * 0.020, 1.2)
     ax.set_xlim(minx - margem_x, maxx + margem_x)
     ax.set_ylim(miny - margem_y, maxy + margem_y)
     ax.set_aspect("equal")
     ax.axis("off")
 
-    # caixa de resumo
-    resumo_ax = fig.add_axes([0.755, 0.305, 0.15, 0.32])
+    # resumo
+    resumo_ax = fig.add_axes([0.775, 0.285, 0.13, 0.30])
     resumo_ax.axis("off")
 
     resumo_box = FancyBboxPatch(
@@ -865,29 +884,29 @@ def criar_figura_area(
         1,
         1,
         boxstyle="round,pad=0.018,rounding_size=0.028",
-        facecolor=(0.92, 0.94, 0.97, 0.95),
+        facecolor=(0.87, 0.89, 0.92, 0.95),
         edgecolor="#7B8794",
         linewidth=1.2
     )
     resumo_ax.add_patch(resumo_box)
 
     resumo_ax.text(0.50, 0.92, "Resumo da Operação", ha="center", va="top",
-                   fontsize=11.2, fontweight="bold", color="#0F172A")
+                   fontsize=11.0, fontweight="bold", color="#0F172A")
 
     resumo_ax.text(
-        0.08, 0.78,
+        0.10, 0.75,
         (
             f"Área total: {area_total_ha} ha\n\n"
             f"Trabalhada: {area_trab_ha} ha ({pct_trab}%)\n\n"
             f"Não trabalhada: {area_nao_ha} ha ({pct_nao}%)"
         ),
-        fontsize=9.5,
+        fontsize=9.4,
         color="#0F172A",
         va="top"
     )
 
-    # legenda da área embaixo do mapa, sem invadir
-    leg_ax = fig.add_axes([0.11, 0.105, 0.42, 0.055])
+    # legenda da área embaixo do mapa
+    leg_ax = fig.add_axes([0.11, 0.105, 0.44, 0.060])
     leg_ax.axis("off")
 
     legenda_box = FancyBboxPatch(
@@ -949,6 +968,12 @@ if not uploaded_zips or not uploaded_gpkg:
 st.sidebar.header("⚙️ Parâmetros")
 
 with sidebar_container():
+    st.markdown("### 🗺️ Tipos de mapa")
+    MAPA_AREA = st.checkbox("Área trabalhada", value=True, key="mapa_area_chk")
+    MAPA_RPM = st.checkbox("Mapa de RPM", value=False, key="mapa_rpm_chk")
+    MAPA_VEL = st.checkbox("Mapa de Velocidade", value=False, key="mapa_vel_chk")
+
+with sidebar_container():
     MULTIPLICADOR_BUFFER = st.number_input(
         "Tamanho do Buffer",
         min_value=1.0,
@@ -966,17 +991,15 @@ with sidebar_container():
         key="area_min_input"
     )
 
-    MOSTRAR_TALHOES = st.checkbox(
-        "📊 Mostrar área por Gleba / Talhão",
-        value=False,
-        key="mostrar_talhoes_chk"
-    )
-
-with sidebar_container():
-    st.markdown("### 🗺️ Tipos de mapa")
-    MAPA_AREA = st.checkbox("Área trabalhada", value=True, key="mapa_area_chk")
-    MAPA_RPM = st.checkbox("Mapa de RPM", value=False, key="mapa_rpm_chk")
-    MAPA_VEL = st.checkbox("Mapa de Velocidade", value=False, key="mapa_vel_chk")
+    # some quando RPM ou VELOCIDADE estiverem selecionados
+    if not (MAPA_RPM or MAPA_VEL):
+        MOSTRAR_TALHOES = st.checkbox(
+            "📊 Mostrar área por Gleba / Talhão",
+            value=False,
+            key="mostrar_talhoes_chk"
+        )
+    else:
+        MOSTRAR_TALHOES = False
 
 RPM_MIN = 1200
 RPM_MAX = 2000
@@ -1358,7 +1381,7 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
 
                 with st.expander(f"🗺️ Mapa – {nome_fazenda}", expanded=False):
 
-                    # ÁREA TRABALHADA (novo modelo visual)
+                    # ÁREA TRABALHADA
                     if MAPA_AREA:
                         fig_area = criar_figura_area(
                             base_fazenda=base_fazenda,
@@ -1404,8 +1427,7 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                             periodo_fim=periodo_fim,
                             fazenda_id=FAZENDA_ID,
                             nome_fazenda=nome_fazenda,
-                            casas=0,
-                            accent_color="#F2994A"
+                            casas=0
                         )
 
                         st.pyplot(fig_rpm)
@@ -1435,8 +1457,7 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                             periodo_fim=periodo_fim,
                             fazenda_id=FAZENDA_ID,
                             nome_fazenda=nome_fazenda,
-                            casas=1,
-                            accent_color="#16A5C8"
+                            casas=1
                         )
 
                         st.pyplot(fig_vel)
