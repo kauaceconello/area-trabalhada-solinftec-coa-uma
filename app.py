@@ -96,34 +96,33 @@ def gerar_faixas(vmin, vmax, passo, casas=0):
 
 def criar_cmap_suave(tipo="rpm"):
     """
-    Paletas mais vivas e mais harmônicas.
+    Paletas mais vivas e harmoniosas.
     """
     if tipo == "rpm":
         cores = [
-            "#0b3c6f",  # azul escuro
-            "#1464a0",  # azul
-            "#2f8edb",  # azul vivo
-            "#31b7b0",  # turquesa
-            "#2eaf57",  # verde
-            "#a5d63f",  # verde-amarelado
-            "#f2cf43",  # amarelo
-            "#f39c35",  # laranja
-            "#d24b4b",  # vermelho
+            "#0B4F8A",  # azul escuro
+            "#1F78B4",  # azul
+            "#2D9CDB",  # azul vivo
+            "#1FBBA6",  # turquesa
+            "#20B15A",  # verde
+            "#8FD14F",  # verde-amarelado
+            "#F2C94C",  # amarelo
+            "#F2994A",  # laranja
+            "#E05A47",  # vermelho
         ]
     else:
         cores = [
-            "#0a4f8a",  # azul escuro
-            "#1375bc",  # azul
-            "#1aa7d1",  # ciano
-            "#1fbba6",  # verde água
-            "#19b85c",  # verde
-            "#7ed957",  # verde claro
-            "#d7e83e",  # amarelo-esverdeado
-            "#f4c542",  # amarelo
-            "#f28e2b",  # laranja
-            "#d9485f",  # vermelho
+            "#0A5E8A",  # azul escuro
+            "#1479C9",  # azul
+            "#16A5C8",  # ciano
+            "#18B7B2",  # verde-água
+            "#1DBE6B",  # verde
+            "#86D44E",  # verde claro
+            "#DCEB46",  # amarelo-esverdeado
+            "#F4C542",  # amarelo
+            "#F59E32",  # laranja
+            "#E1594F",  # vermelho
         ]
-
     return LinearSegmentedColormap.from_list(f"cmap_{tipo}", cores, N=256)
 
 def amostrar_cores_classes(cmap, n_classes):
@@ -132,7 +131,7 @@ def amostrar_cores_classes(cmap, n_classes):
     """
     if n_classes <= 1:
         return [to_hex(cmap(0.55))]
-    pontos = np.linspace(0.12, 0.98, n_classes)
+    pontos = np.linspace(0.10, 0.98, n_classes)
     return [to_hex(cmap(x)) for x in pontos]
 
 def classificar_valor(valor, faixas):
@@ -148,14 +147,14 @@ def classificar_valor(valor, faixas):
                 return label
     return None
 
-def desenhar_base_mapa(ax, base_fazenda, facecolor="#f8fafc", mostrar_talhoes=True, margem_rel_x=0.018, margem_rel_y=0.042):
+def desenhar_base_mapa(ax, base_fazenda, facecolor="#F8FAFC", mostrar_talhoes=True, margem_rel_x=0.018, margem_rel_y=0.040):
     """
-    Desenha a fazenda com zoom equilibrado.
+    Desenha a fazenda com zoom equilibrado e mais profissional.
     """
-    ax.set_facecolor("#e9eef5")
+    ax.set_facecolor("#E9EEF5")
 
-    base_fazenda.plot(ax=ax, facecolor=facecolor, edgecolor="#18212f", linewidth=1.15, zorder=1)
-    base_fazenda.boundary.plot(ax=ax, color="#111827", linewidth=1.15, zorder=3)
+    base_fazenda.plot(ax=ax, facecolor=facecolor, edgecolor="#18212F", linewidth=1.2, zorder=1)
+    base_fazenda.boundary.plot(ax=ax, color="#111827", linewidth=1.2, zorder=3)
 
     if mostrar_talhoes and "TALHAO" in base_fazenda.columns:
         for _, row in base_fazenda.iterrows():
@@ -178,8 +177,9 @@ def desenhar_base_mapa(ax, base_fazenda, facecolor="#f8fafc", mostrar_talhoes=Tr
     dx = maxx - minx
     dy = maxy - miny
 
-    margem_x = max(dx * margem_rel_x, 2.5)
-    margem_y = max(dy * margem_rel_y, 3.5)
+    # Zoom mais equilibrado
+    margem_x = max(dx * margem_rel_x, 2.4)
+    margem_y = max(dy * margem_rel_y, 3.2)
 
     ax.set_xlim(minx - margem_x, maxx + margem_x)
     ax.set_ylim(miny - margem_y, maxy + margem_y)
@@ -198,16 +198,16 @@ def adicionar_resumo(fig, x, y, texto, cor_caixa):
 def adicionar_titulo_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_ini, periodo_fim):
     fig.text(
         0.05,
-        0.945,
+        0.947,
         titulo_mapa,
-        fontsize=16.5,
+        fontsize=16.2,
         weight="bold",
-        color="#111827"
+        color="#0F172A"
     )
 
     fig.text(
         0.05,
-        0.915,
+        0.918,
         f"Fazenda: {fazenda_id} – {nome_fazenda}",
         fontsize=10.8,
         color="#334155"
@@ -215,48 +215,48 @@ def adicionar_titulo_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_in
 
     fig.text(
         0.05,
-        0.892,
+        0.895,
         f"Período: {periodo_ini} até {periodo_fim}",
-        fontsize=10.0,
-        color="#64748b"
+        fontsize=9.9,
+        color="#64748B"
     )
 
 def adicionar_footer(fig, cor_rodape):
     brasilia = pytz.timezone("America/Sao_Paulo")
     hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
 
-    # centralizado na FIGURA INTEIRA
+    # centralizado na figura inteira
     fig.text(
         0.50,
-        0.060,
+        0.057,
         "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos.",
         ha="center",
-        fontsize=9.5,
+        fontsize=9.3,
         color=cor_rodape
     )
 
     fig.text(
         0.50,
-        0.038,
+        0.036,
         "Relatório elaborado com base em dados da Solinftec.",
         ha="center",
-        fontsize=9.5,
+        fontsize=9.3,
         color=cor_rodape
     )
 
     fig.text(
         0.50,
-        0.016,
+        0.015,
         f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
         ha="center",
-        fontsize=9.5,
+        fontsize=9.3,
         color=cor_rodape
     )
 
 def figura_para_pdf_bytes(fig):
     """
     Exporta a figura em PDF vetorial.
-    Mantém boa qualidade quando se dá zoom.
+    Quando se dá zoom, tende a manter melhor a qualidade.
     """
     buffer = io.BytesIO()
     fig.savefig(
@@ -418,10 +418,10 @@ def plotar_mapa_classes(ax, base_fazenda, gdf_plot, coluna_classe, mapa_cores, m
     desenhar_base_mapa(
         ax,
         base_fazenda,
-        facecolor="#f8fafc",
+        facecolor="#F8FAFC",
         mostrar_talhoes=mostrar_talhoes,
         margem_rel_x=0.018,
-        margem_rel_y=0.042
+        margem_rel_y=0.040
     )
 
     if gdf_plot.empty:
@@ -452,33 +452,32 @@ def desenhar_box_legenda_tematica(
     faixa_exibida_txt,
     media_txt,
     df_legenda,
-    casas=0,
-    dark_mode=True
+    casas=0
 ):
     """
-    Caixa lateral menor, mais próxima do mapa, sempre em modo escuro.
+    Caixa lateral em dark mode, mais larga e menos comprimida.
     """
-    # caixa menor e mais próxima
-    ax_box = fig.add_axes([0.62, 0.25, 0.22, 0.46])
+    # Mais larga e menos "espremida"
+    ax_box = fig.add_axes([0.63, 0.23, 0.29, 0.50])
     ax_box.set_xlim(0, 1)
     ax_box.set_ylim(0, 1)
     ax_box.axis("off")
 
-    # modo escuro
-    cor_fundo = "#0b1220"
-    cor_borda = "#243244"
+    cor_fundo = "#081120"
+    cor_borda = "#243447"
     cor_sombra = "#020617"
-    cor_titulo = "#f8fafc"
-    cor_sec = "#94a3b8"
-    cor_linha = "#1e293b"
-    cor_texto = "#e2e8f0"
+    cor_titulo = "#F8FAFC"
+    cor_sec = "#94A3B8"
+    cor_linha = "#162235"
+    cor_texto = "#E2E8F0"
+    cor_destaque = "#22C55E"
 
     # sombra suave
     sombra = FancyBboxPatch(
-        (0.014, -0.010),
+        (0.015, -0.010),
         1,
         1,
-        boxstyle="round,pad=0.018,rounding_size=0.028",
+        boxstyle="round,pad=0.020,rounding_size=0.030",
         facecolor=cor_sombra,
         edgecolor="none",
         alpha=0.30,
@@ -491,51 +490,52 @@ def desenhar_box_legenda_tematica(
         (0, 0),
         1,
         1,
-        boxstyle="round,pad=0.018,rounding_size=0.028",
+        boxstyle="round,pad=0.020,rounding_size=0.030",
         facecolor=cor_fundo,
         edgecolor=cor_borda,
-        linewidth=1.1,
+        linewidth=1.15,
         zorder=1
     )
     ax_box.add_patch(caixa)
 
-    ax_box.text(0.05, 0.95, titulo_box, fontsize=11.2, weight="bold", color=cor_titulo, va="top", zorder=2)
-    ax_box.text(0.05, 0.90, f"Faixa exibida: {faixa_exibida_txt}", fontsize=8.7, color=cor_sec, va="top", zorder=2)
-    ax_box.text(0.05, 0.85, media_txt, fontsize=9.8, color=cor_titulo, va="top", weight="bold", zorder=2)
-
-    ax_box.plot([0.05, 0.95], [0.80, 0.80], color=cor_borda, linewidth=1.0, zorder=2)
-
     # cabeçalho
-    ax_box.text(0.17, 0.765, "Início", fontsize=8.4, color=cor_sec, va="bottom", zorder=2)
-    ax_box.text(0.49, 0.765, "Fim", fontsize=8.4, color=cor_sec, va="bottom", zorder=2)
-    ax_box.text(0.78, 0.765, "%", fontsize=8.4, color=cor_sec, va="bottom", zorder=2)
+    ax_box.text(0.06, 0.94, titulo_box, fontsize=12.0, weight="bold", color=cor_titulo, va="top", zorder=2)
+    ax_box.text(0.06, 0.89, f"Faixa exibida: {faixa_exibida_txt}", fontsize=9.0, color=cor_sec, va="top", zorder=2)
+    ax_box.text(0.06, 0.84, media_txt, fontsize=10.2, color=cor_destaque, va="top", weight="bold", zorder=2)
+
+    ax_box.plot([0.06, 0.94], [0.79, 0.79], color=cor_borda, linewidth=1.0, zorder=2)
+
+    # cabeçalho da grade
+    ax_box.text(0.20, 0.755, "Início", fontsize=8.8, color=cor_sec, va="bottom", zorder=2)
+    ax_box.text(0.50, 0.755, "Fim", fontsize=8.8, color=cor_sec, va="bottom", zorder=2)
+    ax_box.text(0.80, 0.755, "%", fontsize=8.8, color=cor_sec, va="bottom", zorder=2)
 
     if df_legenda.empty:
-        ax_box.text(0.05, 0.65, "Sem dados válidos para exibir.", fontsize=8.8, color=cor_sec, zorder=2)
+        ax_box.text(0.06, 0.65, "Sem dados válidos para exibir.", fontsize=9.0, color=cor_sec, zorder=2)
         return
 
     df_vis = df_legenda.copy().reset_index(drop=True)
 
     n = len(df_vis)
-    topo = 0.735
+    topo = 0.72
     base = 0.08
     row_h = (topo - base) / max(n, 1)
 
     if n <= 7:
-        fonte = 9.0
+        fonte = 9.2
     elif n <= 10:
-        fonte = 8.2
+        fonte = 8.5
     else:
-        fonte = 7.4
+        fonte = 7.8
 
     for i, row in df_vis.iterrows():
         y = topo - (i + 0.5) * row_h
 
         if i > 0:
             y_sep = topo - i * row_h
-            ax_box.plot([0.05, 0.95], [y_sep, y_sep], color=cor_linha, linewidth=0.8, zorder=2)
+            ax_box.plot([0.06, 0.94], [y_sep, y_sep], color=cor_linha, linewidth=0.85, zorder=2)
 
-        circ = Circle((0.09, y), 0.020, facecolor=row["cor"], edgecolor="#cbd5e1", linewidth=0.35, zorder=3)
+        circ = Circle((0.10, y), 0.0185, facecolor=row["cor"], edgecolor="#CBD5E1", linewidth=0.35, zorder=3)
         ax_box.add_patch(circ)
 
         inicio = formatar_numero(row["inicio"], casas)
@@ -545,9 +545,9 @@ def desenhar_box_legenda_tematica(
 
         percentual = f'{row["percentual"]:.1f}%'.replace(".", ",")
 
-        ax_box.text(0.17, y, inicio, fontsize=fonte, va="center", color=cor_texto, zorder=3)
-        ax_box.text(0.49, y, str(fim), fontsize=fonte, va="center", color=cor_texto, zorder=3)
-        ax_box.text(0.76, y, percentual, fontsize=fonte, va="center", color=cor_texto, zorder=3)
+        ax_box.text(0.20, y, inicio, fontsize=fonte, va="center", color=cor_texto, zorder=3)
+        ax_box.text(0.50, y, str(fim), fontsize=fonte, va="center", color=cor_texto, zorder=3)
+        ax_box.text(0.78, y, percentual, fontsize=fonte, va="center", color=cor_texto, zorder=3)
 
 def criar_figura_tematica(
     base_fazenda,
@@ -566,13 +566,13 @@ def criar_figura_tematica(
     casas
 ):
     """
-    Figura temática com mapa maior, box menor e mais próxima.
+    Figura temática com composição mais equilibrada.
     """
-    fig = plt.figure(figsize=(14.5, 9.3))
-    fig.patch.set_facecolor("#e9edf3")
+    fig = plt.figure(figsize=(14.2, 9.0))
+    fig.patch.set_facecolor("#E9EDF3")
 
-    # mapa maior
-    ax = fig.add_axes([0.05, 0.13, 0.50, 0.77])
+    # Mapa maior e melhor posicionado
+    ax = fig.add_axes([0.07, 0.12, 0.50, 0.79])
 
     if gdf_display is not None and not gdf_display.empty:
         plotar_mapa_classes(
@@ -587,10 +587,10 @@ def criar_figura_tematica(
         desenhar_base_mapa(
             ax,
             base_fazenda,
-            facecolor="#f8fafc",
+            facecolor="#F8FAFC",
             mostrar_talhoes=True,
             margem_rel_x=0.018,
-            margem_rel_y=0.042
+            margem_rel_y=0.040
         )
 
     adicionar_titulo_topo(
@@ -608,11 +608,10 @@ def criar_figura_tematica(
         faixa_exibida_txt=faixa_exibida_txt,
         media_txt=media_txt,
         df_legenda=df_legenda,
-        casas=casas,
-        dark_mode=True
+        casas=casas
     )
 
-    adicionar_footer(fig, "#6b7280")
+    adicionar_footer(fig, "#6B7280")
 
     return fig
 
@@ -664,7 +663,6 @@ MAPA_AREA = st.sidebar.checkbox("Área trabalhada", value=True)
 MAPA_RPM = st.sidebar.checkbox("Mapa de RPM", value=False)
 MAPA_VEL = st.sidebar.checkbox("Mapa de Velocidade", value=False)
 
-# Só aparece se marcar RPM
 RPM_MIN = 1200
 RPM_MAX = 2000
 RPM_PASSO = 100
@@ -692,7 +690,6 @@ if MAPA_RPM:
         step=50
     )
 
-# Só aparece se marcar Velocidade
 VEL_MIN = 4.0
 VEL_MAX = 8.0
 VEL_PASSO = 1.0
@@ -1036,7 +1033,6 @@ if uploaded_zips and uploaded_gpkg and GERAR:
                                 lambda x: classificar_valor(x, vel_faixas)
                             )
 
-                # Legendas internas da figura
                 df_leg_rpm = pd.DataFrame(columns=["cor", "inicio", "fim", "faixa", "percentual"])
                 df_leg_vel = pd.DataFrame(columns=["cor", "inicio", "fim", "faixa", "percentual"])
 
@@ -1122,7 +1118,7 @@ if uploaded_zips and uploaded_gpkg and GERAR:
                         )
 
                         adicionar_resumo(fig, pos.x1 + 0.02, 0.50, resumo_area, COR_CAIXA)
-                        # mantém footer da área como está
+
                         fig.text(
                             centro_mapa,
                             base_y - 0.11,
