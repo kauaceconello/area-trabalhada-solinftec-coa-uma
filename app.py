@@ -40,22 +40,39 @@ if "mapas_gerados" not in st.session_state:
 st.markdown(
     """
     <style>
+    .stApp {
+        background: linear-gradient(180deg, #F4F7FB 0%, #EEF3F8 100%);
+    }
+
     div.stButton > button {
         width: 100%;
-        height: 3.2em;
-        font-size: 1.15em;
-        font-weight: 600;
+        height: 3.1em;
+        font-size: 1.05em;
+        font-weight: 700;
+        border-radius: 12px;
+        border: 1px solid #2563EB;
+        background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
+        color: white;
+        box-shadow: 0 8px 20px rgba(37, 99, 235, 0.18);
+        transition: all 0.18s ease;
+    }
+
+    div.stButton > button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 12px 22px rgba(37, 99, 235, 0.24);
     }
 
     section[data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #171923 0%, #1d2130 100%);
+        background: linear-gradient(180deg, #0F172A 0%, #111827 100%);
+        border-right: 1px solid rgba(255,255,255,0.08);
     }
 
     section[data-testid="stSidebar"] .stMarkdown,
     section[data-testid="stSidebar"] label,
     section[data-testid="stSidebar"] p,
-    section[data-testid="stSidebar"] span {
-        color: #f3f4f6 !important;
+    section[data-testid="stSidebar"] span,
+    section[data-testid="stSidebar"] div {
+        color: #F8FAFC !important;
     }
 
     section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div {
@@ -74,16 +91,40 @@ st.markdown(
     }
 
     section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] {
-        border-radius: 12px;
-        border: 1px solid rgba(255,255,255,0.10);
-        background: rgba(255,255,255,0.025);
-        padding: 4px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.10);
+        border-radius: 14px;
+        border: 1px solid rgba(255,255,255,0.08);
+        background: rgba(255,255,255,0.035);
+        padding: 6px;
+        box-shadow: 0 6px 16px rgba(0,0,0,0.18);
     }
 
-    section[data-testid="stSidebar"] .stNumberInput input {
-        background-color: #0b1020;
-        color: #f8fafc;
+    section[data-testid="stSidebar"] .stNumberInput input,
+    section[data-testid="stSidebar"] .stTextInput input,
+    section[data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] > div {
+        background-color: #0B1220 !important;
+        color: #F8FAFC !important;
+        border-radius: 10px !important;
+    }
+
+    [data-testid="stFileUploader"] {
+        background: #FFFFFF;
+        border: 1px dashed #CBD5E1;
+        border-radius: 14px;
+        padding: 10px;
+        box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
+    }
+
+    [data-testid="stExpander"] {
+        border: 1px solid #D9E2EC !important;
+        border-radius: 16px !important;
+        background: rgba(255,255,255,0.70);
+        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+    }
+
+    [data-testid="stDataFrame"] {
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid #E2E8F0;
     }
     </style>
     """,
@@ -372,34 +413,52 @@ def calcular_legenda_percentual(gdf_display, coluna_classe, faixas, mapa_cores):
 def desenhar_base_mapa(
     ax,
     base_fazenda,
-    facecolor="#F8FAFC",
+    facecolor="#FFFFFF",
     mostrar_talhoes=True,
-    margem_rel_x=0.005,
-    margem_rel_y=0.014
+    margem_rel_x=0.020,
+    margem_rel_y=0.030
 ):
     """
-    Mapa com zoom mais próximo e melhor leitura.
+    Mapa com zoom melhor distribuído e leitura mais limpa.
     """
-    ax.set_facecolor("#EEF2F7")
+    ax.set_facecolor("#F8FAFC")
 
-    base_fazenda.plot(ax=ax, facecolor=facecolor, edgecolor="#1F2937", linewidth=1.15, zorder=1)
-    base_fazenda.boundary.plot(ax=ax, color="#111827", linewidth=1.15, zorder=3)
+    base_fazenda.plot(
+        ax=ax,
+        facecolor=facecolor,
+        edgecolor="#334155",
+        linewidth=1.0,
+        zorder=1
+    )
+
+    base_fazenda.boundary.plot(
+        ax=ax,
+        color="#0F172A",
+        linewidth=1.1,
+        zorder=3
+    )
 
     if mostrar_talhoes and "TALHAO" in base_fazenda.columns:
         for _, row in base_fazenda.iterrows():
             if row.geometry.is_empty:
                 continue
+
             centroid = row.geometry.centroid
             ax.text(
                 centroid.x,
                 centroid.y,
                 str(row["TALHAO"]),
-                fontsize=8.1,
+                fontsize=7.8,
                 ha="center",
                 va="center",
-                color="#111827",
+                color="#0F172A",
                 weight="bold",
-                zorder=4
+                zorder=4,
+                bbox=dict(
+                    boxstyle="round,pad=0.14",
+                    facecolor=(1, 1, 1, 0.55),
+                    edgecolor="none"
+                )
             )
 
     minx, miny, maxx, maxy = base_fazenda.total_bounds
@@ -419,10 +478,10 @@ def plotar_mapa_classes(ax, base_fazenda, gdf_plot, coluna_classe, mapa_cores, m
     desenhar_base_mapa(
         ax,
         base_fazenda,
-        facecolor="#F8FAFC",
+        facecolor="#FFFFFF",
         mostrar_talhoes=mostrar_talhoes,
-        margem_rel_x=0.005,
-        margem_rel_y=0.014
+        margem_rel_x=0.020,
+        margem_rel_y=0.030
     )
 
     if gdf_plot.empty:
@@ -450,84 +509,73 @@ def plotar_mapa_classes(ax, base_fazenda, gdf_plot, coluna_classe, mapa_cores, m
 
 def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_ini, periodo_fim):
     """
-    Cabeçalho superior centralizado, com melhor espaçamento entre as linhas.
+    Cabeçalho superior com aparência mais executiva.
     """
-    header = FancyBboxPatch(
-        (0.02, 0.902),
-        0.96,
-        0.090,
-        boxstyle="round,pad=0.004,rounding_size=0.008",
-        transform=fig.transFigure,
-        facecolor=(0.965, 0.972, 0.980, 0.97),
-        edgecolor="#CBD5E1",
-        linewidth=0.9,
-        zorder=0
-    )
-    fig.add_artist(header)
+    ax_header = fig.add_axes([0.025, 0.905, 0.95, 0.08])
+    ax_header.axis("off")
 
-    fig.text(
-        0.50,
-        0.962,
+    card = FancyBboxPatch(
+        (0, 0),
+        1,
+        1,
+        boxstyle="round,pad=0.012,rounding_size=0.02",
+        facecolor="#FFFFFF",
+        edgecolor="#D8E1EB",
+        linewidth=1.0
+    )
+    ax_header.add_patch(card)
+
+    ax_header.text(
+        0.03, 0.62,
         titulo_mapa,
-        fontsize=15.5,
+        fontsize=16,
         weight="bold",
         color="#0F172A",
-        ha="center",
+        ha="left",
         va="center"
     )
 
-    fig.text(
-        0.50,
-        0.936,
-        f"Fazenda: {fazenda_id} – {nome_fazenda}",
-        fontsize=10.4,
-        color="#334155",
-        ha="center",
+    ax_header.text(
+        0.03, 0.26,
+        f"Fazenda {fazenda_id} • {nome_fazenda}",
+        fontsize=10.2,
+        color="#475569",
+        ha="left",
         va="center"
     )
 
-    fig.text(
-        0.50,
-        0.912,
+    ax_header.text(
+        0.97, 0.50,
         f"Período: {periodo_ini} até {periodo_fim}",
-        fontsize=9.4,
+        fontsize=9.6,
         color="#64748B",
-        ha="center",
+        ha="right",
         va="center"
     )
 
 
-def adicionar_footer(fig, cor_rodape="#2F3B4A"):
+def adicionar_footer(fig, cor_rodape="#64748B"):
     """
-    Rodapé mais escuro e centralizado.
+    Rodapé mais discreto e elegante.
     """
     brasilia = pytz.timezone("America/Sao_Paulo")
     hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
 
     fig.text(
         0.50,
-        0.060,
-        "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos.",
+        0.030,
+        "Relatório elaborado com base em dados da Solinftec • Resultados dependem da qualidade dos dados operacionais e geoespaciais.",
         ha="center",
-        fontsize=9.7,
+        fontsize=8.8,
         color=cor_rodape
     )
 
     fig.text(
         0.50,
-        0.038,
-        "Relatório elaborado com base em dados da Solinftec.",
-        ha="center",
-        fontsize=9.7,
-        color=cor_rodape
-    )
-
-    fig.text(
-        0.50,
-        0.016,
+        0.012,
         f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
         ha="center",
-        fontsize=9.7,
+        fontsize=8.6,
         color=cor_rodape
     )
 
@@ -539,140 +587,153 @@ def desenhar_box_legenda_tematica(
     media_txt,
     df_legenda,
     casas=0,
-    reserve_pos=(0.75, 0.19, 0.21, 0.60)
+    reserve_pos=(0.71, 0.16, 0.25, 0.68)
 ):
     """
-    Apenas uma caixa de legenda, centralizada no espaço da direita.
+    Card lateral da legenda com barras de percentual.
     """
     rx, ry, rw, rh = reserve_pos
 
-    n = max(len(df_legenda), 1)
-
-    box_h = min(0.20 + (n * 0.042), rh * 0.94)
-    box_w = rw * 0.92
-
-    # centraliza a caixa no espaço reservado
-    box_x = rx + (rw - box_w) / 2
-    box_y = ry + (rh - box_h) / 2
-
-    ax_box = fig.add_axes([box_x, box_y, box_w, box_h])
+    ax_box = fig.add_axes([rx, ry, rw, rh])
     ax_box.set_xlim(0, 1)
     ax_box.set_ylim(0, 1)
     ax_box.axis("off")
 
-    cor_fundo = (0.87, 0.89, 0.92, 0.96)
-    cor_borda = "#7B8794"
-    cor_sombra = "#A5B4C2"
-    cor_titulo = "#0F172A"
-    cor_sec = "#475569"
-    cor_linha = "#D7DEE7"
-    cor_texto = "#0F172A"
-    cor_destaque = "#047857"
-
-    sombra = FancyBboxPatch(
-        (0.010, -0.010),
-        1,
-        1,
-        boxstyle="round,pad=0.018,rounding_size=0.028",
-        facecolor=cor_sombra,
-        edgecolor="none",
-        alpha=0.10,
-        zorder=0
-    )
-    ax_box.add_patch(sombra)
-
-    caixa = FancyBboxPatch(
+    card = FancyBboxPatch(
         (0, 0),
         1,
         1,
-        boxstyle="round,pad=0.018,rounding_size=0.028",
-        facecolor=cor_fundo,
-        edgecolor=cor_borda,
-        linewidth=1.25,
-        zorder=1
+        boxstyle="round,pad=0.018,rounding_size=0.03",
+        facecolor="#FFFFFF",
+        edgecolor="#D8E1EB",
+        linewidth=1.0
     )
-    ax_box.add_patch(caixa)
+    ax_box.add_patch(card)
 
     ax_box.text(
-        0.50, 0.93,
+        0.07, 0.93,
         titulo_box,
-        fontsize=11.6,
+        fontsize=12,
         weight="bold",
-        color=cor_titulo,
-        va="top",
-        ha="center",
-        zorder=2
+        color="#0F172A",
+        ha="left",
+        va="center"
     )
+
     ax_box.text(
-        0.50, 0.865,
+        0.07, 0.875,
         f"Faixa exibida: {faixa_exibida_txt}",
-        fontsize=8.7,
-        color=cor_sec,
-        va="top",
-        ha="center",
-        zorder=2
+        fontsize=8.8,
+        color="#64748B",
+        ha="left",
+        va="center"
     )
+
+    chip = FancyBboxPatch(
+        (0.07, 0.78),
+        0.86,
+        0.08,
+        boxstyle="round,pad=0.01,rounding_size=0.02",
+        facecolor="#EFF6FF",
+        edgecolor="#BFDBFE",
+        linewidth=0.8
+    )
+    ax_box.add_patch(chip)
+
     ax_box.text(
-        0.50, 0.805,
+        0.50, 0.82,
         media_txt,
-        fontsize=9.5,
-        color=cor_destaque,
-        va="top",
-        ha="center",
+        fontsize=10.0,
+        color="#1D4ED8",
         weight="bold",
-        zorder=2
+        ha="center",
+        va="center"
     )
 
-    ax_box.plot([0.08, 0.94], [0.74, 0.74], color=cor_borda, linewidth=0.9, zorder=2)
-
-    ax_box.text(0.32, 0.705, "Início", fontsize=8.5, color=cor_sec, va="bottom", ha="center", zorder=2)
-    ax_box.text(0.62, 0.705, "Fim", fontsize=8.5, color=cor_sec, va="bottom", ha="center", zorder=2)
-    ax_box.text(0.86, 0.705, "%", fontsize=8.5, color=cor_sec, va="bottom", ha="center", zorder=2)
+    ax_box.plot([0.07, 0.93], [0.73, 0.73], color="#E2E8F0", linewidth=1)
 
     if df_legenda.empty:
-        ax_box.text(0.50, 0.58, "Sem dados válidos para exibir.", fontsize=8.6, color=cor_sec,
-                    ha="center", zorder=2)
+        ax_box.text(
+            0.50, 0.55,
+            "Sem dados válidos para exibir.",
+            fontsize=9.2,
+            color="#64748B",
+            ha="center"
+        )
         return
 
     topo = 0.67
-    base = 0.10
+    base = 0.08
+    n = len(df_legenda)
     row_h = (topo - base) / max(n, 1)
 
-    if n <= 7:
-        fonte = 8.8
-        size_bolinha = 64
-    elif n <= 10:
-        fonte = 8.2
-        size_bolinha = 56
-    else:
-        fonte = 7.5
-        size_bolinha = 50
-
     for i, row in df_legenda.reset_index(drop=True).iterrows():
-        y_row = topo - (i + 0.5) * row_h
+        y = topo - i * row_h
 
-        if i > 0:
-            y_sep = topo - i * row_h
-            ax_box.plot([0.08, 0.94], [y_sep, y_sep], color=cor_linha, linewidth=0.65, zorder=2)
+        faixa_txt = row["faixa"]
+        percentual = row["percentual"]
+        pct_txt = f"{percentual:.1f}%".replace(".", ",")
 
-        ax_box.scatter(
-            [0.16], [y_row],
-            s=size_bolinha,
-            color=row["cor"],
-            edgecolors="none",
-            zorder=3
+        ax_box.add_patch(
+            FancyBboxPatch(
+                (0.07, y - 0.020),
+                0.025,
+                0.025,
+                boxstyle="round,pad=0.002,rounding_size=0.004",
+                facecolor=row["cor"],
+                edgecolor="none"
+            )
         )
 
-        inicio = formatar_numero(row["inicio"], casas)
-        fim = row["fim"]
-        if fim != "+":
-            fim = formatar_numero(fim, casas)
+        ax_box.text(
+            0.11, y - 0.007,
+            faixa_txt,
+            fontsize=8.9,
+            color="#0F172A",
+            ha="left",
+            va="center"
+        )
 
-        percentual = f'{row["percentual"]:.1f}%'.replace(".", ",")
+        ax_box.add_patch(
+            FancyBboxPatch(
+                (0.57, y - 0.020),
+                0.25,
+                0.025,
+                boxstyle="round,pad=0.002,rounding_size=0.008",
+                facecolor="#E2E8F0",
+                edgecolor="none"
+            )
+        )
 
-        ax_box.text(0.32, y_row, inicio, fontsize=fonte, va="center", ha="center", color=cor_texto, zorder=3)
-        ax_box.text(0.62, y_row, str(fim), fontsize=fonte, va="center", ha="center", color=cor_texto, zorder=3)
-        ax_box.text(0.86, y_row, percentual, fontsize=fonte, va="center", ha="center", color=cor_texto, zorder=3)
+        largura_barra = 0.25 * max(0, min(percentual, 100)) / 100
+        ax_box.add_patch(
+            FancyBboxPatch(
+                (0.57, y - 0.020),
+                largura_barra,
+                0.025,
+                boxstyle="round,pad=0.002,rounding_size=0.008",
+                facecolor=row["cor"],
+                edgecolor="none"
+            )
+        )
+
+        ax_box.text(
+            0.86, y - 0.007,
+            pct_txt,
+            fontsize=8.9,
+            color="#334155",
+            ha="center",
+            va="center",
+            weight="bold"
+        )
+
+        if i < n - 1:
+            ax_box.plot(
+                [0.07, 0.93],
+                [y - 0.045, y - 0.045],
+                color="#F1F5F9",
+                linewidth=0.8
+            )
 
 
 def criar_figura_tematica(
@@ -692,38 +753,47 @@ def criar_figura_tematica(
     casas
 ):
     """
-    Figura temática com mapa + uma caixa de legenda centralizada à direita.
+    Figura temática com mapa + card lateral de legenda.
     """
-    fig = plt.figure(figsize=(14.0, 8.6))
-    fig.patch.set_facecolor("#E9EDF3")
+    fig = plt.figure(figsize=(15.5, 8.8))
+    fig.patch.set_facecolor("#F4F7FB")
 
     moldura = FancyBboxPatch(
-        (0.015, 0.01),
-        0.97,
-        0.97,
-        boxstyle="round,pad=0.0,rounding_size=0.008",
+        (0.01, 0.01),
+        0.98,
+        0.98,
+        boxstyle="round,pad=0.0,rounding_size=0.012",
         transform=fig.transFigure,
         facecolor="none",
-        edgecolor="#CAD4E0",
+        edgecolor="#D8E1EB",
         linewidth=1.0,
         zorder=0
     )
     fig.add_artist(moldura)
 
+    adicionar_header_topo(
+        fig,
+        titulo_mapa=titulo_mapa,
+        fazenda_id=fazenda_id,
+        nome_fazenda=nome_fazenda,
+        periodo_ini=periodo_ini,
+        periodo_fim=periodo_fim
+    )
+
     painel_mapa = FancyBboxPatch(
-        (0.03, 0.11),
-        0.69,
-        0.79,
-        boxstyle="round,pad=0.004,rounding_size=0.012",
+        (0.03, 0.10),
+        0.64,
+        0.78,
+        boxstyle="round,pad=0.004,rounding_size=0.015",
         transform=fig.transFigure,
-        facecolor=(0.96, 0.97, 0.99, 0.58),
-        edgecolor="#D4DCE6",
-        linewidth=0.9,
+        facecolor="#FFFFFF",
+        edgecolor="#D8E1EB",
+        linewidth=1.0,
         zorder=0
     )
     fig.add_artist(painel_mapa)
 
-    ax = fig.add_axes([0.11, 0.18, 0.43, 0.62])
+    ax = fig.add_axes([0.06, 0.16, 0.58, 0.66])
 
     if gdf_display is not None and not gdf_display.empty:
         plotar_mapa_classes(
@@ -736,22 +806,11 @@ def criar_figura_tematica(
         )
     else:
         desenhar_base_mapa(
-            ax,
-            base_fazenda,
-            facecolor="#F8FAFC",
-            mostrar_talhoes=True,
-            margem_rel_x=0.005,
-            margem_rel_y=0.014
+            ax=ax,
+            base_fazenda=base_fazenda,
+            facecolor="#FFFFFF",
+            mostrar_talhoes=True
         )
-
-    adicionar_header_topo(
-        fig,
-        titulo_mapa=titulo_mapa,
-        fazenda_id=fazenda_id,
-        nome_fazenda=nome_fazenda,
-        periodo_ini=periodo_ini,
-        periodo_fim=periodo_fim
-    )
 
     desenhar_box_legenda_tematica(
         fig=fig,
@@ -760,11 +819,10 @@ def criar_figura_tematica(
         media_txt=media_txt,
         df_legenda=df_legenda,
         casas=casas,
-        reserve_pos=(0.75, 0.19, 0.21, 0.60)
+        reserve_pos=(0.71, 0.16, 0.25, 0.68)
     )
 
-    adicionar_footer(fig, "#2F3B4A")
-
+    adicionar_footer(fig, "#64748B")
     return fig
 
 
@@ -788,20 +846,19 @@ def criar_figura_area(
     cor_nao_trab
 ):
     """
-    Mesmo modelo visual para o mapa de área trabalhada,
-    com resumo e legenda centralizados.
+    Mapa de área trabalhada com visual mais executivo.
     """
-    fig = plt.figure(figsize=(14.0, 8.6))
-    fig.patch.set_facecolor("#E9EDF3")
+    fig = plt.figure(figsize=(15.5, 8.8))
+    fig.patch.set_facecolor("#F4F7FB")
 
     moldura = FancyBboxPatch(
-        (0.015, 0.01),
-        0.97,
-        0.97,
-        boxstyle="round,pad=0.0,rounding_size=0.008",
+        (0.01, 0.01),
+        0.98,
+        0.98,
+        boxstyle="round,pad=0.0,rounding_size=0.012",
         transform=fig.transFigure,
         facecolor="none",
-        edgecolor="#CAD4E0",
+        edgecolor="#D8E1EB",
         linewidth=1.0,
         zorder=0
     )
@@ -817,25 +874,41 @@ def criar_figura_area(
     )
 
     painel_mapa = FancyBboxPatch(
-        (0.03, 0.11),
-        0.69,
-        0.79,
-        boxstyle="round,pad=0.004,rounding_size=0.012",
+        (0.03, 0.10),
+        0.64,
+        0.78,
+        boxstyle="round,pad=0.004,rounding_size=0.015",
         transform=fig.transFigure,
-        facecolor=(0.96, 0.97, 0.99, 0.58),
-        edgecolor="#D4DCE6",
-        linewidth=0.9,
+        facecolor="#FFFFFF",
+        edgecolor="#D8E1EB",
+        linewidth=1.0,
         zorder=0
     )
     fig.add_artist(painel_mapa)
 
-    ax = fig.add_axes([0.11, 0.18, 0.45, 0.62])
+    ax = fig.add_axes([0.06, 0.16, 0.58, 0.66])
 
-    base_fazenda.plot(ax=ax, facecolor=cor_nao_trab, edgecolor="black", linewidth=1.1, zorder=1)
-    gpd.GeoSeries(area_trabalhada, crs=base_fazenda.crs).plot(
-        ax=ax, color=cor_trabalhada, alpha=0.9, zorder=2
+    base_fazenda.plot(
+        ax=ax,
+        facecolor=cor_nao_trab,
+        edgecolor="#334155",
+        linewidth=1.0,
+        zorder=1
     )
-    base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.15, zorder=3)
+
+    gpd.GeoSeries(area_trabalhada, crs=base_fazenda.crs).plot(
+        ax=ax,
+        color=cor_trabalhada,
+        alpha=0.88,
+        zorder=2
+    )
+
+    base_fazenda.boundary.plot(
+        ax=ax,
+        color="#0F172A",
+        linewidth=1.1,
+        zorder=3
+    )
 
     if mostrar_talhoes and "TALHAO" in base_fazenda.columns:
         for _, row in base_fazenda.iterrows():
@@ -846,98 +919,103 @@ def criar_figura_area(
                 centroid.x,
                 centroid.y,
                 str(row["TALHAO"]),
-                fontsize=8.0,
+                fontsize=7.8,
                 ha="center",
                 va="center",
-                color="black",
+                color="#0F172A",
                 weight="bold",
-                zorder=4
+                zorder=4,
+                bbox=dict(
+                    boxstyle="round,pad=0.14",
+                    facecolor=(1, 1, 1, 0.55),
+                    edgecolor="none"
+                )
             )
 
     minx, miny, maxx, maxy = base_fazenda.total_bounds
     dx = maxx - minx
     dy = maxy - miny
-    margem_x = max(dx * 0.005, 0.35)
-    margem_y = max(dy * 0.014, 0.70)
+    margem_x = max(dx * 0.020, 0.35)
+    margem_y = max(dy * 0.030, 0.70)
 
     ax.set_xlim(minx - margem_x, maxx + margem_x)
     ax.set_ylim(miny - margem_y, maxy + margem_y)
     ax.set_aspect("equal")
     ax.axis("off")
 
-    # apenas uma caixa de resumo
-    resumo_ax = fig.add_axes([0.765, 0.295, 0.15, 0.31])
-    resumo_ax.set_facecolor("none")
-    resumo_ax.patch.set_alpha(0)
+    resumo_ax = fig.add_axes([0.71, 0.23, 0.25, 0.48])
+    resumo_ax.set_xlim(0, 1)
+    resumo_ax.set_ylim(0, 1)
     resumo_ax.axis("off")
 
     resumo_box = FancyBboxPatch(
         (0, 0),
         1,
         1,
-        boxstyle="round,pad=0.018,rounding_size=0.028",
-        facecolor=(0.94, 0.95, 0.97, 0.96),
-        edgecolor="#7B8794",
-        linewidth=1.2
+        boxstyle="round,pad=0.018,rounding_size=0.03",
+        facecolor="#FFFFFF",
+        edgecolor="#D8E1EB",
+        linewidth=1.0
     )
     resumo_ax.add_patch(resumo_box)
 
     resumo_ax.text(
-        0.50, 0.90,
+        0.08, 0.92,
         "Resumo da Operação",
-        ha="center",
-        va="top",
-        fontsize=10.8,
+        ha="left",
+        va="center",
+        fontsize=12,
         fontweight="bold",
         color="#0F172A"
     )
 
-    resumo_ax.text(
-        0.50, 0.70,
-        f"Área total: {area_total_ha} ha",
-        fontsize=9.1,
-        color="#0F172A",
-        va="center",
-        ha="center"
-    )
-    resumo_ax.text(
-        0.50, 0.53,
-        f"Trabalhada: {area_trab_ha} ha ({pct_trab}%)",
-        fontsize=9.1,
-        color="#0F172A",
-        va="center",
-        ha="center"
-    )
-    resumo_ax.text(
-        0.50, 0.36,
-        f"Não trabalhada: {area_nao_ha} ha ({pct_nao}%)",
-        fontsize=9.1,
-        color="#0F172A",
-        va="center",
-        ha="center"
+    resumo_ax.text(0.08, 0.77, "Área total", fontsize=8.7, color="#64748B", ha="left")
+    resumo_ax.text(0.92, 0.77, f"{area_total_ha} ha", fontsize=10.2, color="#0F172A", ha="right", weight="bold")
+
+    resumo_ax.text(0.08, 0.62, "Trabalhada", fontsize=8.7, color="#64748B", ha="left")
+    resumo_ax.text(0.92, 0.62, f"{area_trab_ha} ha ({pct_trab}%)", fontsize=10.0, color="#16A34A", ha="right", weight="bold")
+
+    resumo_ax.text(0.08, 0.47, "Não trabalhada", fontsize=8.7, color="#64748B", ha="left")
+    resumo_ax.text(0.92, 0.47, f"{area_nao_ha} ha ({pct_nao}%)", fontsize=10.0, color="#475569", ha="right", weight="bold")
+
+    resumo_ax.add_patch(
+        FancyBboxPatch(
+            (0.08, 0.28),
+            0.84,
+            0.06,
+            boxstyle="round,pad=0.004,rounding_size=0.015",
+            facecolor="#E5E7EB",
+            edgecolor="none"
+        )
     )
 
-    # legenda centralizada sob o mapa
-    leg_ax = fig.add_axes([0.11, 0.105, 0.45, 0.060])
-    leg_ax.set_facecolor("none")
-    leg_ax.patch.set_alpha(0)
+    resumo_ax.add_patch(
+        FancyBboxPatch(
+            (0.08, 0.28),
+            0.84 * (pct_trab / 100 if pct_trab <= 100 else 1),
+            0.06,
+            boxstyle="round,pad=0.004,rounding_size=0.015",
+            facecolor=cor_trabalhada,
+            edgecolor="none"
+        )
+    )
+
+    resumo_ax.text(
+        0.50, 0.20,
+        f"Cobertura operacional: {pct_trab}%",
+        fontsize=9.6,
+        color="#0F172A",
+        ha="center",
+        weight="bold"
+    )
+
+    leg_ax = fig.add_axes([0.06, 0.09, 0.58, 0.05])
     leg_ax.axis("off")
-
-    legenda_box = FancyBboxPatch(
-        (0, 0),
-        1,
-        1,
-        boxstyle="round,pad=0.012,rounding_size=0.020",
-        facecolor=(0.93, 0.94, 0.97, 0.94),
-        edgecolor="#7B8794",
-        linewidth=1.0
-    )
-    leg_ax.add_patch(legenda_box)
 
     handles = [
         mpatches.Patch(color=cor_trabalhada, label="Área trabalhada"),
         mpatches.Patch(color=cor_nao_trab, label="Área não trabalhada"),
-        mpatches.Patch(facecolor="white", edgecolor="black", label="Limites da fazenda")
+        mpatches.Patch(facecolor="white", edgecolor="#0F172A", label="Limites da fazenda")
     ]
 
     leg_ax.legend(
@@ -948,8 +1026,7 @@ def criar_figura_area(
         fontsize=9.8
     )
 
-    adicionar_footer(fig, "#2F3B4A")
-
+    adicionar_footer(fig, "#64748B")
     return fig
 
 
@@ -1078,10 +1155,19 @@ if MAPA_VEL:
 
 TEMPO_MAX_SEG = 60
 
-COR_TRABALHADA = "#62b27f"
-COR_NAO_TRAB = "#f6b1b3"
-COR_CAIXA = "#f1f8ff"
-COR_RODAPE = "#7a7a7a"
+COR_TRABALHADA = "#22C55E"
+COR_NAO_TRAB = "#E5E7EB"
+COR_CAIXA = "#FFFFFF"
+COR_RODAPE = "#64748B"
+
+COR_FUNDO_FIG = "#F4F7FB"
+COR_CARD = "#FFFFFF"
+COR_BORDA = "#D8E1EB"
+COR_TEXTO = "#0F172A"
+COR_TEXTO_SEC = "#475569"
+COR_LINHA_SUAVE = "#E2E8F0"
+COR_DESTAQUE = "#2563EB"
+COR_SUCESSO = "#16A34A"
 
 FIG_WIDTH = 25
 FIG_HEIGHT = 9
@@ -1400,7 +1486,7 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                             periodo_fim=periodo_fim,
                             fazenda_id=FAZENDA_ID,
                             nome_fazenda=nome_fazenda,
-                            mostrar_talhoes=True,
+                            mostrar_talhoes=MOSTRAR_TALHOES,
                             cor_trabalhada=COR_TRABALHADA,
                             cor_nao_trab=COR_NAO_TRAB
                         )
