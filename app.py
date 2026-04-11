@@ -57,7 +57,7 @@ st.markdown(
         color: #0F172A !important;
     }
 
-    /* Mantém textos do conteúdo principal escuros */
+    /* Conteúdo principal */
     [data-testid="stAppViewContainer"] p,
     [data-testid="stAppViewContainer"] label,
     [data-testid="stAppViewContainer"] span,
@@ -127,47 +127,71 @@ st.markdown(
         background-color: #0B1220 !important;
         color: #F8FAFC !important;
         border-radius: 10px !important;
+        border: 1px solid rgba(255,255,255,0.08) !important;
     }
 
-    /* UPLOADER - CONTAINER EXTERNO */
+    /* =====================================================
+       ÁREA DE UPLOAD - VISUAL ALINHADO COM O SISTEMA
+       ===================================================== */
+
+    /* Card geral do uploader */
     [data-testid="stFileUploader"] {
-        background: #FFFFFF !important;
-        border: 1px solid #D8E1EB !important;
+        background: linear-gradient(180deg, #111827 0%, #0F172A 100%) !important;
+        border: 1px solid rgba(37, 99, 235, 0.28) !important;
         border-radius: 16px !important;
-        padding: 10px !important;
-        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
+        padding: 12px !important;
+        box-shadow: 0 8px 22px rgba(15, 23, 42, 0.18);
     }
 
-    /* DROPZONE INTERNA */
+    /* Título e textos internos do uploader */
+    [data-testid="stFileUploader"] label,
+    [data-testid="stFileUploader"] small,
+    [data-testid="stFileUploader"] p,
+    [data-testid="stFileUploader"] span {
+        color: #E5EDF7 !important;
+    }
+
+    /* Área de arrastar/soltar */
     [data-testid="stFileUploaderDropzone"] {
-        background: #F8FAFC !important;
-        border: 1px dashed #CBD5E1 !important;
+        background: linear-gradient(180deg, #172036 0%, #101827 100%) !important;
+        border: 1px dashed rgba(96, 165, 250, 0.45) !important;
         border-radius: 12px !important;
     }
 
     [data-testid="stFileUploaderDropzone"] * {
-        color: #475569 !important;
-        fill: #475569 !important;
+        color: #DCE7F5 !important;
+        fill: #93C5FD !important;
     }
 
-    /* ÁREA DE ARQUIVOS ANEXADOS */
+    /* Linha do arquivo anexado */
     [data-testid="stFileUploaderFile"] {
-        background: #FFFFFF !important;
-        border: 1px solid #D8E1EB !important;
+        background: rgba(255,255,255,0.04) !important;
+        border: 1px solid rgba(255,255,255,0.08) !important;
         border-radius: 12px !important;
-        color: #0F172A !important;
+        color: #F8FAFC !important;
     }
 
     [data-testid="stFileUploaderFile"] * {
-        color: #0F172A !important;
-        fill: #475569 !important;
+        color: #F8FAFC !important;
+        fill: #93C5FD !important;
     }
 
-    /* Botão do arquivo anexado */
+    /* Botões secundários do uploader */
     [data-testid="stFileUploader"] button[kind="secondary"] {
-        background: #FFFFFF !important;
-        color: #0F172A !important;
-        border: 1px solid #D8E1EB !important;
+        background: rgba(255,255,255,0.04) !important;
+        color: #F8FAFC !important;
+        border: 1px solid rgba(255,255,255,0.10) !important;
+        border-radius: 10px !important;
+    }
+
+    [data-testid="stFileUploader"] button[kind="secondary"]:hover {
+        background: rgba(255,255,255,0.08) !important;
+        border-color: rgba(96,165,250,0.35) !important;
+    }
+
+    /* Ícones do uploader */
+    [data-testid="stFileUploader"] svg {
+        fill: #93C5FD !important;
     }
 
     /* EXPANDER */
@@ -188,6 +212,11 @@ st.markdown(
     /* ALERTAS */
     [data-testid="stInfo"], [data-testid="stSuccess"], [data-testid="stWarning"], [data-testid="stError"] {
         border-radius: 12px !important;
+    }
+
+    /* Caption principal */
+    .stCaption {
+        color: #475569 !important;
     }
     </style>
     """,
@@ -673,8 +702,9 @@ def desenhar_box_legenda_tematica(
     )
     ax_box.add_patch(card)
 
+    # título levemente mais alto
     ax_box.text(
-        0.07, 0.93,
+        0.07, 0.945,
         titulo_box,
         fontsize=12,
         weight="bold",
@@ -683,8 +713,9 @@ def desenhar_box_legenda_tematica(
         va="center"
     )
 
+    # faixa exibida mais alta
     ax_box.text(
-        0.07, 0.875,
+        0.07, 0.895,
         f"Faixa exibida: {faixa_exibida_txt}",
         fontsize=8.8,
         color="#64748B",
@@ -692,10 +723,11 @@ def desenhar_box_legenda_tematica(
         va="center"
     )
 
+    # chip da média sobe um pouco junto
     chip = FancyBboxPatch(
-        (0.07, 0.78),
+        (0.07, 0.805),
         0.86,
-        0.08,
+        0.072,
         boxstyle="round,pad=0.01,rounding_size=0.02",
         facecolor="#EFF6FF",
         edgecolor="#BFDBFE",
@@ -704,7 +736,7 @@ def desenhar_box_legenda_tematica(
     ax_box.add_patch(chip)
 
     ax_box.text(
-        0.50, 0.82,
+        0.50, 0.841,
         media_txt,
         fontsize=10.0,
         color="#1D4ED8",
@@ -713,7 +745,8 @@ def desenhar_box_legenda_tematica(
         va="center"
     )
 
-    ax_box.plot([0.07, 0.93], [0.73, 0.73], color="#E2E8F0", linewidth=1)
+    # divisor um pouco mais alto
+    ax_box.plot([0.07, 0.93], [0.755, 0.755], color="#E2E8F0", linewidth=1)
 
     if df_legenda.empty:
         ax_box.text(
@@ -725,7 +758,7 @@ def desenhar_box_legenda_tematica(
         )
         return
 
-    topo = 0.67
+    topo = 0.695
     base = 0.08
     n = len(df_legenda)
     row_h = (topo - base) / max(n, 1)
@@ -1226,17 +1259,26 @@ if not (MAPA_AREA or MAPA_RPM or MAPA_VEL):
 st.markdown(
     """
     <div style="
-        background: rgba(255,255,255,0.72);
-        border: 1px solid #D8E1EB;
+        background: linear-gradient(135deg, #0F172A 0%, #111827 100%);
+        border: 1px solid rgba(37, 99, 235, 0.28);
         border-radius: 18px;
         padding: 18px 20px;
         margin-bottom: 14px;
-        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
     ">
-        <div style="font-size: 1.05rem; font-weight: 700; color: #0F172A; margin-bottom: 6px;">
+        <div style="
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: #F8FAFC;
+            margin-bottom: 6px;
+        ">
             📂 Envio dos arquivos
         </div>
-        <div style="font-size: 0.92rem; color: #64748B;">
+        <div style="
+            font-size: 0.92rem;
+            color: #CBD5E1;
+            line-height: 1.45;
+        ">
             Faça o upload dos ZIPs com os CSVs operacionais e da base cartográfica em GPKG para gerar os mapas.
         </div>
     </div>
