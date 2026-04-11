@@ -5,6 +5,7 @@ import streamlit as st
 import pandas as pd
 import geopandas as gpd
 import numpy as np
+import io
 
 from shapely.geometry import LineString
 from shapely.ops import unary_union
@@ -95,47 +96,46 @@ def gerar_faixas(vmin, vmax, passo, casas=0):
 
 def criar_cmap_suave(tipo="rpm"):
     """
-    Colormap mais elegante e harmonioso.
+    Paletas mais vivas e mais harmônicas.
     """
     if tipo == "rpm":
         cores = [
-            "#133c73",  # azul escuro
-            "#1f78b4",  # azul
-            "#5aa9e6",  # azul claro
-            "#66c2a5",  # verde-água
-            "#2ca25f",  # verde
-            "#f6d55c",  # amarelo
-            "#f29e4c",  # laranja
-            "#d1495b",  # vermelho
+            "#0b3c6f",  # azul escuro
+            "#1464a0",  # azul
+            "#2f8edb",  # azul vivo
+            "#31b7b0",  # turquesa
+            "#2eaf57",  # verde
+            "#a5d63f",  # verde-amarelado
+            "#f2cf43",  # amarelo
+            "#f39c35",  # laranja
+            "#d24b4b",  # vermelho
         ]
     else:
         cores = [
-            "#1d4e89",  # azul escuro
-            "#2a7ab9",  # azul
-            "#5fbcd3",  # ciano
-            "#4fc3a1",  # verde água
-            "#2fbf71",  # verde
-            "#b8e356",  # verde-amarelado
-            "#f6d55c",  # amarelo
-            "#f29e4c",  # laranja
-            "#d1495b",  # vermelho
+            "#0a4f8a",  # azul escuro
+            "#1375bc",  # azul
+            "#1aa7d1",  # ciano
+            "#1fbba6",  # verde água
+            "#19b85c",  # verde
+            "#7ed957",  # verde claro
+            "#d7e83e",  # amarelo-esverdeado
+            "#f4c542",  # amarelo
+            "#f28e2b",  # laranja
+            "#d9485f",  # vermelho
         ]
 
     return LinearSegmentedColormap.from_list(f"cmap_{tipo}", cores, N=256)
 
 def amostrar_cores_classes(cmap, n_classes):
     """
-    Retorna cores suaves para cada faixa.
+    Retorna cores mais saturadas para as classes.
     """
     if n_classes <= 1:
-        return [to_hex(cmap(0.5))]
-    pontos = np.linspace(0.08, 0.95, n_classes)
+        return [to_hex(cmap(0.55))]
+    pontos = np.linspace(0.12, 0.98, n_classes)
     return [to_hex(cmap(x)) for x in pontos]
 
 def classificar_valor(valor, faixas):
-    """
-    Retorna o label da faixa em que o valor cai.
-    """
     if pd.isna(valor):
         return None
 
@@ -148,13 +148,13 @@ def classificar_valor(valor, faixas):
                 return label
     return None
 
-def desenhar_base_mapa(ax, base_fazenda, facecolor="#f8fafc", mostrar_talhoes=True, margem_rel_x=0.035, margem_rel_y=0.055):
+def desenhar_base_mapa(ax, base_fazenda, facecolor="#f8fafc", mostrar_talhoes=True, margem_rel_x=0.018, margem_rel_y=0.042):
     """
-    Desenha a fazenda com zoom mais equilibrado.
+    Desenha a fazenda com zoom equilibrado.
     """
-    ax.set_facecolor("#eef2f7")
+    ax.set_facecolor("#e9eef5")
 
-    base_fazenda.plot(ax=ax, facecolor=facecolor, edgecolor="#1f2937", linewidth=1.15, zorder=1)
+    base_fazenda.plot(ax=ax, facecolor=facecolor, edgecolor="#18212f", linewidth=1.15, zorder=1)
     base_fazenda.boundary.plot(ax=ax, color="#111827", linewidth=1.15, zorder=3)
 
     if mostrar_talhoes and "TALHAO" in base_fazenda.columns:
@@ -166,7 +166,7 @@ def desenhar_base_mapa(ax, base_fazenda, facecolor="#f8fafc", mostrar_talhoes=Tr
                 centroid.x,
                 centroid.y,
                 str(row["TALHAO"]),
-                fontsize=7.6,
+                fontsize=7.9,
                 ha="center",
                 va="center",
                 color="#111827",
@@ -178,8 +178,8 @@ def desenhar_base_mapa(ax, base_fazenda, facecolor="#f8fafc", mostrar_talhoes=Tr
     dx = maxx - minx
     dy = maxy - miny
 
-    margem_x = max(dx * margem_rel_x, 4)
-    margem_y = max(dy * margem_rel_y, 4)
+    margem_x = max(dx * margem_rel_x, 2.5)
+    margem_y = max(dy * margem_rel_y, 3.5)
 
     ax.set_xlim(minx - margem_x, maxx + margem_x)
     ax.set_ylim(miny - margem_y, maxy + margem_y)
@@ -196,41 +196,39 @@ def adicionar_resumo(fig, x, y, texto, cor_caixa):
     )
 
 def adicionar_titulo_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_ini, periodo_fim):
-    """
-    Título e contexto no topo da imagem.
-    """
     fig.text(
-        0.06,
+        0.05,
         0.945,
         titulo_mapa,
-        fontsize=17,
+        fontsize=16.5,
         weight="bold",
         color="#111827"
     )
 
     fig.text(
-        0.06,
+        0.05,
         0.915,
         f"Fazenda: {fazenda_id} – {nome_fazenda}",
-        fontsize=11,
-        color="#374151"
+        fontsize=10.8,
+        color="#334155"
     )
 
     fig.text(
-        0.06,
-        0.890,
+        0.05,
+        0.892,
         f"Período: {periodo_ini} até {periodo_fim}",
-        fontsize=10.3,
-        color="#6b7280"
+        fontsize=10.0,
+        color="#64748b"
     )
 
-def adicionar_footer(fig, centro_mapa, base_y, cor_rodape):
+def adicionar_footer(fig, cor_rodape):
     brasilia = pytz.timezone("America/Sao_Paulo")
     hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
 
+    # centralizado na FIGURA INTEIRA
     fig.text(
-        centro_mapa,
-        base_y - 0.050,
+        0.50,
+        0.060,
         "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos.",
         ha="center",
         fontsize=9.5,
@@ -238,8 +236,8 @@ def adicionar_footer(fig, centro_mapa, base_y, cor_rodape):
     )
 
     fig.text(
-        centro_mapa,
-        base_y - 0.074,
+        0.50,
+        0.038,
         "Relatório elaborado com base em dados da Solinftec.",
         ha="center",
         fontsize=9.5,
@@ -247,18 +245,30 @@ def adicionar_footer(fig, centro_mapa, base_y, cor_rodape):
     )
 
     fig.text(
-        centro_mapa,
-        base_y - 0.098,
+        0.50,
+        0.016,
         f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
         ha="center",
         fontsize=9.5,
         color=cor_rodape
     )
 
+def figura_para_pdf_bytes(fig):
+    """
+    Exporta a figura em PDF vetorial.
+    Mantém boa qualidade quando se dá zoom.
+    """
+    buffer = io.BytesIO()
+    fig.savefig(
+        buffer,
+        format="pdf",
+        bbox_inches="tight",
+        facecolor=fig.get_facecolor()
+    )
+    buffer.seek(0)
+    return buffer.getvalue()
+
 def ler_csvs_de_zip(uploaded_zip, tmpdir, idx_zip):
-    """
-    Extrai cada ZIP em pasta própria e retorna todos os CSVs encontrados.
-    """
     zip_path = os.path.join(tmpdir, uploaded_zip.name)
     with open(zip_path, "wb") as f:
         f.write(uploaded_zip.read())
@@ -287,9 +297,6 @@ def adicionar_segmento_clipado(
     t_fim,
     geom_fazenda
 ):
-    """
-    Cria a linha do segmento, clipa dentro da fazenda e guarda atributos.
-    """
     if len(pontos) < 2:
         return
 
@@ -324,8 +331,7 @@ def adicionar_segmento_clipado(
 
 def criar_poligonos_display(gdf_linhas, geom_fazenda):
     """
-    Para RPM/Velocidade:
-    cria a faixa real da operação usando apenas a largura do implemento (em metros),
+    Cria a faixa real da operação usando apenas a largura do implemento (em metros),
     sem multiplicador extra.
     """
     registros = []
@@ -407,31 +413,36 @@ def calcular_legenda_percentual(gdf_display, coluna_classe, faixas, mapa_cores):
 
 def plotar_mapa_classes(ax, base_fazenda, gdf_plot, coluna_classe, mapa_cores, mostrar_talhoes=True):
     """
-    Plota o mapa por classe com leve contorno para destacar melhor as faixas.
+    Plota o mapa por classe, dissolvendo geometrias para evitar aparência pálida.
     """
     desenhar_base_mapa(
         ax,
         base_fazenda,
         facecolor="#f8fafc",
         mostrar_talhoes=mostrar_talhoes,
-        margem_rel_x=0.035,
-        margem_rel_y=0.055
+        margem_rel_x=0.018,
+        margem_rel_y=0.042
     )
 
     if gdf_plot.empty:
         return
 
-    classes_na_ordem = [c for c in mapa_cores.keys() if c in gdf_plot[coluna_classe].dropna().unique()]
+    gdf_tmp = gdf_plot[[coluna_classe, "geometry"]].dropna(subset=[coluna_classe]).copy()
+    if gdf_tmp.empty:
+        return
+
+    gdf_diss = gdf_tmp.dissolve(by=coluna_classe, as_index=False)
+
+    classes_na_ordem = [c for c in mapa_cores.keys() if c in gdf_diss[coluna_classe].dropna().unique()]
 
     for classe in classes_na_ordem:
-        sub = gdf_plot[gdf_plot[coluna_classe] == classe]
+        sub = gdf_diss[gdf_diss[coluna_classe] == classe]
         if not sub.empty:
             sub.plot(
                 ax=ax,
                 color=mapa_cores[classe],
-                edgecolor="#e5e7eb",
-                linewidth=0.15,
-                alpha=0.97,
+                edgecolor="none",
+                alpha=1.0,
                 zorder=2
             )
 
@@ -442,47 +453,35 @@ def desenhar_box_legenda_tematica(
     media_txt,
     df_legenda,
     casas=0,
-    dark_mode=False
+    dark_mode=True
 ):
     """
-    Desenha caixa lateral harmoniosa com:
-    - título
-    - faixa exibida
-    - média trabalhada
-    - legenda com cor + intervalo + %
+    Caixa lateral menor, mais próxima do mapa, sempre em modo escuro.
     """
-    # caixa mais próxima do mapa
-    ax_box = fig.add_axes([0.60, 0.20, 0.31, 0.62])
+    # caixa menor e mais próxima
+    ax_box = fig.add_axes([0.62, 0.25, 0.22, 0.46])
     ax_box.set_xlim(0, 1)
     ax_box.set_ylim(0, 1)
     ax_box.axis("off")
 
-    if dark_mode:
-        cor_fundo = "#0f172a"
-        cor_borda = "#334155"
-        cor_sombra = "#020617"
-        cor_titulo = "#f8fafc"
-        cor_sec = "#94a3b8"
-        cor_linha = "#1e293b"
-        cor_texto = "#e2e8f0"
-    else:
-        cor_fundo = "#ffffff"
-        cor_borda = "#cbd5e1"
-        cor_sombra = "#cbd5e1"
-        cor_titulo = "#111827"
-        cor_sec = "#6b7280"
-        cor_linha = "#f1f5f9"
-        cor_texto = "#111827"
+    # modo escuro
+    cor_fundo = "#0b1220"
+    cor_borda = "#243244"
+    cor_sombra = "#020617"
+    cor_titulo = "#f8fafc"
+    cor_sec = "#94a3b8"
+    cor_linha = "#1e293b"
+    cor_texto = "#e2e8f0"
 
     # sombra suave
     sombra = FancyBboxPatch(
-        (0.018, -0.012),
+        (0.014, -0.010),
         1,
         1,
-        boxstyle="round,pad=0.018,rounding_size=0.03",
+        boxstyle="round,pad=0.018,rounding_size=0.028",
         facecolor=cor_sombra,
         edgecolor="none",
-        alpha=0.22,
+        alpha=0.30,
         zorder=0
     )
     ax_box.add_patch(sombra)
@@ -492,27 +491,27 @@ def desenhar_box_legenda_tematica(
         (0, 0),
         1,
         1,
-        boxstyle="round,pad=0.018,rounding_size=0.03",
+        boxstyle="round,pad=0.018,rounding_size=0.028",
         facecolor=cor_fundo,
         edgecolor=cor_borda,
-        linewidth=1.2,
+        linewidth=1.1,
         zorder=1
     )
     ax_box.add_patch(caixa)
 
-    ax_box.text(0.05, 0.95, titulo_box, fontsize=12.2, weight="bold", color=cor_titulo, va="top", zorder=2)
-    ax_box.text(0.05, 0.895, f"Faixa exibida: {faixa_exibida_txt}", fontsize=9.2, color=cor_sec, va="top", zorder=2)
-    ax_box.text(0.05, 0.845, media_txt, fontsize=10.4, color=cor_titulo, va="top", weight="bold", zorder=2)
+    ax_box.text(0.05, 0.95, titulo_box, fontsize=11.2, weight="bold", color=cor_titulo, va="top", zorder=2)
+    ax_box.text(0.05, 0.90, f"Faixa exibida: {faixa_exibida_txt}", fontsize=8.7, color=cor_sec, va="top", zorder=2)
+    ax_box.text(0.05, 0.85, media_txt, fontsize=9.8, color=cor_titulo, va="top", weight="bold", zorder=2)
 
-    ax_box.plot([0.05, 0.95], [0.795, 0.795], color=cor_borda if dark_mode else "#e5e7eb", linewidth=1.0, zorder=2)
+    ax_box.plot([0.05, 0.95], [0.80, 0.80], color=cor_borda, linewidth=1.0, zorder=2)
 
-    # cabeçalho da grade
-    ax_box.text(0.16, 0.762, "Início", fontsize=8.8, color=cor_sec, va="bottom", zorder=2)
-    ax_box.text(0.48, 0.762, "Fim", fontsize=8.8, color=cor_sec, va="bottom", zorder=2)
-    ax_box.text(0.76, 0.762, "%", fontsize=8.8, color=cor_sec, va="bottom", zorder=2)
+    # cabeçalho
+    ax_box.text(0.17, 0.765, "Início", fontsize=8.4, color=cor_sec, va="bottom", zorder=2)
+    ax_box.text(0.49, 0.765, "Fim", fontsize=8.4, color=cor_sec, va="bottom", zorder=2)
+    ax_box.text(0.78, 0.765, "%", fontsize=8.4, color=cor_sec, va="bottom", zorder=2)
 
     if df_legenda.empty:
-        ax_box.text(0.05, 0.65, "Sem dados válidos para exibir.", fontsize=9.2, color=cor_sec, zorder=2)
+        ax_box.text(0.05, 0.65, "Sem dados válidos para exibir.", fontsize=8.8, color=cor_sec, zorder=2)
         return
 
     df_vis = df_legenda.copy().reset_index(drop=True)
@@ -523,20 +522,20 @@ def desenhar_box_legenda_tematica(
     row_h = (topo - base) / max(n, 1)
 
     if n <= 7:
-        fonte = 9.4
+        fonte = 9.0
     elif n <= 10:
-        fonte = 8.7
+        fonte = 8.2
     else:
-        fonte = 7.8
+        fonte = 7.4
 
     for i, row in df_vis.iterrows():
         y = topo - (i + 0.5) * row_h
 
         if i > 0:
             y_sep = topo - i * row_h
-            ax_box.plot([0.05, 0.95], [y_sep, y_sep], color=cor_linha, linewidth=0.85, zorder=2)
+            ax_box.plot([0.05, 0.95], [y_sep, y_sep], color=cor_linha, linewidth=0.8, zorder=2)
 
-        circ = Circle((0.09, y), 0.0205, facecolor=row["cor"], edgecolor="#94a3b8", linewidth=0.45, zorder=3)
+        circ = Circle((0.09, y), 0.020, facecolor=row["cor"], edgecolor="#cbd5e1", linewidth=0.35, zorder=3)
         ax_box.add_patch(circ)
 
         inicio = formatar_numero(row["inicio"], casas)
@@ -546,9 +545,9 @@ def desenhar_box_legenda_tematica(
 
         percentual = f'{row["percentual"]:.1f}%'.replace(".", ",")
 
-        ax_box.text(0.16, y, inicio, fontsize=fonte, va="center", color=cor_texto, zorder=3)
-        ax_box.text(0.48, y, str(fim), fontsize=fonte, va="center", color=cor_texto, zorder=3)
-        ax_box.text(0.74, y, percentual, fontsize=fonte, va="center", color=cor_texto, zorder=3)
+        ax_box.text(0.17, y, inicio, fontsize=fonte, va="center", color=cor_texto, zorder=3)
+        ax_box.text(0.49, y, str(fim), fontsize=fonte, va="center", color=cor_texto, zorder=3)
+        ax_box.text(0.76, y, percentual, fontsize=fonte, va="center", color=cor_texto, zorder=3)
 
 def criar_figura_tematica(
     base_fazenda,
@@ -564,21 +563,16 @@ def criar_figura_tematica(
     periodo_fim,
     fazenda_id,
     nome_fazenda,
-    casas,
-    dark_mode_box=False
+    casas
 ):
     """
-    Cria figura temática (RPM ou Velocidade) com:
-    - título no topo
-    - mapa maior
-    - caixa lateral mais próxima
-    - rodapé limpo
+    Figura temática com mapa maior, box menor e mais próxima.
     """
-    fig = plt.figure(figsize=(14.8, 10.8))
-    fig.patch.set_facecolor("#eef2f7")
+    fig = plt.figure(figsize=(14.5, 9.3))
+    fig.patch.set_facecolor("#e9edf3")
 
-    # eixo do mapa maior
-    ax = fig.add_axes([0.06, 0.14, 0.44, 0.76])
+    # mapa maior
+    ax = fig.add_axes([0.05, 0.13, 0.50, 0.77])
 
     if gdf_display is not None and not gdf_display.empty:
         plotar_mapa_classes(
@@ -595,13 +589,9 @@ def criar_figura_tematica(
             base_fazenda,
             facecolor="#f8fafc",
             mostrar_talhoes=True,
-            margem_rel_x=0.035,
-            margem_rel_y=0.055
+            margem_rel_x=0.018,
+            margem_rel_y=0.042
         )
-
-    pos = ax.get_position()
-    centro_mapa = (pos.x0 + pos.x1) / 2
-    base_y = pos.y0
 
     adicionar_titulo_topo(
         fig,
@@ -619,10 +609,10 @@ def criar_figura_tematica(
         media_txt=media_txt,
         df_legenda=df_legenda,
         casas=casas,
-        dark_mode=dark_mode_box
+        dark_mode=True
     )
 
-    adicionar_footer(fig, centro_mapa, base_y, "#6b7280")
+    adicionar_footer(fig, "#6b7280")
 
     return fig
 
@@ -1132,9 +1122,43 @@ if uploaded_zips and uploaded_gpkg and GERAR:
                         )
 
                         adicionar_resumo(fig, pos.x1 + 0.02, 0.50, resumo_area, COR_CAIXA)
-                        adicionar_footer(fig, centro_mapa, base_y, COR_RODAPE)
+                        # mantém footer da área como está
+                        fig.text(
+                            centro_mapa,
+                            base_y - 0.11,
+                            "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos.",
+                            ha="center",
+                            fontsize=10,
+                            color=COR_RODAPE
+                        )
+                        fig.text(
+                            centro_mapa,
+                            base_y - 0.14,
+                            "Relatório elaborado com base em dados da Solinftec.",
+                            ha="center",
+                            fontsize=10,
+                            color=COR_RODAPE
+                        )
+                        brasilia = pytz.timezone("America/Sao_Paulo")
+                        hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
+                        fig.text(
+                            centro_mapa,
+                            base_y - 0.17,
+                            f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
+                            ha="center",
+                            fontsize=10,
+                            color=COR_RODAPE
+                        )
 
                         st.pyplot(fig)
+                        pdf_area = figura_para_pdf_bytes(fig)
+                        st.download_button(
+                            "⬇️ Baixar PDF vetorial – Área Trabalhada",
+                            data=pdf_area,
+                            file_name=f"mapa_area_{FAZENDA_ID}.pdf",
+                            mime="application/pdf",
+                            key=f"pdf_area_{FAZENDA_ID}"
+                        )
                         plt.close(fig)
 
                     # -----------------------------------
@@ -1155,11 +1179,18 @@ if uploaded_zips and uploaded_gpkg and GERAR:
                             periodo_fim=periodo_fim,
                             fazenda_id=FAZENDA_ID,
                             nome_fazenda=nome_fazenda,
-                            casas=0,
-                            dark_mode_box=False
+                            casas=0
                         )
 
                         st.pyplot(fig_rpm)
+                        pdf_rpm = figura_para_pdf_bytes(fig_rpm)
+                        st.download_button(
+                            "⬇️ Baixar PDF vetorial – RPM",
+                            data=pdf_rpm,
+                            file_name=f"mapa_rpm_{FAZENDA_ID}.pdf",
+                            mime="application/pdf",
+                            key=f"pdf_rpm_{FAZENDA_ID}"
+                        )
                         plt.close(fig_rpm)
 
                     # -----------------------------------
@@ -1180,11 +1211,18 @@ if uploaded_zips and uploaded_gpkg and GERAR:
                             periodo_fim=periodo_fim,
                             fazenda_id=FAZENDA_ID,
                             nome_fazenda=nome_fazenda,
-                            casas=1,
-                            dark_mode_box=True
+                            casas=1
                         )
 
                         st.pyplot(fig_vel)
+                        pdf_vel = figura_para_pdf_bytes(fig_vel)
+                        st.download_button(
+                            "⬇️ Baixar PDF vetorial – Velocidade",
+                            data=pdf_vel,
+                            file_name=f"mapa_velocidade_{FAZENDA_ID}.pdf",
+                            mime="application/pdf",
+                            key=f"pdf_vel_{FAZENDA_ID}"
+                        )
                         plt.close(fig_vel)
 
                     # -----------------------------------
