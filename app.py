@@ -268,15 +268,15 @@ def adicionar_resumo(fig, x, y, texto, cor_caixa):
 
 def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_ini, periodo_fim, accent_color):
     """
-    Header centralizado, em faixa própria, sem invadir o mapa.
+    Cabeçalho superior em faixa própria, centralizado e sem invadir o mapa.
     """
     header = FancyBboxPatch(
-        (0.02, 0.91),
+        (0.02, 0.905),
         0.96,
-        0.075,
+        0.078,
         boxstyle="round,pad=0.004,rounding_size=0.008",
         transform=fig.transFigure,
-        facecolor=(0.965, 0.972, 0.980, 0.95),
+        facecolor=(0.965, 0.972, 0.980, 0.96),
         edgecolor="#CBD5E1",
         linewidth=0.9,
         zorder=0
@@ -284,9 +284,9 @@ def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_in
     fig.add_artist(header)
 
     linha = FancyBboxPatch(
-        (0.41, 0.938),
-        0.18,
-        0.004,
+        (0.42, 0.943),
+        0.16,
+        0.0038,
         boxstyle="round,pad=0.001,rounding_size=0.003",
         transform=fig.transFigure,
         facecolor=accent_color,
@@ -297,9 +297,9 @@ def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_in
 
     fig.text(
         0.50,
-        0.952,
+        0.949,
         titulo_mapa,
-        fontsize=16.2,
+        fontsize=15.4,
         weight="bold",
         color="#0F172A",
         ha="center",
@@ -308,9 +308,9 @@ def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_in
 
     fig.text(
         0.50,
-        0.926,
+        0.925,
         f"Fazenda: {fazenda_id} – {nome_fazenda}",
-        fontsize=10.8,
+        fontsize=10.4,
         color="#334155",
         ha="center",
         va="center"
@@ -318,9 +318,9 @@ def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_in
 
     fig.text(
         0.50,
-        0.906,
+        0.907,
         f"Período: {periodo_ini} até {periodo_fim}",
-        fontsize=9.7,
+        fontsize=9.4,
         color="#64748B",
         ha="center",
         va="center"
@@ -441,6 +441,10 @@ def adicionar_segmento_clipado(
 
 
 def criar_poligonos_display(gdf_linhas, geom_fazenda):
+    """
+    Cria a faixa real da operação usando apenas a largura do implemento (em metros),
+    sem multiplicador extra.
+    """
     registros = []
 
     for _, row in gdf_linhas.iterrows():
@@ -556,7 +560,7 @@ def desenhar_box_legenda_tematica(
     media_txt,
     df_legenda,
     casas=0,
-    box_pos=(0.755, 0.30, 0.15, 0.34)
+    box_pos=(0.782, 0.33, 0.12, 0.25)
 ):
     """
     Box lateral menor, mais ao canto, com outline arredondado visível.
@@ -697,7 +701,7 @@ def criar_figura_tematica(
     # painel do mapa mais largo
     painel_mapa = FancyBboxPatch(
         (0.03, 0.11),
-        0.67,
+        0.71,
         0.79,
         boxstyle="round,pad=0.004,rounding_size=0.012",
         transform=fig.transFigure,
@@ -708,14 +712,14 @@ def criar_figura_tematica(
     )
     fig.add_artist(painel_mapa)
 
-    # painel reservado da legenda mais estreito
+    # painel da legenda mais estreito
     painel_leg = FancyBboxPatch(
-        (0.73, 0.20),
-        0.20,
+        (0.76, 0.21),
+        0.17,
         0.55,
         boxstyle="round,pad=0.004,rounding_size=0.012",
         transform=fig.transFigure,
-        facecolor=(0.94, 0.95, 0.97, 0.36),
+        facecolor=(0.93, 0.94, 0.96, 0.34),
         edgecolor="#D1D9E2",
         linewidth=0.8,
         zorder=0
@@ -723,7 +727,7 @@ def criar_figura_tematica(
     fig.add_artist(painel_leg)
 
     # mapa maior
-    ax = fig.add_axes([0.12, 0.15, 0.42, 0.68])
+    ax = fig.add_axes([0.12, 0.15, 0.44, 0.67])
 
     if gdf_display is not None and not gdf_display.empty:
         plotar_mapa_classes(
@@ -761,7 +765,7 @@ def criar_figura_tematica(
         media_txt=media_txt,
         df_legenda=df_legenda,
         casas=casas,
-        box_pos=(0.755, 0.30, 0.15, 0.34)
+        box_pos=(0.782, 0.33, 0.12, 0.25)
     )
 
     adicionar_footer(fig, "#2F3B4A")
@@ -1038,9 +1042,6 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
 
                 geom_fazenda = unary_union(base_fazenda.geometry)
 
-                # -------------------------
-                # LINHAS CLIPADAS
-                # -------------------------
                 linhas = []
 
                 for _, grupo in gdf_pts.groupby("cd_equipamento"):
