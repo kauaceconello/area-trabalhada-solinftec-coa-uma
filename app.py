@@ -103,8 +103,7 @@ st.markdown(
 # =========================================================
 def sidebar_container():
     """
-    Compatibilidade com versões do Streamlit:
-    tenta usar border=True; se não suportar, cai no container simples.
+    Compatibilidade com versões do Streamlit.
     """
     try:
         return st.sidebar.container(border=True)
@@ -215,11 +214,11 @@ def desenhar_base_mapa(
     base_fazenda,
     facecolor="#F8FAFC",
     mostrar_talhoes=True,
-    margem_rel_x=0.014,
-    margem_rel_y=0.034
+    margem_rel_x=0.010,
+    margem_rel_y=0.026
 ):
     """
-    Mapa maior e bem enquadrado.
+    Mapa com zoom mais próximo, sem distorcer.
     """
     ax.set_facecolor("#EEF2F7")
 
@@ -235,7 +234,7 @@ def desenhar_base_mapa(
                 centroid.x,
                 centroid.y,
                 str(row["TALHAO"]),
-                fontsize=8.0,
+                fontsize=8.1,
                 ha="center",
                 va="center",
                 color="#111827",
@@ -247,8 +246,8 @@ def desenhar_base_mapa(
     dx = maxx - minx
     dy = maxy - miny
 
-    margem_x = max(dx * margem_rel_x, 1.8)
-    margem_y = max(dy * margem_rel_y, 2.4)
+    margem_x = max(dx * margem_rel_x, 1.2)
+    margem_y = max(dy * margem_rel_y, 1.8)
 
     ax.set_xlim(minx - margem_x, maxx + margem_x)
     ax.set_ylim(miny - margem_y, maxy + margem_y)
@@ -268,12 +267,12 @@ def adicionar_resumo(fig, x, y, texto, cor_caixa):
 
 def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_ini, periodo_fim, accent_color):
     """
-    Cabeçalho superior em faixa própria, centralizado e sem invadir o mapa.
+    Cabeçalho superior centralizado, totalmente contido dentro da faixa branca.
     """
     header = FancyBboxPatch(
         (0.02, 0.905),
         0.96,
-        0.078,
+        0.085,
         boxstyle="round,pad=0.004,rounding_size=0.008",
         transform=fig.transFigure,
         facecolor=(0.965, 0.972, 0.980, 0.96),
@@ -284,8 +283,8 @@ def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_in
     fig.add_artist(header)
 
     linha = FancyBboxPatch(
-        (0.42, 0.943),
-        0.16,
+        (0.425, 0.952),
+        0.15,
         0.0038,
         boxstyle="round,pad=0.001,rounding_size=0.003",
         transform=fig.transFigure,
@@ -297,9 +296,9 @@ def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_in
 
     fig.text(
         0.50,
-        0.949,
+        0.957,
         titulo_mapa,
-        fontsize=15.4,
+        fontsize=15.2,
         weight="bold",
         color="#0F172A",
         ha="center",
@@ -308,7 +307,7 @@ def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_in
 
     fig.text(
         0.50,
-        0.925,
+        0.935,
         f"Fazenda: {fazenda_id} – {nome_fazenda}",
         fontsize=10.4,
         color="#334155",
@@ -318,7 +317,7 @@ def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_in
 
     fig.text(
         0.50,
-        0.907,
+        0.915,
         f"Período: {periodo_ini} até {periodo_fim}",
         fontsize=9.4,
         color="#64748B",
@@ -526,8 +525,8 @@ def plotar_mapa_classes(ax, base_fazenda, gdf_plot, coluna_classe, mapa_cores, m
         base_fazenda,
         facecolor="#F8FAFC",
         mostrar_talhoes=mostrar_talhoes,
-        margem_rel_x=0.014,
-        margem_rel_y=0.034
+        margem_rel_x=0.010,
+        margem_rel_y=0.026
     )
 
     if gdf_plot.empty:
@@ -560,35 +559,43 @@ def desenhar_box_legenda_tematica(
     media_txt,
     df_legenda,
     casas=0,
-    box_pos=(0.782, 0.33, 0.12, 0.25)
+    reserve_pos=(0.795, 0.22, 0.13, 0.52)
 ):
     """
-    Box lateral menor, mais ao canto, com outline arredondado visível.
+    Box lateral com altura dinâmica conforme o conteúdo.
+    Fica centralizada no espaço reservado à direita.
     """
-    x, y, w, h = box_pos
+    rx, ry, rw, rh = reserve_pos
 
-    ax_box = fig.add_axes([x, y, w, h])
+    n = max(len(df_legenda), 1)
+    box_h = min(0.14 + (n * 0.035), rh * 0.82)
+    box_w = rw * 0.92
+
+    box_x = rx + (rw - box_w) / 2
+    box_y = ry + (rh - box_h) / 2
+
+    ax_box = fig.add_axes([box_x, box_y, box_w, box_h])
     ax_box.set_xlim(0, 1)
     ax_box.set_ylim(0, 1)
     ax_box.axis("off")
 
-    cor_fundo = (0.90, 0.92, 0.95, 0.92)
+    cor_fundo = (0.87, 0.89, 0.92, 0.95)
     cor_borda = "#7B8794"
-    cor_sombra = "#94A3B8"
+    cor_sombra = "#A5B4C2"
     cor_titulo = "#0F172A"
     cor_sec = "#475569"
-    cor_linha = "#D6DEE8"
+    cor_linha = "#D7DEE7"
     cor_texto = "#0F172A"
     cor_destaque = "#047857"
 
     sombra = FancyBboxPatch(
-        (0.012, -0.010),
+        (0.010, -0.010),
         1,
         1,
-        boxstyle="round,pad=0.018,rounding_size=0.030",
+        boxstyle="round,pad=0.018,rounding_size=0.028",
         facecolor=cor_sombra,
         edgecolor="none",
-        alpha=0.12,
+        alpha=0.10,
         zorder=0
     )
     ax_box.add_patch(sombra)
@@ -597,53 +604,52 @@ def desenhar_box_legenda_tematica(
         (0, 0),
         1,
         1,
-        boxstyle="round,pad=0.018,rounding_size=0.030",
+        boxstyle="round,pad=0.018,rounding_size=0.028",
         facecolor=cor_fundo,
         edgecolor=cor_borda,
-        linewidth=1.30,
+        linewidth=1.25,
         zorder=1
     )
     ax_box.add_patch(caixa)
 
-    ax_box.text(0.07, 0.93, titulo_box, fontsize=11.5, weight="bold", color=cor_titulo, va="top", zorder=2)
-    ax_box.text(0.07, 0.875, f"Faixa exibida: {faixa_exibida_txt}", fontsize=8.8, color=cor_sec, va="top", zorder=2)
-    ax_box.text(0.07, 0.825, media_txt, fontsize=9.8, color=cor_destaque, va="top", weight="bold", zorder=2)
+    ax_box.text(0.08, 0.93, titulo_box, fontsize=11.2, weight="bold", color=cor_titulo, va="top", zorder=2)
+    ax_box.text(0.08, 0.865, f"Faixa exibida: {faixa_exibida_txt}", fontsize=8.4, color=cor_sec, va="top", zorder=2)
+    ax_box.text(0.08, 0.805, media_txt, fontsize=9.2, color=cor_destaque, va="top", weight="bold", zorder=2)
 
-    ax_box.plot([0.07, 0.94], [0.78, 0.78], color=cor_borda, linewidth=0.9, zorder=2)
+    ax_box.plot([0.08, 0.94], [0.74, 0.74], color=cor_borda, linewidth=0.9, zorder=2)
 
-    ax_box.text(0.26, 0.745, "Início", fontsize=8.7, color=cor_sec, va="bottom", zorder=2)
-    ax_box.text(0.56, 0.745, "Fim", fontsize=8.7, color=cor_sec, va="bottom", zorder=2)
-    ax_box.text(0.82, 0.745, "%", fontsize=8.7, color=cor_sec, va="bottom", zorder=2)
+    ax_box.text(0.28, 0.705, "Início", fontsize=8.2, color=cor_sec, va="bottom", zorder=2)
+    ax_box.text(0.58, 0.705, "Fim", fontsize=8.2, color=cor_sec, va="bottom", zorder=2)
+    ax_box.text(0.84, 0.705, "%", fontsize=8.2, color=cor_sec, va="bottom", zorder=2)
 
     if df_legenda.empty:
-        ax_box.text(0.07, 0.65, "Sem dados válidos para exibir.", fontsize=8.8, color=cor_sec, zorder=2)
+        ax_box.text(0.08, 0.58, "Sem dados válidos para exibir.", fontsize=8.4, color=cor_sec, zorder=2)
         return
 
-    df_vis = df_legenda.copy().reset_index(drop=True)
-
-    n = len(df_vis)
-    topo = 0.71
+    topo = 0.67
     base = 0.10
     row_h = (topo - base) / max(n, 1)
 
     if n <= 7:
-        fonte = 9.0
+        fonte = 8.7
+        size_bolinha = 58
     elif n <= 10:
-        fonte = 8.4
+        fonte = 8.0
+        size_bolinha = 52
     else:
-        fonte = 7.7
+        fonte = 7.3
+        size_bolinha = 46
 
-    for i, row in df_vis.iterrows():
+    for i, row in df_legenda.reset_index(drop=True).iterrows():
         y_row = topo - (i + 0.5) * row_h
 
         if i > 0:
             y_sep = topo - i * row_h
-            ax_box.plot([0.07, 0.94], [y_sep, y_sep], color=cor_linha, linewidth=0.7, zorder=2)
+            ax_box.plot([0.08, 0.94], [y_sep, y_sep], color=cor_linha, linewidth=0.65, zorder=2)
 
-        # bolinha redonda e maior
         ax_box.scatter(
-            [0.14], [y_row],
-            s=72,
+            [0.15], [y_row],
+            s=size_bolinha,
             color=row["cor"],
             edgecolors="none",
             zorder=3
@@ -656,9 +662,9 @@ def desenhar_box_legenda_tematica(
 
         percentual = f'{row["percentual"]:.1f}%'.replace(".", ",")
 
-        ax_box.text(0.26, y_row, inicio, fontsize=fonte, va="center", color=cor_texto, zorder=3)
-        ax_box.text(0.56, y_row, str(fim), fontsize=fonte, va="center", color=cor_texto, zorder=3)
-        ax_box.text(0.82, y_row, percentual, fontsize=fonte, va="center", color=cor_texto, zorder=3)
+        ax_box.text(0.28, y_row, inicio, fontsize=fonte, va="center", color=cor_texto, zorder=3)
+        ax_box.text(0.58, y_row, str(fim), fontsize=fonte, va="center", color=cor_texto, zorder=3)
+        ax_box.text(0.83, y_row, percentual, fontsize=fonte, va="center", color=cor_texto, zorder=3)
 
 
 def criar_figura_tematica(
@@ -679,7 +685,7 @@ def criar_figura_tematica(
     accent_color
 ):
     """
-    Figura temática com cara de software / relatório técnico.
+    Figura temática com layout mais fechado, mapa maior e legenda mais enxuta.
     """
     fig = plt.figure(figsize=(14.0, 8.6))
     fig.patch.set_facecolor("#E9EDF3")
@@ -698,10 +704,10 @@ def criar_figura_tematica(
     )
     fig.add_artist(moldura)
 
-    # painel do mapa mais largo
+    # painel do mapa maior
     painel_mapa = FancyBboxPatch(
         (0.03, 0.11),
-        0.71,
+        0.74,
         0.79,
         boxstyle="round,pad=0.004,rounding_size=0.012",
         transform=fig.transFigure,
@@ -712,10 +718,10 @@ def criar_figura_tematica(
     )
     fig.add_artist(painel_mapa)
 
-    # painel da legenda mais estreito
+    # painel da direita mais estreito
     painel_leg = FancyBboxPatch(
-        (0.76, 0.21),
-        0.17,
+        (0.79, 0.21),
+        0.14,
         0.55,
         boxstyle="round,pad=0.004,rounding_size=0.012",
         transform=fig.transFigure,
@@ -727,7 +733,7 @@ def criar_figura_tematica(
     fig.add_artist(painel_leg)
 
     # mapa maior
-    ax = fig.add_axes([0.12, 0.15, 0.44, 0.67])
+    ax = fig.add_axes([0.13, 0.15, 0.45, 0.67])
 
     if gdf_display is not None and not gdf_display.empty:
         plotar_mapa_classes(
@@ -744,8 +750,8 @@ def criar_figura_tematica(
             base_fazenda,
             facecolor="#F8FAFC",
             mostrar_talhoes=True,
-            margem_rel_x=0.014,
-            margem_rel_y=0.034
+            margem_rel_x=0.010,
+            margem_rel_y=0.026
         )
 
     adicionar_header_topo(
@@ -765,7 +771,7 @@ def criar_figura_tematica(
         media_txt=media_txt,
         df_legenda=df_legenda,
         casas=casas,
-        box_pos=(0.782, 0.33, 0.12, 0.25)
+        reserve_pos=(0.795, 0.22, 0.13, 0.52)
     )
 
     adicionar_footer(fig, "#2F3B4A")
