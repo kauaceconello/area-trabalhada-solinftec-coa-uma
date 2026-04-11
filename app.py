@@ -43,6 +43,53 @@ st.markdown(
         font-size: 1.2em;
         font-weight: 600;
     }
+    .painel-sol {
+        border: 1px solid #d0d7de;
+        border-radius: 10px;
+        padding: 0.8rem 0.9rem;
+        background: #0b1117;
+        color: #f0f6fc;
+        margin-bottom: 0.7rem;
+    }
+    .painel-sol h4 {
+        margin: 0 0 0.6rem 0;
+        font-size: 1rem;
+        color: #f0f6fc;
+    }
+    .painel-sol .sub {
+        color: #8b949e;
+        font-size: 0.85rem;
+        margin-bottom: 0.55rem;
+    }
+    .sol-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.86rem;
+    }
+    .sol-table th {
+        text-align: left;
+        border-bottom: 1px solid #30363d;
+        padding: 0.45rem 0.3rem;
+        color: #c9d1d9;
+    }
+    .sol-table td {
+        border-bottom: 1px solid #21262d;
+        padding: 0.45rem 0.3rem;
+        color: #f0f6fc;
+        vertical-align: middle;
+    }
+    .sol-dot {
+        display: inline-block;
+        width: 15px;
+        height: 15px;
+        border-radius: 50%;
+        border: 1px solid rgba(255,255,255,0.25);
+    }
+    .sol-foot {
+        font-size: 0.82rem;
+        color: #6e7781;
+        margin-top: 0.35rem;
+    }
     </style>
     """,
     unsafe_allow_html=True
@@ -116,10 +163,11 @@ def criar_cmap_suave(tipo="rpm"):
             "#08519c",  # azul escuro
             "#3182bd",  # azul
             "#6baed6",  # azul claro
-            "#7bccc4",  # verde água
-            "#41ab5d",  # verde
+            "#66c2a4",  # verde água
+            "#18c964",  # verde vivo
             "#d9ef8b",  # amarelo esverdeado
-            "#fdae61",  # laranja
+            "#f7b733",  # laranja amarelo
+            "#f15a24",  # laranja forte
             "#d73027",  # vermelho
         ]
 
@@ -154,8 +202,8 @@ def classificar_valor(valor, faixas):
 
 
 def desenhar_base_mapa(ax, base_fazenda, facecolor="#f7f7f7", mostrar_talhoes=True):
-    base_fazenda.plot(ax=ax, facecolor=facecolor, edgecolor="black", linewidth=1.2)
-    base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.2)
+    base_fazenda.plot(ax=ax, facecolor=facecolor, edgecolor="black", linewidth=1.1, zorder=1)
+    base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.1, zorder=3)
 
     if mostrar_talhoes and "TALHAO" in base_fazenda.columns:
         for _, row in base_fazenda.iterrows():
@@ -170,9 +218,19 @@ def desenhar_base_mapa(ax, base_fazenda, facecolor="#f7f7f7", mostrar_talhoes=Tr
                 ha="center",
                 va="center",
                 color="black",
-                weight="bold"
+                weight="bold",
+                zorder=4
             )
 
+    minx, miny, maxx, maxy = base_fazenda.total_bounds
+    dx = maxx - minx
+    dy = maxy - miny
+    margem_x = dx * 0.05 if dx > 0 else 10
+    margem_y = dy * 0.05 if dy > 0 else 10
+
+    ax.set_xlim(minx - margem_x, maxx + margem_x)
+    ax.set_ylim(miny - margem_y, maxy + margem_y)
+    ax.set_aspect("equal")
     ax.axis("off")
 
 
@@ -218,71 +276,9 @@ def adicionar_footer(fig, centro_mapa, base_y, cor_rodape):
     )
 
 
-def desenhar_legenda_horizontal(fig, pos_ax, df_legenda, titulo):
-    """
-    Legenda horizontal com faixas + % do tempo,
-    posicionada onde antes ficava a legenda do mapa de área.
-    """
-    leg_ax = fig.add_axes([pos_ax.x0 + 0.01, pos_ax.y0 - 0.16, pos_ax.width * 0.98, 0.09])
-    leg_ax.set_xlim(0, 1)
-    leg_ax.set_ylim(0, 1)
-    leg_ax.axis("off")
-
-    leg_ax.text(
-        0.0, 0.97,
-        f"{titulo} — % do tempo por faixa",
-        fontsize=10,
-        fontweight="bold",
-        va="top"
-    )
-
-    if df_legenda.empty:
-        leg_ax.text(0.0, 0.35, "Sem dados válidos para a legenda.", fontsize=9)
-        return
-
-    n = len(df_legenda)
-    margem = 0.01
-    largura_total = 1 - 2 * margem
-    largura_bloco = largura_total / n
-    y = 0.32
-    h = 0.23
-
-    for i, row in df_legenda.reset_index(drop=True).iterrows():
-        x = margem + i * largura_bloco
-        w = largura_bloco * 0.94
-
-        rect = mpatches.Rectangle(
-            (x, y),
-            w,
-            h,
-            facecolor=row["cor"],
-            edgecolor="white",
-            linewidth=1.0
-        )
-        leg_ax.add_patch(rect)
-
-        leg_ax.text(
-            x + w / 2,
-            y + h + 0.08,
-            row["faixa"],
-            ha="center",
-            va="bottom",
-            fontsize=7
-        )
-
-        leg_ax.text(
-            x + w / 2,
-            y - 0.06,
-            f"{row['percentual']:.1f}%",
-            ha="center",
-            va="top",
-            fontsize=7
-        )
-
-
 def ler_csvs_de_zip(uploaded_zip, tmpdir, idx_zip):
     """
-    Extrai cada ZIP em pasta própria e lê todos os CSVs encontrados.
+    Extrai cada ZIP em pasta própria e retorna todos os CSVs encontrados.
     """
     zip_path = os.path.join(tmpdir, uploaded_zip.name)
     with open(zip_path, "wb") as f:
@@ -390,27 +386,27 @@ def criar_poligonos_display(gdf_linhas, geom_fazenda):
     return gpd.GeoDataFrame(registros, geometry="geometry", crs=gdf_linhas.crs)
 
 
-def calcular_legenda_percentual(gdf_display, coluna_valor, coluna_classe, faixas, mapa_cores):
+def calcular_legenda_percentual(gdf_display, coluna_classe, faixas, mapa_cores):
     """
     Calcula % do tempo em cada faixa.
     Usa duracao_seg como peso.
     """
     if gdf_display is None or gdf_display.empty:
-        return pd.DataFrame(columns=["faixa", "percentual", "cor"])
+        return pd.DataFrame(columns=["cor", "inicio", "fim", "faixa", "percentual"])
 
-    if coluna_valor not in gdf_display.columns or coluna_classe not in gdf_display.columns:
-        return pd.DataFrame(columns=["faixa", "percentual", "cor"])
+    if coluna_classe not in gdf_display.columns:
+        return pd.DataFrame(columns=["cor", "inicio", "fim", "faixa", "percentual"])
 
-    dados = gdf_display.dropna(subset=[coluna_valor, coluna_classe]).copy()
+    dados = gdf_display.dropna(subset=[coluna_classe]).copy()
 
     if dados.empty:
-        return pd.DataFrame(columns=["faixa", "percentual", "cor"])
+        return pd.DataFrame(columns=["cor", "inicio", "fim", "faixa", "percentual"])
 
     total_tempo = dados["duracao_seg"].fillna(0).sum()
     usar_contagem = total_tempo <= 0
 
     linhas = []
-    for _, _, label in faixas:
+    for a, b, label in faixas:
         subset = dados[dados[coluna_classe] == label]
 
         if usar_contagem:
@@ -421,10 +417,14 @@ def calcular_legenda_percentual(gdf_display, coluna_valor, coluna_classe, faixas
                 if total_tempo > 0 else 0
             )
 
+        fim_txt = "+" if np.isinf(b) else b
+
         linhas.append({
+            "cor": mapa_cores.get(label, "#cccccc"),
+            "inicio": a,
+            "fim": fim_txt,
             "faixa": label,
-            "percentual": percentual,
-            "cor": mapa_cores.get(label, "#cccccc")
+            "percentual": percentual
         })
 
     return pd.DataFrame(linhas)
@@ -432,7 +432,7 @@ def calcular_legenda_percentual(gdf_display, coluna_valor, coluna_classe, faixas
 
 def plotar_mapa_classes(ax, base_fazenda, gdf_plot, coluna_classe, mapa_cores, mostrar_talhoes=True):
     """
-    Plota o mapa por classe (mais leve que plotar elemento por elemento).
+    Plota o mapa por classe (mais leve e mais bonito).
     """
     desenhar_base_mapa(ax, base_fazenda, facecolor="#f7f7f7", mostrar_talhoes=mostrar_talhoes)
 
@@ -448,8 +448,89 @@ def plotar_mapa_classes(ax, base_fazenda, gdf_plot, coluna_classe, mapa_cores, m
                 ax=ax,
                 color=mapa_cores[classe],
                 edgecolor="none",
-                alpha=0.95
+                alpha=0.92,
+                zorder=2
             )
+
+
+def renderizar_painel_lateral(
+    titulo,
+    subtitulo,
+    df_legenda,
+    metrica_min,
+    metrica_media,
+    metrica_max,
+    unidade_label,
+    periodo_ini,
+    periodo_fim,
+    fazenda_texto,
+    casas=0
+):
+    """
+    Renderiza painel lateral estilo Solinftec usando Streamlit + HTML.
+    """
+    st.markdown(
+        f"""
+        <div class="painel-sol">
+            <h4>{titulo}</h4>
+            <div class="sub">{subtitulo}</div>
+            <div class="sub">{fazenda_texto}</div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Mín.", f"{formatar_numero(metrica_min, casas)}{unidade_label}")
+    c2.metric("Médio", f"{formatar_numero(metrica_media, casas)}{unidade_label}")
+    c3.metric("Máx.", f"{formatar_numero(metrica_max, casas)}{unidade_label}")
+
+    html = """
+    <div class="painel-sol">
+        <table class="sol-table">
+            <thead>
+                <tr>
+                    <th style="width: 18%;">Cor</th>
+                    <th style="width: 24%;">Início</th>
+                    <th style="width: 22%;">Fim</th>
+                    <th style="width: 36%;">% Tempo</th>
+                </tr>
+            </thead>
+            <tbody>
+    """
+
+    if df_legenda.empty:
+        html += """
+            <tr>
+                <td colspan="4">Sem dados válidos para exibir.</td>
+            </tr>
+        """
+    else:
+        for _, row in df_legenda.iterrows():
+            inicio = formatar_numero(row["inicio"], casas)
+            fim = row["fim"]
+            if fim != "+":
+                fim = formatar_numero(fim, casas)
+
+            percentual = f'{row["percentual"]:.1f}%'.replace(".", ",")
+
+            html += f"""
+            <tr>
+                <td><span class="sol-dot" style="background:{row['cor']};"></span></td>
+                <td>{inicio}</td>
+                <td>{fim}</td>
+                <td>{percentual}</td>
+            </tr>
+            """
+
+    html += f"""
+            </tbody>
+        </table>
+        <div class="sol-foot">Período: {periodo_ini} até {periodo_fim}</div>
+    </div>
+    """
+
+    st.markdown(html, unsafe_allow_html=True)
 
 # =========================
 # UPLOAD
@@ -499,51 +580,61 @@ MAPA_AREA = st.sidebar.checkbox("Área trabalhada", value=True)
 MAPA_RPM = st.sidebar.checkbox("Mapa de RPM", value=False)
 MAPA_VEL = st.sidebar.checkbox("Mapa de Velocidade", value=False)
 
-st.sidebar.markdown("### ⚙️ Parâmetros RPM")
-RPM_MIN = st.sidebar.number_input(
-    "RPM mínimo",
-    min_value=0,
-    max_value=10000,
-    value=1200,
-    step=100
-)
-RPM_MAX = st.sidebar.number_input(
-    "RPM máximo",
-    min_value=0,
-    max_value=10000,
-    value=2000,
-    step=100
-)
-RPM_PASSO = st.sidebar.number_input(
-    "Passo das faixas RPM",
-    min_value=50,
-    max_value=1000,
-    value=100,
-    step=50
-)
+# Só aparece se marcar RPM
+RPM_MIN = 1200
+RPM_MAX = 2000
+RPM_PASSO = 100
+if MAPA_RPM:
+    st.sidebar.markdown("### ⚙️ Parâmetros RPM")
+    RPM_MIN = st.sidebar.number_input(
+        "RPM mínimo",
+        min_value=0,
+        max_value=10000,
+        value=1200,
+        step=100
+    )
+    RPM_MAX = st.sidebar.number_input(
+        "RPM máximo",
+        min_value=0,
+        max_value=10000,
+        value=2000,
+        step=100
+    )
+    RPM_PASSO = st.sidebar.number_input(
+        "Passo das faixas RPM",
+        min_value=50,
+        max_value=1000,
+        value=100,
+        step=50
+    )
 
-st.sidebar.markdown("### ⚙️ Parâmetros Velocidade (km/h)")
-VEL_MIN = st.sidebar.number_input(
-    "Velocidade mínima",
-    min_value=0.0,
-    max_value=100.0,
-    value=4.0,
-    step=0.5
-)
-VEL_MAX = st.sidebar.number_input(
-    "Velocidade máxima",
-    min_value=0.0,
-    max_value=100.0,
-    value=8.0,
-    step=0.5
-)
-VEL_PASSO = st.sidebar.number_input(
-    "Passo das faixas Velocidade",
-    min_value=0.5,
-    max_value=10.0,
-    value=1.0,
-    step=0.5
-)
+# Só aparece se marcar Velocidade
+VEL_MIN = 4.0
+VEL_MAX = 8.0
+VEL_PASSO = 1.0
+if MAPA_VEL:
+    st.sidebar.markdown("### ⚙️ Parâmetros Velocidade (km/h)")
+    VEL_MIN = st.sidebar.number_input(
+        "Velocidade mínima",
+        min_value=0.0,
+        max_value=100.0,
+        value=4.0,
+        step=0.5
+    )
+    VEL_MAX = st.sidebar.number_input(
+        "Velocidade máxima",
+        min_value=0.0,
+        max_value=100.0,
+        value=8.0,
+        step=0.5
+    )
+    VEL_PASSO = st.sidebar.number_input(
+        "Passo das faixas Velocidade",
+        min_value=0.5,
+        max_value=10.0,
+        value=1.0,
+        step=0.5
+    )
 
 COR_TRABALHADA = "#62b27f"
 COR_NAO_TRAB = "#f6b1b3"
@@ -553,9 +644,9 @@ COR_RODAPE = "#7a7a7a"
 FIG_WIDTH = 25
 FIG_HEIGHT = 9
 
-if RPM_MAX <= RPM_MIN:
+if MAPA_RPM and RPM_MAX <= RPM_MIN:
     st.sidebar.error("⚠️ O RPM máximo deve ser maior que o RPM mínimo.")
-if VEL_MAX <= VEL_MIN:
+if MAPA_VEL and VEL_MAX <= VEL_MIN:
     st.sidebar.error("⚠️ A velocidade máxima deve ser maior que a velocidade mínima.")
 if not (MAPA_AREA or MAPA_RPM or MAPA_VEL):
     st.sidebar.warning("Selecione pelo menos um tipo de mapa.")
@@ -565,8 +656,12 @@ if not (MAPA_AREA or MAPA_RPM or MAPA_VEL):
 # =========================
 if uploaded_zips and uploaded_gpkg and GERAR:
 
-    if RPM_MAX <= RPM_MIN or VEL_MAX <= VEL_MIN:
-        st.error("❌ Ajuste os parâmetros mínimos e máximos na sidebar antes de gerar os mapas.")
+    if MAPA_RPM and RPM_MAX <= RPM_MIN:
+        st.error("❌ Ajuste os parâmetros mínimos e máximos de RPM na sidebar antes de gerar os mapas.")
+        st.stop()
+
+    if MAPA_VEL and VEL_MAX <= VEL_MIN:
+        st.error("❌ Ajuste os parâmetros mínimos e máximos de velocidade na sidebar antes de gerar os mapas.")
         st.stop()
 
     if not (MAPA_AREA or MAPA_RPM or MAPA_VEL):
@@ -651,17 +746,17 @@ if uploaded_zips and uploaded_gpkg and GERAR:
             # =========================
             # PREPARAÇÃO DE CORES E FAIXAS
             # =========================
-            rpm_faixas = gerar_faixas(RPM_MIN, RPM_MAX, RPM_PASSO, casas=0)
-            vel_faixas = gerar_faixas(VEL_MIN, VEL_MAX, VEL_PASSO, casas=1)
+            rpm_faixas = gerar_faixas(RPM_MIN, RPM_MAX, RPM_PASSO, casas=0) if MAPA_RPM else []
+            vel_faixas = gerar_faixas(VEL_MIN, VEL_MAX, VEL_PASSO, casas=1) if MAPA_VEL else []
 
             rpm_cmap = criar_cmap_suave("rpm")
             vel_cmap = criar_cmap_suave("vel")
 
-            rpm_labels = [f[2] for f in rpm_faixas]
-            vel_labels = [f[2] for f in vel_faixas]
+            rpm_labels = [f[2] for f in rpm_faixas] if MAPA_RPM else []
+            vel_labels = [f[2] for f in vel_faixas] if MAPA_VEL else []
 
-            rpm_cores = dict(zip(rpm_labels, amostrar_cores_classes(rpm_cmap, len(rpm_labels))))
-            vel_cores = dict(zip(vel_labels, amostrar_cores_classes(vel_cmap, len(vel_labels))))
+            rpm_cores = dict(zip(rpm_labels, amostrar_cores_classes(rpm_cmap, len(rpm_labels)))) if MAPA_RPM else {}
+            vel_cores = dict(zip(vel_labels, amostrar_cores_classes(vel_cmap, len(vel_labels)))) if MAPA_VEL else {}
 
             # =========================
             # LOOP FAZENDAS
@@ -792,7 +887,7 @@ if uploaded_zips and uploaded_gpkg and GERAR:
                 # =========================
                 df_talhoes = None
 
-                if MOSTRAR_TALHOES and "TALHAO" in base_fazenda.columns and "GLEBA" in base_fazenda.columns:
+                if MOSTRAR_TALHOES and "TALHAO" in base.columns and "GLEBA" in base.columns:
                     base_tmp = base_fazenda.copy()
                     base_tmp["Área total (ha)"] = base_tmp.geometry.area / 10000
 
@@ -854,32 +949,35 @@ if uploaded_zips and uploaded_gpkg and GERAR:
                     gdf_display = criar_poligonos_display(gdf_linhas, geom_fazenda)
 
                     if gdf_display is not None and not gdf_display.empty:
-                        gdf_display["classe_rpm"] = gdf_display["rpm_medio"].apply(
-                            lambda x: classificar_valor(x, rpm_faixas)
-                        )
-                        gdf_display["classe_vel"] = gdf_display["vel_media"].apply(
-                            lambda x: classificar_valor(x, vel_faixas)
-                        )
+                        if MAPA_RPM:
+                            gdf_display["classe_rpm"] = gdf_display["rpm_medio"].apply(
+                                lambda x: classificar_valor(x, rpm_faixas)
+                            )
+                        if MAPA_VEL:
+                            gdf_display["classe_vel"] = gdf_display["vel_media"].apply(
+                                lambda x: classificar_valor(x, vel_faixas)
+                            )
 
-                # Legendas (% tempo por faixa)
-                df_leg_rpm = pd.DataFrame(columns=["faixa", "percentual", "cor"])
-                df_leg_vel = pd.DataFrame(columns=["faixa", "percentual", "cor"])
+                # Legendas laterais estilo Solinftec
+                df_leg_rpm = pd.DataFrame(columns=["cor", "inicio", "fim", "faixa", "percentual"])
+                df_leg_vel = pd.DataFrame(columns=["cor", "inicio", "fim", "faixa", "percentual"])
 
                 if gdf_display is not None and not gdf_display.empty:
-                    df_leg_rpm = calcular_legenda_percentual(
-                        gdf_display,
-                        "rpm_medio",
-                        "classe_rpm",
-                        rpm_faixas,
-                        rpm_cores
-                    )
-                    df_leg_vel = calcular_legenda_percentual(
-                        gdf_display,
-                        "vel_media",
-                        "classe_vel",
-                        vel_faixas,
-                        vel_cores
-                    )
+                    if MAPA_RPM:
+                        df_leg_rpm = calcular_legenda_percentual(
+                            gdf_display,
+                            "classe_rpm",
+                            rpm_faixas,
+                            rpm_cores
+                        )
+
+                    if MAPA_VEL:
+                        df_leg_vel = calcular_legenda_percentual(
+                            gdf_display,
+                            "classe_vel",
+                            vel_faixas,
+                            vel_cores
+                        )
 
                 # =========================
                 # EXPANDER
@@ -887,7 +985,7 @@ if uploaded_zips and uploaded_gpkg and GERAR:
                 with st.expander(f"🗺️ Mapa – {nome_fazenda}", expanded=False):
 
                     # -----------------------------------
-                    # 1) MAPA DE ÁREA TRABALHADA
+                    # 1) MAPA DE ÁREA TRABALHADA (MANTIDO)
                     # -----------------------------------
                     if MAPA_AREA:
                         fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
@@ -951,96 +1049,92 @@ if uploaded_zips and uploaded_gpkg and GERAR:
                         st.pyplot(fig)
 
                     # -----------------------------------
-                    # 2) MAPA DE RPM
+                    # 2) MAPA DE RPM (VISUAL MELHORADO)
                     # -----------------------------------
                     if MAPA_RPM:
-                        fig_rpm, ax_rpm = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
-                        plt.subplots_adjust(left=0.15, right=0.84, bottom=0.33, top=0.88)
+                        st.markdown("### ⚙️ Mapa de RPM")
 
-                        if gdf_display is not None and not gdf_display.empty:
-                            plotar_mapa_classes(
-                                ax=ax_rpm,
-                                base_fazenda=base_fazenda,
-                                gdf_plot=gdf_display.dropna(subset=["classe_rpm"]).copy(),
-                                coluna_classe="classe_rpm",
-                                mapa_cores=rpm_cores,
-                                mostrar_talhoes=True
+                        col_mapa, col_painel = st.columns([3.2, 1.35], vertical_alignment="top")
+
+                        with col_mapa:
+                            fig_rpm, ax_rpm = plt.subplots(figsize=(8.5, 12))
+                            plt.subplots_adjust(left=0.02, right=0.98, bottom=0.02, top=0.98)
+
+                            if gdf_display is not None and not gdf_display.empty:
+                                plotar_mapa_classes(
+                                    ax=ax_rpm,
+                                    base_fazenda=base_fazenda,
+                                    gdf_plot=gdf_display.dropna(subset=["classe_rpm"]).copy(),
+                                    coluna_classe="classe_rpm",
+                                    mapa_cores=rpm_cores,
+                                    mostrar_talhoes=True
+                                )
+                            else:
+                                desenhar_base_mapa(ax_rpm, base_fazenda, facecolor="#f7f7f7", mostrar_talhoes=True)
+
+                            st.pyplot(fig_rpm, use_container_width=True)
+                            st.caption(
+                                "⚠️ Mapa temático de RPM com faixa operacional baseada na largura real do implemento (m)."
                             )
-                        else:
-                            desenhar_base_mapa(ax_rpm, base_fazenda, facecolor="#f7f7f7", mostrar_talhoes=True)
 
-                        pos_rpm = ax_rpm.get_position()
-                        centro_mapa_rpm = (pos_rpm.x0 + pos_rpm.x1) / 2
-                        base_y_rpm = pos_rpm.y0
-
-                        desenhar_legenda_horizontal(
-                            fig_rpm,
-                            pos_rpm,
-                            df_leg_rpm,
-                            "RPM"
-                        )
-
-                        resumo_rpm = (
-                            f"Resumo de RPM\n\n"
-                            f"Fazenda: {FAZENDA_ID} – {nome_fazenda}\n\n"
-                            f"RPM mínimo trabalhado: {formatar_numero(rpm_min_real, 0)}\n"
-                            f"RPM médio trabalhado: {formatar_numero(rpm_med_real, 0)}\n"
-                            f"RPM máximo trabalhado: {formatar_numero(rpm_max_real, 0)}\n\n"
-                            f"Faixa exibida:\n"
-                            f"{int(arredondar_para_baixo(RPM_MIN, RPM_PASSO))} até {int(arredondar_para_cima(RPM_MAX, RPM_PASSO))}+\n\n"
-                            f"Período:\n{periodo_ini} até {periodo_fim}"
-                        )
-
-                        adicionar_resumo(fig_rpm, pos_rpm.x1 + 0.02, 0.47, resumo_rpm, COR_CAIXA)
-                        adicionar_footer(fig_rpm, centro_mapa_rpm, base_y_rpm, COR_RODAPE)
-
-                        st.pyplot(fig_rpm)
+                        with col_painel:
+                            renderizar_painel_lateral(
+                                titulo="Resumo de RPM",
+                                subtitulo=f"Faixa exibida: {int(arredondar_para_baixo(RPM_MIN, RPM_PASSO))} até {int(arredondar_para_cima(RPM_MAX, RPM_PASSO))}+",
+                                df_legenda=df_leg_rpm,
+                                metrica_min=rpm_min_real,
+                                metrica_media=rpm_med_real,
+                                metrica_max=rpm_max_real,
+                                unidade_label="",
+                                periodo_ini=periodo_ini,
+                                periodo_fim=periodo_fim,
+                                fazenda_texto=f"Fazenda: {FAZENDA_ID} – {nome_fazenda}",
+                                casas=0
+                            )
 
                     # -----------------------------------
-                    # 3) MAPA DE VELOCIDADE
+                    # 3) MAPA DE VELOCIDADE (VISUAL MELHORADO)
                     # -----------------------------------
                     if MAPA_VEL:
-                        fig_vel, ax_vel = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
-                        plt.subplots_adjust(left=0.15, right=0.84, bottom=0.33, top=0.88)
+                        st.markdown("### 🚜 Mapa de Velocidade")
 
-                        if gdf_display is not None and not gdf_display.empty:
-                            plotar_mapa_classes(
-                                ax=ax_vel,
-                                base_fazenda=base_fazenda,
-                                gdf_plot=gdf_display.dropna(subset=["classe_vel"]).copy(),
-                                coluna_classe="classe_vel",
-                                mapa_cores=vel_cores,
-                                mostrar_talhoes=True
+                        col_mapa, col_painel = st.columns([3.2, 1.35], vertical_alignment="top")
+
+                        with col_mapa:
+                            fig_vel, ax_vel = plt.subplots(figsize=(8.5, 12))
+                            plt.subplots_adjust(left=0.02, right=0.98, bottom=0.02, top=0.98)
+
+                            if gdf_display is not None and not gdf_display.empty:
+                                plotar_mapa_classes(
+                                    ax=ax_vel,
+                                    base_fazenda=base_fazenda,
+                                    gdf_plot=gdf_display.dropna(subset=["classe_vel"]).copy(),
+                                    coluna_classe="classe_vel",
+                                    mapa_cores=vel_cores,
+                                    mostrar_talhoes=True
+                                )
+                            else:
+                                desenhar_base_mapa(ax_vel, base_fazenda, facecolor="#f7f7f7", mostrar_talhoes=True)
+
+                            st.pyplot(fig_vel, use_container_width=True)
+                            st.caption(
+                                "⚠️ Mapa temático de velocidade com faixa operacional baseada na largura real do implemento (m)."
                             )
-                        else:
-                            desenhar_base_mapa(ax_vel, base_fazenda, facecolor="#f7f7f7", mostrar_talhoes=True)
 
-                        pos_vel = ax_vel.get_position()
-                        centro_mapa_vel = (pos_vel.x0 + pos_vel.x1) / 2
-                        base_y_vel = pos_vel.y0
-
-                        desenhar_legenda_horizontal(
-                            fig_vel,
-                            pos_vel,
-                            df_leg_vel,
-                            "Velocidade (km/h)"
-                        )
-
-                        resumo_vel = (
-                            f"Resumo de Velocidade\n\n"
-                            f"Fazenda: {FAZENDA_ID} – {nome_fazenda}\n\n"
-                            f"Velocidade mínima trabalhada: {formatar_numero(vel_min_real, 1)} km/h\n"
-                            f"Velocidade média trabalhada: {formatar_numero(vel_med_real, 1)} km/h\n"
-                            f"Velocidade máxima trabalhada: {formatar_numero(vel_max_real, 1)} km/h\n\n"
-                            f"Faixa exibida:\n"
-                            f"{formatar_numero(arredondar_para_baixo(VEL_MIN, VEL_PASSO), 1)} até {formatar_numero(arredondar_para_cima(VEL_MAX, VEL_PASSO), 1)}+\n\n"
-                            f"Período:\n{periodo_ini} até {periodo_fim}"
-                        )
-
-                        adicionar_resumo(fig_vel, pos_vel.x1 + 0.02, 0.47, resumo_vel, COR_CAIXA)
-                        adicionar_footer(fig_vel, centro_mapa_vel, base_y_vel, COR_RODAPE)
-
-                        st.pyplot(fig_vel)
+                        with col_painel:
+                            renderizar_painel_lateral(
+                                titulo="Resumo de Velocidade",
+                                subtitulo=f"Faixa exibida: {formatar_numero(arredondar_para_baixo(VEL_MIN, VEL_PASSO), 1)} até {formatar_numero(arredondar_para_cima(VEL_MAX, VEL_PASSO), 1)}+ km/h",
+                                df_legenda=df_leg_vel,
+                                metrica_min=vel_min_real,
+                                metrica_media=vel_med_real,
+                                metrica_max=vel_max_real,
+                                unidade_label=" km/h",
+                                periodo_ini=periodo_ini,
+                                periodo_fim=periodo_fim,
+                                fazenda_texto=f"Fazenda: {FAZENDA_ID} – {nome_fazenda}",
+                                casas=1
+                            )
 
                     # -----------------------------------
                     # TABELA DE TALHÕES (PRESERVADA)
