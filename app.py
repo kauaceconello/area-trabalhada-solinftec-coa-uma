@@ -44,6 +44,28 @@ st.markdown(
         background: linear-gradient(180deg, #F4F7FB 0%, #EEF3F8 100%);
     }
 
+    .block-container {
+        padding-top: 1.8rem;
+        padding-bottom: 2rem;
+    }
+
+    [data-testid="stHeader"] {
+        background: transparent;
+    }
+
+    h1, h2, h3, h4, h5, h6 {
+        color: #0F172A !important;
+    }
+
+    /* Mantém textos do conteúdo principal escuros */
+    [data-testid="stAppViewContainer"] p,
+    [data-testid="stAppViewContainer"] label,
+    [data-testid="stAppViewContainer"] span,
+    [data-testid="stAppViewContainer"] div {
+        color: #0F172A;
+    }
+
+    /* BOTÕES */
     div.stButton > button {
         width: 100%;
         height: 3.1em;
@@ -52,7 +74,7 @@ st.markdown(
         border-radius: 12px;
         border: 1px solid #2563EB;
         background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
-        color: white;
+        color: white !important;
         box-shadow: 0 8px 20px rgba(37, 99, 235, 0.18);
         transition: all 0.18s ease;
     }
@@ -62,6 +84,7 @@ st.markdown(
         box-shadow: 0 12px 22px rgba(37, 99, 235, 0.24);
     }
 
+    /* SIDEBAR */
     section[data-testid="stSidebar"] {
         background: linear-gradient(180deg, #0F172A 0%, #111827 100%);
         border-right: 1px solid rgba(255,255,255,0.08);
@@ -106,25 +129,65 @@ st.markdown(
         border-radius: 10px !important;
     }
 
+    /* UPLOADER - CONTAINER EXTERNO */
     [data-testid="stFileUploader"] {
-        background: #FFFFFF;
-        border: 1px dashed #CBD5E1;
-        border-radius: 14px;
-        padding: 10px;
-        box-shadow: 0 4px 14px rgba(15, 23, 42, 0.04);
+        background: #FFFFFF !important;
+        border: 1px solid #D8E1EB !important;
+        border-radius: 16px !important;
+        padding: 10px !important;
+        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
     }
 
+    /* DROPZONE INTERNA */
+    [data-testid="stFileUploaderDropzone"] {
+        background: #F8FAFC !important;
+        border: 1px dashed #CBD5E1 !important;
+        border-radius: 12px !important;
+    }
+
+    [data-testid="stFileUploaderDropzone"] * {
+        color: #475569 !important;
+        fill: #475569 !important;
+    }
+
+    /* ÁREA DE ARQUIVOS ANEXADOS */
+    [data-testid="stFileUploaderFile"] {
+        background: #FFFFFF !important;
+        border: 1px solid #D8E1EB !important;
+        border-radius: 12px !important;
+        color: #0F172A !important;
+    }
+
+    [data-testid="stFileUploaderFile"] * {
+        color: #0F172A !important;
+        fill: #475569 !important;
+    }
+
+    /* Botão do arquivo anexado */
+    [data-testid="stFileUploader"] button[kind="secondary"] {
+        background: #FFFFFF !important;
+        color: #0F172A !important;
+        border: 1px solid #D8E1EB !important;
+    }
+
+    /* EXPANDER */
     [data-testid="stExpander"] {
         border: 1px solid #D9E2EC !important;
         border-radius: 16px !important;
-        background: rgba(255,255,255,0.70);
+        background: rgba(255,255,255,0.72);
         box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
     }
 
+    /* DATAFRAME */
     [data-testid="stDataFrame"] {
         border-radius: 12px;
         overflow: hidden;
         border: 1px solid #E2E8F0;
+    }
+
+    /* ALERTAS */
+    [data-testid="stInfo"], [data-testid="stSuccess"], [data-testid="stWarning"], [data-testid="stError"] {
+        border-radius: 12px !important;
     }
     </style>
     """,
@@ -1031,29 +1094,6 @@ def criar_figura_area(
 
 
 # =========================================================
-# UPLOAD
-# =========================================================
-uploaded_zips = st.file_uploader(
-    "📦 Upload dos ZIPs contendo o CSV da Solinftec",
-    type=["zip"],
-    accept_multiple_files=True
-)
-
-uploaded_gpkg = st.file_uploader(
-    "🗺️ Upload da base cartográfica (GPKG)",
-    type=["gpkg"]
-)
-
-GERAR = st.button("▶️ Gerar mapa")
-
-if GERAR:
-    st.session_state["mapas_gerados"] = True
-
-if not uploaded_zips or not uploaded_gpkg:
-    st.session_state["mapas_gerados"] = False
-
-
-# =========================================================
 # SIDEBAR
 # =========================================================
 st.sidebar.header("⚙️ Parâmetros")
@@ -1061,8 +1101,8 @@ st.sidebar.header("⚙️ Parâmetros")
 with sidebar_container():
     st.markdown("### 🗺️ Tipos de mapa")
     MAPA_AREA = st.checkbox("Área trabalhada", value=True, key="mapa_area_chk")
-    MAPA_RPM = st.checkbox("Mapa de RPM", value=False, key="mapa_rpm_chk")
-    MAPA_VEL = st.checkbox("Mapa de Velocidade", value=False, key="mapa_vel_chk")
+    MAPA_RPM = st.checkbox("Mapa de RPM", value=True, key="mapa_rpm_chk")
+    MAPA_VEL = st.checkbox("Mapa de Velocidade", value=True, key="mapa_vel_chk")
 
 with sidebar_container():
     MULTIPLICADOR_BUFFER = st.number_input(
@@ -1178,6 +1218,67 @@ if MAPA_VEL and VEL_MAX <= VEL_MIN:
     st.sidebar.error("⚠️ A velocidade máxima deve ser maior que a velocidade mínima.")
 if not (MAPA_AREA or MAPA_RPM or MAPA_VEL):
     st.sidebar.warning("Selecione pelo menos um tipo de mapa.")
+
+
+# =========================================================
+# CARD DE UPLOAD
+# =========================================================
+st.markdown(
+    """
+    <div style="
+        background: rgba(255,255,255,0.72);
+        border: 1px solid #D8E1EB;
+        border-radius: 18px;
+        padding: 18px 20px;
+        margin-bottom: 14px;
+        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+    ">
+        <div style="font-size: 1.05rem; font-weight: 700; color: #0F172A; margin-bottom: 6px;">
+            📂 Envio dos arquivos
+        </div>
+        <div style="font-size: 0.92rem; color: #64748B;">
+            Faça o upload dos ZIPs com os CSVs operacionais e da base cartográfica em GPKG para gerar os mapas.
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+
+# =========================================================
+# UPLOAD
+# =========================================================
+uploaded_zips = st.file_uploader(
+    "📦 Upload dos ZIPs contendo o CSV da Solinftec",
+    type=["zip"],
+    accept_multiple_files=True
+)
+
+uploaded_gpkg = st.file_uploader(
+    "🗺️ Upload da base cartográfica (GPKG)",
+    type=["gpkg"]
+)
+
+GERAR = st.button("▶️ Gerar mapa")
+
+if GERAR:
+    st.session_state["mapas_gerados"] = True
+
+if not uploaded_zips or not uploaded_gpkg:
+    st.session_state["mapas_gerados"] = False
+
+mapas_selecionados = []
+if MAPA_AREA:
+    mapas_selecionados.append("Área trabalhada")
+if MAPA_RPM:
+    mapas_selecionados.append("RPM")
+if MAPA_VEL:
+    mapas_selecionados.append("Velocidade")
+
+if mapas_selecionados:
+    st.caption("✅ Mapas selecionados para geração: " + ", ".join(mapas_selecionados))
+else:
+    st.caption("⚠️ Nenhum mapa selecionado.")
 
 
 # =========================================================
