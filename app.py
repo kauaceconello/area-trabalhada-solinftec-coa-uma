@@ -282,18 +282,7 @@ def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_in
     )
     fig.add_artist(header)
 
-    linha = FancyBboxPatch(
-        (0.425, 0.952),
-        0.15,
-        0.0038,
-        boxstyle="round,pad=0.001,rounding_size=0.003",
-        transform=fig.transFigure,
-        facecolor=accent_color,
-        edgecolor="none",
-        zorder=1
-    )
-    fig.add_artist(linha)
-
+    # Sem linha abaixo do título para não cortar o texto
     fig.text(
         0.50,
         0.957,
@@ -324,6 +313,19 @@ def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_in
         ha="center",
         va="center"
     )
+
+    # pequeno detalhe de cor no canto esquerdo do header
+    detalhe = FancyBboxPatch(
+        (0.035, 0.925),
+        0.06,
+        0.014,
+        boxstyle="round,pad=0.001,rounding_size=0.003",
+        transform=fig.transFigure,
+        facecolor=accent_color,
+        edgecolor="none",
+        zorder=1
+    )
+    fig.add_artist(detalhe)
 
 
 def adicionar_footer(fig, cor_rodape="#2F3B4A"):
@@ -562,14 +564,16 @@ def desenhar_box_legenda_tematica(
     reserve_pos=(0.795, 0.22, 0.13, 0.52)
 ):
     """
-    Box lateral com altura dinâmica conforme o conteúdo.
-    Fica centralizada no espaço reservado à direita.
+    Box lateral única, com altura dinâmica conforme o conteúdo.
+    Centralizada no espaço reservado à direita.
     """
     rx, ry, rw, rh = reserve_pos
 
     n = max(len(df_legenda), 1)
-    box_h = min(0.14 + (n * 0.035), rh * 0.82)
-    box_w = rw * 0.92
+
+    # altura dinâmica
+    box_h = min(0.16 + (n * 0.038), rh * 0.88)
+    box_w = rw * 0.96
 
     box_x = rx + (rw - box_w) / 2
     box_y = ry + (rh - box_h) / 2
@@ -612,18 +616,19 @@ def desenhar_box_legenda_tematica(
     )
     ax_box.add_patch(caixa)
 
-    ax_box.text(0.08, 0.93, titulo_box, fontsize=11.2, weight="bold", color=cor_titulo, va="top", zorder=2)
-    ax_box.text(0.08, 0.865, f"Faixa exibida: {faixa_exibida_txt}", fontsize=8.4, color=cor_sec, va="top", zorder=2)
-    ax_box.text(0.08, 0.805, media_txt, fontsize=9.2, color=cor_destaque, va="top", weight="bold", zorder=2)
+    # cabeçalho
+    ax_box.text(0.08, 0.93, titulo_box, fontsize=11.4, weight="bold", color=cor_titulo, va="top", zorder=2)
+    ax_box.text(0.08, 0.865, f"Faixa exibida: {faixa_exibida_txt}", fontsize=8.5, color=cor_sec, va="top", zorder=2)
+    ax_box.text(0.08, 0.805, media_txt, fontsize=9.4, color=cor_destaque, va="top", weight="bold", zorder=2)
 
     ax_box.plot([0.08, 0.94], [0.74, 0.74], color=cor_borda, linewidth=0.9, zorder=2)
 
-    ax_box.text(0.28, 0.705, "Início", fontsize=8.2, color=cor_sec, va="bottom", zorder=2)
-    ax_box.text(0.58, 0.705, "Fim", fontsize=8.2, color=cor_sec, va="bottom", zorder=2)
-    ax_box.text(0.84, 0.705, "%", fontsize=8.2, color=cor_sec, va="bottom", zorder=2)
+    ax_box.text(0.28, 0.705, "Início", fontsize=8.3, color=cor_sec, va="bottom", zorder=2)
+    ax_box.text(0.58, 0.705, "Fim", fontsize=8.3, color=cor_sec, va="bottom", zorder=2)
+    ax_box.text(0.84, 0.705, "%", fontsize=8.3, color=cor_sec, va="bottom", zorder=2)
 
     if df_legenda.empty:
-        ax_box.text(0.08, 0.58, "Sem dados válidos para exibir.", fontsize=8.4, color=cor_sec, zorder=2)
+        ax_box.text(0.08, 0.58, "Sem dados válidos para exibir.", fontsize=8.5, color=cor_sec, zorder=2)
         return
 
     topo = 0.67
@@ -631,14 +636,14 @@ def desenhar_box_legenda_tematica(
     row_h = (topo - base) / max(n, 1)
 
     if n <= 7:
-        fonte = 8.7
-        size_bolinha = 58
+        fonte = 8.8
+        size_bolinha = 60
     elif n <= 10:
-        fonte = 8.0
-        size_bolinha = 52
+        fonte = 8.1
+        size_bolinha = 54
     else:
-        fonte = 7.3
-        size_bolinha = 46
+        fonte = 7.4
+        size_bolinha = 48
 
     for i, row in df_legenda.reset_index(drop=True).iterrows():
         y_row = topo - (i + 0.5) * row_h
@@ -685,7 +690,7 @@ def criar_figura_tematica(
     accent_color
 ):
     """
-    Figura temática com layout mais fechado, mapa maior e legenda mais enxuta.
+    Figura temática com layout fechado, mapa maior e legenda mais enxuta.
     """
     fig = plt.figure(figsize=(14.0, 8.6))
     fig.patch.set_facecolor("#E9EDF3")
@@ -718,19 +723,19 @@ def criar_figura_tematica(
     )
     fig.add_artist(painel_mapa)
 
-    # painel da direita mais estreito
-    painel_leg = FancyBboxPatch(
+    # área reservada da legenda (sem quadrado interno adicional)
+    reserva_leg = FancyBboxPatch(
         (0.79, 0.21),
         0.14,
         0.55,
         boxstyle="round,pad=0.004,rounding_size=0.012",
         transform=fig.transFigure,
-        facecolor=(0.93, 0.94, 0.96, 0.34),
+        facecolor=(0.93, 0.94, 0.96, 0.30),
         edgecolor="#D1D9E2",
         linewidth=0.8,
         zorder=0
     )
-    fig.add_artist(painel_leg)
+    fig.add_artist(reserva_leg)
 
     # mapa maior
     ax = fig.add_axes([0.13, 0.15, 0.45, 0.67])
