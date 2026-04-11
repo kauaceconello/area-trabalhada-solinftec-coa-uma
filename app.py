@@ -1120,4 +1120,3 @@ if uploaded_zips and uploaded_gpkg and GERAR:
 
 else:
     st.info("⬆️ Envie os arquivos e clique em **Gerar mapa**.")
-``
