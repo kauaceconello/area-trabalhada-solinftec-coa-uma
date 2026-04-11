@@ -89,6 +89,7 @@ A aplicação foi desenvolvida para transformar esse fluxo em um processo mais s
 
 A aplicação segue o fluxo abaixo:
 
+```text
 ZIPs com CSVs + GPKG
         ↓
 Leitura e tratamento dos dados
