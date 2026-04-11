@@ -40,121 +40,241 @@ if "mapas_gerados" not in st.session_state:
 st.markdown(
     """
     <style>
-    .stApp {
-        background: linear-gradient(180deg, #F4F7FB 0%, #EEF3F8 100%);
+    /* =====================================================
+       FUNDO GERAL - REMOVE O BRANCO
+       ===================================================== */
+    html, body, [data-testid="stApp"] {
+        background: linear-gradient(180deg, #020617 0%, #0B1020 50%, #0F172A 100%) !important;
     }
 
-    .block-container {
-        padding-top: 1.8rem;
+    [data-testid="stAppViewContainer"] {
+        background: transparent !important;
+    }
+
+    section.main {
+        background: transparent !important;
+    }
+
+    section.main > div {
+        background: transparent !important;
+    }
+
+    .main .block-container,
+    [data-testid="stMainBlockContainer"] {
+        background: transparent !important;
+        padding-top: 1.6rem;
         padding-bottom: 2rem;
     }
 
     [data-testid="stHeader"] {
-        background: transparent;
+        background: transparent !important;
+    }
+
+    /* =====================================================
+       TIPOGRAFIA GLOBAL
+       ===================================================== */
+    * {
+        font-family: "Inter", "Segoe UI", sans-serif;
     }
 
     h1, h2, h3, h4, h5, h6 {
-        color: #0F172A !important;
+        color: #F8FAFC !important;
+        font-weight: 700 !important;
     }
 
-    /* Conteúdo principal */
-    [data-testid="stAppViewContainer"] p,
-    [data-testid="stAppViewContainer"] label,
-    [data-testid="stAppViewContainer"] span,
-    [data-testid="stAppViewContainer"] div {
-        color: #0F172A;
+    p, span, small {
+        color: #CBD5E1;
     }
 
-    /* BOTÕES */
+    .stMarkdown p {
+        color: #CBD5E1 !important;
+    }
+
+    .stCaption {
+        color: #94A3B8 !important;
+    }
+
+    /* =====================================================
+       HERO / TOPO
+       ===================================================== */
+    .hero-card {
+        background: linear-gradient(135deg, #0B1020 0%, #111827 100%);
+        border: 1px solid rgba(96, 165, 250, 0.18);
+        border-radius: 18px;
+        padding: 22px 24px;
+        margin-bottom: 14px;
+        box-shadow: 0 16px 36px rgba(0,0,0,0.32);
+    }
+
+    .hero-title {
+        font-size: 2rem;
+        font-weight: 800;
+        color: #F8FAFC;
+        margin-bottom: 8px;
+        line-height: 1.15;
+    }
+
+    .hero-subtitle {
+        font-size: 0.96rem;
+        color: #CBD5E1;
+        line-height: 1.5;
+        margin-bottom: 0;
+    }
+
+    /* =====================================================
+       SIDEBAR
+       ===================================================== */
+    section[data-testid="stSidebar"] {
+        background: linear-gradient(180deg, #020617 0%, #0B1020 100%) !important;
+        border-right: 1px solid rgba(255,255,255,0.06);
+    }
+
+    section[data-testid="stSidebar"] * {
+        color: #E5E7EB !important;
+    }
+
+    section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] {
+        background: rgba(255,255,255,0.04);
+        border-radius: 14px;
+        border: 1px solid rgba(255,255,255,0.08);
+        padding: 8px;
+        box-shadow: 0 6px 18px rgba(0,0,0,0.30);
+    }
+
+    section[data-testid="stSidebar"] h1,
+    section[data-testid="stSidebar"] h2,
+    section[data-testid="stSidebar"] h3,
+    section[data-testid="stSidebar"] label,
+    section[data-testid="stSidebar"] p,
+    section[data-testid="stSidebar"] span {
+        color: #F8FAFC !important;
+    }
+
+    /* =====================================================
+       INPUTS / PARÂMETROS
+       ===================================================== */
+    label {
+        font-size: 0.84rem !important;
+        font-weight: 600 !important;
+        color: #CBD5E1 !important;
+    }
+
+    /* Input base */
+    input, textarea {
+        background-color: #020617 !important;
+        color: #F8FAFC !important;
+        border: 1px solid rgba(255,255,255,0.12) !important;
+        border-radius: 10px !important;
+        font-size: 0.95rem !important;
+    }
+
+    input::placeholder,
+    textarea::placeholder {
+        color: #64748B !important;
+    }
+
+    /* NumberInput */
+    [data-testid="stNumberInput"] input {
+        background-color: #020617 !important;
+        color: #F8FAFC !important;
+        border: 1px solid rgba(255,255,255,0.12) !important;
+    }
+
+    /* Botões + e - do number input */
+    [data-testid="stNumberInput"] button {
+        background: rgba(255,255,255,0.04) !important;
+        color: #F8FAFC !important;
+        border: 1px solid rgba(255,255,255,0.08) !important;
+    }
+
+    [data-testid="stNumberInput"] button svg {
+        fill: #F8FAFC !important;
+    }
+
+    /* Selectbox */
+    [data-baseweb="select"] > div {
+        background-color: #020617 !important;
+        color: #F8FAFC !important;
+        border-radius: 10px !important;
+        border: 1px solid rgba(255,255,255,0.12) !important;
+    }
+
+    [data-baseweb="select"] * {
+        color: #F8FAFC !important;
+    }
+
+    /* Checkbox */
+    [data-testid="stCheckbox"] label {
+        color: #F8FAFC !important;
+    }
+
+    /* =====================================================
+       BOTÕES
+       ===================================================== */
     div.stButton > button {
         width: 100%;
-        height: 3.1em;
-        font-size: 1.05em;
+        height: 3.05em;
+        font-size: 1.0em;
         font-weight: 700;
         border-radius: 12px;
         border: 1px solid #2563EB;
         background: linear-gradient(135deg, #2563EB 0%, #1D4ED8 100%);
-        color: white !important;
-        box-shadow: 0 8px 20px rgba(37, 99, 235, 0.18);
+        color: #FFFFFF !important;
+        box-shadow: 0 10px 24px rgba(37, 99, 235, 0.35);
         transition: all 0.18s ease;
     }
 
     div.stButton > button:hover {
         transform: translateY(-1px);
-        box-shadow: 0 12px 22px rgba(37, 99, 235, 0.24);
-    }
-
-    /* SIDEBAR */
-    section[data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #0F172A 0%, #111827 100%);
-        border-right: 1px solid rgba(255,255,255,0.08);
-    }
-
-    section[data-testid="stSidebar"] .stMarkdown,
-    section[data-testid="stSidebar"] label,
-    section[data-testid="stSidebar"] p,
-    section[data-testid="stSidebar"] span,
-    section[data-testid="stSidebar"] div {
-        color: #F8FAFC !important;
-    }
-
-    section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div {
-        animation: popIn 0.18s ease-out;
-    }
-
-    @keyframes popIn {
-        0% {
-            transform: scale(0.985);
-            opacity: 0.0;
-        }
-        100% {
-            transform: scale(1);
-            opacity: 1;
-        }
-    }
-
-    section[data-testid="stSidebar"] [data-testid="stVerticalBlockBorderWrapper"] {
-        border-radius: 14px;
-        border: 1px solid rgba(255,255,255,0.08);
-        background: rgba(255,255,255,0.035);
-        padding: 6px;
-        box-shadow: 0 6px 16px rgba(0,0,0,0.18);
-    }
-
-    section[data-testid="stSidebar"] .stNumberInput input,
-    section[data-testid="stSidebar"] .stTextInput input,
-    section[data-testid="stSidebar"] .stSelectbox div[data-baseweb="select"] > div {
-        background-color: #0B1220 !important;
-        color: #F8FAFC !important;
-        border-radius: 10px !important;
-        border: 1px solid rgba(255,255,255,0.08) !important;
+        box-shadow: 0 14px 28px rgba(37, 99, 235, 0.45);
     }
 
     /* =====================================================
-       ÁREA DE UPLOAD - VISUAL ALINHADO COM O SISTEMA
+       CARD DE ENVIO
        ===================================================== */
-
-    /* Card geral do uploader */
-    [data-testid="stFileUploader"] {
-        background: linear-gradient(180deg, #111827 0%, #0F172A 100%) !important;
-        border: 1px solid rgba(37, 99, 235, 0.28) !important;
-        border-radius: 16px !important;
-        padding: 12px !important;
-        box-shadow: 0 8px 22px rgba(15, 23, 42, 0.18);
+    .upload-hero {
+        background: linear-gradient(135deg, #0B1020 0%, #111827 100%);
+        border: 1px solid rgba(37, 99, 235, 0.22);
+        border-radius: 18px;
+        padding: 18px 20px;
+        margin-bottom: 14px;
+        box-shadow: 0 12px 28px rgba(0,0,0,0.28);
     }
 
-    /* Título e textos internos do uploader */
+    .upload-hero-title {
+        font-size: 1.04rem;
+        font-weight: 700;
+        color: #F8FAFC;
+        margin-bottom: 6px;
+    }
+
+    .upload-hero-text {
+        font-size: 0.92rem;
+        color: #CBD5E1;
+        line-height: 1.45;
+    }
+
+    /* =====================================================
+       UPLOADERS
+       ===================================================== */
+    [data-testid="stFileUploader"] {
+        background: linear-gradient(180deg, #0B1020 0%, #111827 100%) !important;
+        border: 1px solid rgba(96, 165, 250, 0.22) !important;
+        border-radius: 16px !important;
+        padding: 10px !important;
+        box-shadow: 0 10px 28px rgba(0,0,0,0.28);
+    }
+
     [data-testid="stFileUploader"] label,
     [data-testid="stFileUploader"] small,
     [data-testid="stFileUploader"] p,
     [data-testid="stFileUploader"] span {
-        color: #E5EDF7 !important;
+        color: #E5E7EB !important;
     }
 
-    /* Área de arrastar/soltar */
     [data-testid="stFileUploaderDropzone"] {
-        background: linear-gradient(180deg, #172036 0%, #101827 100%) !important;
-        border: 1px dashed rgba(96, 165, 250, 0.45) !important;
+        background: rgba(255,255,255,0.04) !important;
+        border: 1px dashed rgba(96,165,250,0.45) !important;
         border-radius: 12px !important;
     }
 
@@ -163,9 +283,8 @@ st.markdown(
         fill: #93C5FD !important;
     }
 
-    /* Linha do arquivo anexado */
     [data-testid="stFileUploaderFile"] {
-        background: rgba(255,255,255,0.04) !important;
+        background: rgba(255,255,255,0.05) !important;
         border: 1px solid rgba(255,255,255,0.08) !important;
         border-radius: 12px !important;
         color: #F8FAFC !important;
@@ -176,9 +295,8 @@ st.markdown(
         fill: #93C5FD !important;
     }
 
-    /* Botões secundários do uploader */
     [data-testid="stFileUploader"] button[kind="secondary"] {
-        background: rgba(255,255,255,0.04) !important;
+        background: rgba(255,255,255,0.05) !important;
         color: #F8FAFC !important;
         border: 1px solid rgba(255,255,255,0.10) !important;
         border-radius: 10px !important;
@@ -189,45 +307,67 @@ st.markdown(
         border-color: rgba(96,165,250,0.35) !important;
     }
 
-    /* Ícones do uploader */
     [data-testid="stFileUploader"] svg {
         fill: #93C5FD !important;
     }
 
-    /* EXPANDER */
+    /* =====================================================
+       EXPANDERS / ALERTAS / DATAFRAME
+       ===================================================== */
     [data-testid="stExpander"] {
-        border: 1px solid #D9E2EC !important;
+        background: rgba(255,255,255,0.05) !important;
         border-radius: 16px !important;
-        background: rgba(255,255,255,0.72);
-        box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05);
+        border: 1px solid rgba(255,255,255,0.08) !important;
+        box-shadow: 0 12px 30px rgba(0,0,0,0.28);
     }
 
-    /* DATAFRAME */
+    [data-testid="stExpander"] summary,
+    [data-testid="stExpander"] summary * {
+        color: #F8FAFC !important;
+    }
+
     [data-testid="stDataFrame"] {
-        border-radius: 12px;
-        overflow: hidden;
-        border: 1px solid #E2E8F0;
-    }
-
-    /* ALERTAS */
-    [data-testid="stInfo"], [data-testid="stSuccess"], [data-testid="stWarning"], [data-testid="stError"] {
+        background: #020617 !important;
         border-radius: 12px !important;
+        border: 1px solid rgba(255,255,255,0.08) !important;
     }
 
-    /* Caption principal */
-    .stCaption {
-        color: #475569 !important;
+    [data-testid="stInfo"],
+    [data-testid="stWarning"],
+    [data-testid="stError"],
+    [data-testid="stSuccess"] {
+        background: rgba(255,255,255,0.06) !important;
+        color: #E5E7EB !important;
+        border-radius: 12px !important;
+        border: 1px solid rgba(255,255,255,0.12) !important;
+    }
+
+    /* =====================================================
+       AJUSTES FINOS
+       ===================================================== */
+    hr {
+        border-color: rgba(255,255,255,0.08) !important;
     }
     </style>
     """,
     unsafe_allow_html=True
 )
 
-st.title("📍 Área Trabalhada – Solinftec")
 
+# =========================================================
+# HERO / TOPO DA PÁGINA
+# =========================================================
 st.markdown(
-    "Aplicação para cálculo e visualização da **área trabalhada** com base em "
-    "dados operacionais da **Solinftec** e base cartográfica da Usina Monte Alegre."
+    """
+    <div class="hero-card">
+        <div class="hero-title">📍 Área Trabalhada – Solinftec</div>
+        <div class="hero-subtitle">
+            Aplicação para cálculo e visualização da área trabalhada com base em dados operacionais da Solinftec
+            e base cartográfica da Usina Monte Alegre.
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True
 )
 
 
@@ -702,7 +842,6 @@ def desenhar_box_legenda_tematica(
     )
     ax_box.add_patch(card)
 
-    # título levemente mais alto
     ax_box.text(
         0.07, 0.945,
         titulo_box,
@@ -713,7 +852,6 @@ def desenhar_box_legenda_tematica(
         va="center"
     )
 
-    # faixa exibida mais alta
     ax_box.text(
         0.07, 0.895,
         f"Faixa exibida: {faixa_exibida_txt}",
@@ -723,7 +861,6 @@ def desenhar_box_legenda_tematica(
         va="center"
     )
 
-    # chip da média sobe um pouco junto
     chip = FancyBboxPatch(
         (0.07, 0.805),
         0.86,
@@ -745,7 +882,6 @@ def desenhar_box_legenda_tematica(
         va="center"
     )
 
-    # divisor um pouco mais alto
     ax_box.plot([0.07, 0.93], [0.755, 0.755], color="#E2E8F0", linewidth=1)
 
     if df_legenda.empty:
@@ -1258,27 +1394,9 @@ if not (MAPA_AREA or MAPA_RPM or MAPA_VEL):
 # =========================================================
 st.markdown(
     """
-    <div style="
-        background: linear-gradient(135deg, #0F172A 0%, #111827 100%);
-        border: 1px solid rgba(37, 99, 235, 0.28);
-        border-radius: 18px;
-        padding: 18px 20px;
-        margin-bottom: 14px;
-        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
-    ">
-        <div style="
-            font-size: 1.05rem;
-            font-weight: 700;
-            color: #F8FAFC;
-            margin-bottom: 6px;
-        ">
-            📂 Envio dos arquivos
-        </div>
-        <div style="
-            font-size: 0.92rem;
-            color: #CBD5E1;
-            line-height: 1.45;
-        ">
+    <div class="upload-hero">
+        <div class="upload-hero-title">📂 Envio dos arquivos</div>
+        <div class="upload-hero-text">
             Faça o upload dos ZIPs com os CSVs operacionais e da base cartográfica em GPKG para gerar os mapas.
         </div>
     </div>
