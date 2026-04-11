@@ -12,6 +12,7 @@ from shapely.ops import unary_union
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.colors import LinearSegmentedColormap, to_hex
+from matplotlib.patches import Circle, FancyBboxPatch
 
 import zipfile
 import tempfile
@@ -42,53 +43,6 @@ st.markdown(
         height: 3.2em;
         font-size: 1.2em;
         font-weight: 600;
-    }
-    .painel-sol {
-        border: 1px solid #d0d7de;
-        border-radius: 10px;
-        padding: 0.8rem 0.9rem;
-        background: #0b1117;
-        color: #f0f6fc;
-        margin-bottom: 0.7rem;
-    }
-    .painel-sol h4 {
-        margin: 0 0 0.6rem 0;
-        font-size: 1rem;
-        color: #f0f6fc;
-    }
-    .painel-sol .sub {
-        color: #8b949e;
-        font-size: 0.85rem;
-        margin-bottom: 0.55rem;
-    }
-    .sol-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 0.86rem;
-    }
-    .sol-table th {
-        text-align: left;
-        border-bottom: 1px solid #30363d;
-        padding: 0.45rem 0.3rem;
-        color: #c9d1d9;
-    }
-    .sol-table td {
-        border-bottom: 1px solid #21262d;
-        padding: 0.45rem 0.3rem;
-        color: #f0f6fc;
-        vertical-align: middle;
-    }
-    .sol-dot {
-        display: inline-block;
-        width: 15px;
-        height: 15px;
-        border-radius: 50%;
-        border: 1px solid rgba(255,255,255,0.25);
-    }
-    .sol-foot {
-        font-size: 0.82rem;
-        color: #6e7781;
-        margin-top: 0.35rem;
     }
     </style>
     """,
@@ -166,8 +120,8 @@ def criar_cmap_suave(tipo="rpm"):
             "#66c2a4",  # verde água
             "#18c964",  # verde vivo
             "#d9ef8b",  # amarelo esverdeado
-            "#f7b733",  # laranja amarelo
-            "#f15a24",  # laranja forte
+            "#f7b733",  # amarelo/laranja
+            "#f15a24",  # laranja
             "#d73027",  # vermelho
         ]
 
@@ -201,7 +155,10 @@ def classificar_valor(valor, faixas):
     return None
 
 
-def desenhar_base_mapa(ax, base_fazenda, facecolor="#f7f7f7", mostrar_talhoes=True):
+def desenhar_base_mapa(ax, base_fazenda, facecolor="#f7f7f7", mostrar_talhoes=True, margem_rel=0.12):
+    """
+    Desenha a fazenda com zoom moderado e limpo.
+    """
     base_fazenda.plot(ax=ax, facecolor=facecolor, edgecolor="black", linewidth=1.1, zorder=1)
     base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.1, zorder=3)
 
@@ -225,8 +182,9 @@ def desenhar_base_mapa(ax, base_fazenda, facecolor="#f7f7f7", mostrar_talhoes=Tr
     minx, miny, maxx, maxy = base_fazenda.total_bounds
     dx = maxx - minx
     dy = maxy - miny
-    margem_x = dx * 0.05 if dx > 0 else 10
-    margem_y = dy * 0.05 if dy > 0 else 10
+
+    margem_x = max(dx * margem_rel, dy * 0.03)
+    margem_y = max(dy * margem_rel, dx * 0.03)
 
     ax.set_xlim(minx - margem_x, maxx + margem_x)
     ax.set_ylim(miny - margem_y, maxy + margem_y)
@@ -250,7 +208,7 @@ def adicionar_footer(fig, centro_mapa, base_y, cor_rodape):
 
     fig.text(
         centro_mapa,
-        base_y - 0.23,
+        base_y - 0.15,
         "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos.",
         ha="center",
         fontsize=10,
@@ -259,7 +217,7 @@ def adicionar_footer(fig, centro_mapa, base_y, cor_rodape):
 
     fig.text(
         centro_mapa,
-        base_y - 0.26,
+        base_y - 0.18,
         "Relatório elaborado com base em dados da Solinftec.",
         ha="center",
         fontsize=10,
@@ -268,7 +226,7 @@ def adicionar_footer(fig, centro_mapa, base_y, cor_rodape):
 
     fig.text(
         centro_mapa,
-        base_y - 0.29,
+        base_y - 0.21,
         f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
         ha="center",
         fontsize=10,
@@ -434,7 +392,7 @@ def plotar_mapa_classes(ax, base_fazenda, gdf_plot, coluna_classe, mapa_cores, m
     """
     Plota o mapa por classe (mais leve e mais bonito).
     """
-    desenhar_base_mapa(ax, base_fazenda, facecolor="#f7f7f7", mostrar_talhoes=mostrar_talhoes)
+    desenhar_base_mapa(ax, base_fazenda, facecolor="#f7f7f7", mostrar_talhoes=mostrar_talhoes, margem_rel=0.12)
 
     if gdf_plot.empty:
         return
@@ -453,84 +411,135 @@ def plotar_mapa_classes(ax, base_fazenda, gdf_plot, coluna_classe, mapa_cores, m
             )
 
 
-def renderizar_painel_lateral(
-    titulo,
-    subtitulo,
+def desenhar_tabela_faixas(fig, df_legenda, titulo, casas=0):
+    """
+    Desenha uma tabela/legenda compacta dentro da figura,
+    em estilo limpo e parecido com o mapa de área.
+    """
+    # eixo da legenda dentro da figura
+    ax_leg = fig.add_axes([0.07, 0.06, 0.63, 0.16])
+    ax_leg.set_xlim(0, 1)
+    ax_leg.set_ylim(0, 1)
+    ax_leg.axis("off")
+
+    # caixa da legenda
+    caixa = FancyBboxPatch(
+        (0, 0),
+        1,
+        1,
+        boxstyle="round,pad=0.012,rounding_size=0.02",
+        facecolor="#ffffff",
+        edgecolor="#cfcfcf",
+        linewidth=1.0
+    )
+    ax_leg.add_patch(caixa)
+
+    ax_leg.text(0.02, 0.92, titulo, fontsize=10, weight="bold", va="top")
+
+    # cabeçalho
+    y_header = 0.74
+    ax_leg.text(0.08, y_header, "Cor", fontsize=8, weight="bold", va="center")
+    ax_leg.text(0.22, y_header, "Início", fontsize=8, weight="bold", va="center")
+    ax_leg.text(0.41, y_header, "Fim", fontsize=8, weight="bold", va="center")
+    ax_leg.text(0.58, y_header, "% Tempo", fontsize=8, weight="bold", va="center")
+
+    ax_leg.plot([0.02, 0.98], [0.68, 0.68], color="#d9d9d9", linewidth=0.8)
+
+    if df_legenda.empty:
+        ax_leg.text(0.03, 0.43, "Sem dados válidos para exibir.", fontsize=8, va="center")
+        return
+
+    n = len(df_legenda)
+    area_util_topo = 0.64
+    area_util_base = 0.10
+    row_h = (area_util_topo - area_util_base) / max(n, 1)
+
+    # ajusta fonte conforme quantidade de linhas
+    fonte = 8 if n <= 8 else 7
+
+    for i, (_, row) in enumerate(df_legenda.iterrows()):
+        y = area_util_topo - (i + 0.5) * row_h
+
+        # separador de linha
+        if i > 0:
+            y_sep = area_util_topo - i * row_h
+            ax_leg.plot([0.02, 0.98], [y_sep, y_sep], color="#efefef", linewidth=0.6)
+
+        # bolinha da cor
+        circ = Circle((0.10, y), 0.018, facecolor=row["cor"], edgecolor="#666666", linewidth=0.4)
+        ax_leg.add_patch(circ)
+
+        inicio = formatar_numero(row["inicio"], casas)
+        fim = row["fim"]
+        if fim != "+":
+            fim = formatar_numero(fim, casas)
+
+        percentual = f'{row["percentual"]:.1f}%'.replace(".", ",")
+
+        ax_leg.text(0.18, y, inicio, fontsize=fonte, va="center")
+        ax_leg.text(0.38, y, str(fim), fontsize=fonte, va="center")
+        ax_leg.text(0.56, y, percentual, fontsize=fonte, va="center")
+
+
+def criar_figura_tematica(
+    base_fazenda,
+    gdf_display,
+    coluna_classe,
+    mapa_cores,
     df_legenda,
+    titulo_resumo,
+    faixa_exibida_txt,
     metrica_min,
     metrica_media,
     metrica_max,
-    unidade_label,
     periodo_ini,
     periodo_fim,
-    fazenda_texto,
-    casas=0
+    fazenda_id,
+    nome_fazenda,
+    unidade,
+    casas,
+    titulo_tabela
 ):
     """
-    Renderiza painel lateral estilo Solinftec usando Streamlit + HTML.
+    Cria a figura temática (RPM ou Velocidade) com:
+    - mapa à esquerda
+    - resumo dentro da figura à direita
+    - tabela de faixas dentro da figura na parte inferior
     """
-    st.markdown(
-        f"""
-        <div class="painel-sol">
-            <h4>{titulo}</h4>
-            <div class="sub">{subtitulo}</div>
-            <div class="sub">{fazenda_texto}</div>
-        </div>
-        """,
-        unsafe_allow_html=True
+    fig, ax = plt.subplots(figsize=(25, 10.5))
+    plt.subplots_adjust(left=0.07, right=0.72, bottom=0.26, top=0.90)
+
+    if gdf_display is not None and not gdf_display.empty:
+        plotar_mapa_classes(
+            ax=ax,
+            base_fazenda=base_fazenda,
+            gdf_plot=gdf_display.dropna(subset=[coluna_classe]).copy(),
+            coluna_classe=coluna_classe,
+            mapa_cores=mapa_cores,
+            mostrar_talhoes=True
+        )
+    else:
+        desenhar_base_mapa(ax, base_fazenda, facecolor="#f7f7f7", mostrar_talhoes=True, margem_rel=0.12)
+
+    pos = ax.get_position()
+    centro_mapa = (pos.x0 + pos.x1) / 2
+    base_y = pos.y0
+
+    resumo_texto = (
+        f"{titulo_resumo}\n\n"
+        f"Fazenda: {fazenda_id} – {nome_fazenda}\n\n"
+        f"Mínimo trabalhado: {formatar_numero(metrica_min, casas)}{unidade}\n"
+        f"Médio trabalhado: {formatar_numero(metrica_media, casas)}{unidade}\n"
+        f"Máximo trabalhado: {formatar_numero(metrica_max, casas)}{unidade}\n\n"
+        f"Faixa exibida:\n{faixa_exibida_txt}\n\n"
+        f"Período:\n{periodo_ini} até {periodo_fim}"
     )
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Mín.", f"{formatar_numero(metrica_min, casas)}{unidade_label}")
-    c2.metric("Médio", f"{formatar_numero(metrica_media, casas)}{unidade_label}")
-    c3.metric("Máx.", f"{formatar_numero(metrica_max, casas)}{unidade_label}")
+    adicionar_resumo(fig, pos.x1 + 0.03, 0.49, resumo_texto, "#f1f8ff")
+    desenhar_tabela_faixas(fig, df_legenda, titulo_tabela, casas=casas)
+    adicionar_footer(fig, centro_mapa, base_y, "#7a7a7a")
 
-    html = """
-    <div class="painel-sol">
-        <table class="sol-table">
-            <thead>
-                <tr>
-                    <th style="width: 18%;">Cor</th>
-                    <th style="width: 24%;">Início</th>
-                    <th style="width: 22%;">Fim</th>
-                    <th style="width: 36%;">% Tempo</th>
-                </tr>
-            </thead>
-            <tbody>
-    """
-
-    if df_legenda.empty:
-        html += """
-            <tr>
-                <td colspan="4">Sem dados válidos para exibir.</td>
-            </tr>
-        """
-    else:
-        for _, row in df_legenda.iterrows():
-            inicio = formatar_numero(row["inicio"], casas)
-            fim = row["fim"]
-            if fim != "+":
-                fim = formatar_numero(fim, casas)
-
-            percentual = f'{row["percentual"]:.1f}%'.replace(".", ",")
-
-            html += f"""
-            <tr>
-                <td><span class="sol-dot" style="background:{row['cor']};"></span></td>
-                <td>{inicio}</td>
-                <td>{fim}</td>
-                <td>{percentual}</td>
-            </tr>
-            """
-
-    html += f"""
-            </tbody>
-        </table>
-        <div class="sol-foot">Período: {periodo_ini} até {periodo_fim}</div>
-    </div>
-    """
-
-    st.markdown(html, unsafe_allow_html=True)
+    return fig
 
 # =========================
 # UPLOAD
@@ -887,7 +896,7 @@ if uploaded_zips and uploaded_gpkg and GERAR:
                 # =========================
                 df_talhoes = None
 
-                if MOSTRAR_TALHOES and "TALHAO" in base.columns and "GLEBA" in base.columns:
+                if MOSTRAR_TALHOES and "TALHAO" in base_fazenda.columns and "GLEBA" in base_fazenda.columns:
                     base_tmp = base_fazenda.copy()
                     base_tmp["Área total (ha)"] = base_tmp.geometry.area / 10000
 
@@ -942,7 +951,6 @@ if uploaded_zips and uploaded_gpkg and GERAR:
 
                 # =========================
                 # GEOMETRIA DE EXIBIÇÃO RPM / VEL
-                # usa largura real do implemento (em metros)
                 # =========================
                 gdf_display = None
                 if MAPA_RPM or MAPA_VEL:
@@ -958,7 +966,7 @@ if uploaded_zips and uploaded_gpkg and GERAR:
                                 lambda x: classificar_valor(x, vel_faixas)
                             )
 
-                # Legendas laterais estilo Solinftec
+                # Legendas internas da figura
                 df_leg_rpm = pd.DataFrame(columns=["cor", "inicio", "fim", "faixa", "percentual"])
                 df_leg_vel = pd.DataFrame(columns=["cor", "inicio", "fim", "faixa", "percentual"])
 
@@ -989,7 +997,7 @@ if uploaded_zips and uploaded_gpkg and GERAR:
                     # -----------------------------------
                     if MAPA_AREA:
                         fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
-                        plt.subplots_adjust(left=0.15, right=0.85, bottom=0.33, top=0.88)
+                        plt.subplots_adjust(left=0.15, right=0.85, bottom=0.25, top=0.88)
 
                         base_fazenda.plot(ax=ax, facecolor=COR_NAO_TRAB, edgecolor="black", linewidth=1.2)
                         gpd.GeoSeries(area_trabalhada, crs=base_fazenda.crs).plot(
@@ -1028,7 +1036,7 @@ if uploaded_zips and uploaded_gpkg and GERAR:
                                 mpatches.Patch(facecolor="none", edgecolor="black", label="Limites da fazenda"),
                             ],
                             loc="lower center",
-                            bbox_to_anchor=(centro_mapa, base_y - 0.40),
+                            bbox_to_anchor=(centro_mapa, base_y - 0.35),
                             ncol=3,
                             frameon=True,
                             fontsize=13
@@ -1047,94 +1055,61 @@ if uploaded_zips and uploaded_gpkg and GERAR:
                         adicionar_footer(fig, centro_mapa, base_y, COR_RODAPE)
 
                         st.pyplot(fig)
+                        plt.close(fig)
 
                     # -----------------------------------
-                    # 2) MAPA DE RPM (VISUAL MELHORADO)
+                    # 2) MAPA DE RPM (MELHORADO E LIMPO)
                     # -----------------------------------
                     if MAPA_RPM:
-                        st.markdown("### ⚙️ Mapa de RPM")
+                        fig_rpm = criar_figura_tematica(
+                            base_fazenda=base_fazenda,
+                            gdf_display=gdf_display,
+                            coluna_classe="classe_rpm",
+                            mapa_cores=rpm_cores,
+                            df_legenda=df_leg_rpm,
+                            titulo_resumo="Resumo de RPM",
+                            faixa_exibida_txt=f"{int(arredondar_para_baixo(RPM_MIN, RPM_PASSO))} até {int(arredondar_para_cima(RPM_MAX, RPM_PASSO))}+",
+                            metrica_min=rpm_min_real,
+                            metrica_media=rpm_med_real,
+                            metrica_max=rpm_max_real,
+                            periodo_ini=periodo_ini,
+                            periodo_fim=periodo_fim,
+                            fazenda_id=FAZENDA_ID,
+                            nome_fazenda=nome_fazenda,
+                            unidade="",
+                            casas=0,
+                            titulo_tabela="RPM — % do tempo por faixa"
+                        )
 
-                        col_mapa, col_painel = st.columns([3.2, 1.35], vertical_alignment="top")
-
-                        with col_mapa:
-                            fig_rpm, ax_rpm = plt.subplots(figsize=(8.5, 12))
-                            plt.subplots_adjust(left=0.02, right=0.98, bottom=0.02, top=0.98)
-
-                            if gdf_display is not None and not gdf_display.empty:
-                                plotar_mapa_classes(
-                                    ax=ax_rpm,
-                                    base_fazenda=base_fazenda,
-                                    gdf_plot=gdf_display.dropna(subset=["classe_rpm"]).copy(),
-                                    coluna_classe="classe_rpm",
-                                    mapa_cores=rpm_cores,
-                                    mostrar_talhoes=True
-                                )
-                            else:
-                                desenhar_base_mapa(ax_rpm, base_fazenda, facecolor="#f7f7f7", mostrar_talhoes=True)
-
-                            st.pyplot(fig_rpm, use_container_width=True)
-                            st.caption(
-                                "⚠️ Mapa temático de RPM com faixa operacional baseada na largura real do implemento (m)."
-                            )
-
-                        with col_painel:
-                            renderizar_painel_lateral(
-                                titulo="Resumo de RPM",
-                                subtitulo=f"Faixa exibida: {int(arredondar_para_baixo(RPM_MIN, RPM_PASSO))} até {int(arredondar_para_cima(RPM_MAX, RPM_PASSO))}+",
-                                df_legenda=df_leg_rpm,
-                                metrica_min=rpm_min_real,
-                                metrica_media=rpm_med_real,
-                                metrica_max=rpm_max_real,
-                                unidade_label="",
-                                periodo_ini=periodo_ini,
-                                periodo_fim=periodo_fim,
-                                fazenda_texto=f"Fazenda: {FAZENDA_ID} – {nome_fazenda}",
-                                casas=0
-                            )
+                        st.pyplot(fig_rpm)
+                        plt.close(fig_rpm)
 
                     # -----------------------------------
-                    # 3) MAPA DE VELOCIDADE (VISUAL MELHORADO)
+                    # 3) MAPA DE VELOCIDADE (MELHORADO E LIMPO)
                     # -----------------------------------
                     if MAPA_VEL:
-                        st.markdown("### 🚜 Mapa de Velocidade")
+                        fig_vel = criar_figura_tematica(
+                            base_fazenda=base_fazenda,
+                            gdf_display=gdf_display,
+                            coluna_classe="classe_vel",
+                            mapa_cores=vel_cores,
+                            df_legenda=df_leg_vel,
+                            titulo_resumo="Resumo de Velocidade",
+                            faixa_exibida_txt=f"{formatar_numero(arredondar_para_baixo(VEL_MIN, VEL_PASSO), 1)} até {formatar_numero(arredondar_para_cima(VEL_MAX, VEL_PASSO), 1)}+ km/h",
+                            metrica_min=vel_min_real,
+                            metrica_media=vel_med_real,
+                            metrica_max=vel_max_real,
+                            periodo_ini=periodo_ini,
+                            periodo_fim=periodo_fim,
+                            fazenda_id=FAZENDA_ID,
+                            nome_fazenda=nome_fazenda,
+                            unidade=" km/h",
+                            casas=1,
+                            titulo_tabela="Velocidade — % do tempo por faixa"
+                        )
 
-                        col_mapa, col_painel = st.columns([3.2, 1.35], vertical_alignment="top")
-
-                        with col_mapa:
-                            fig_vel, ax_vel = plt.subplots(figsize=(8.5, 12))
-                            plt.subplots_adjust(left=0.02, right=0.98, bottom=0.02, top=0.98)
-
-                            if gdf_display is not None and not gdf_display.empty:
-                                plotar_mapa_classes(
-                                    ax=ax_vel,
-                                    base_fazenda=base_fazenda,
-                                    gdf_plot=gdf_display.dropna(subset=["classe_vel"]).copy(),
-                                    coluna_classe="classe_vel",
-                                    mapa_cores=vel_cores,
-                                    mostrar_talhoes=True
-                                )
-                            else:
-                                desenhar_base_mapa(ax_vel, base_fazenda, facecolor="#f7f7f7", mostrar_talhoes=True)
-
-                            st.pyplot(fig_vel, use_container_width=True)
-                            st.caption(
-                                "⚠️ Mapa temático de velocidade com faixa operacional baseada na largura real do implemento (m)."
-                            )
-
-                        with col_painel:
-                            renderizar_painel_lateral(
-                                titulo="Resumo de Velocidade",
-                                subtitulo=f"Faixa exibida: {formatar_numero(arredondar_para_baixo(VEL_MIN, VEL_PASSO), 1)} até {formatar_numero(arredondar_para_cima(VEL_MAX, VEL_PASSO), 1)}+ km/h",
-                                df_legenda=df_leg_vel,
-                                metrica_min=vel_min_real,
-                                metrica_media=vel_med_real,
-                                metrica_max=vel_max_real,
-                                unidade_label=" km/h",
-                                periodo_ini=periodo_ini,
-                                periodo_fim=periodo_fim,
-                                fazenda_texto=f"Fazenda: {FAZENDA_ID} – {nome_fazenda}",
-                                casas=1
-                            )
+                        st.pyplot(fig_vel)
+                        plt.close(fig_vel)
 
                     # -----------------------------------
                     # TABELA DE TALHÕES (PRESERVADA)
@@ -1145,3 +1120,4 @@ if uploaded_zips and uploaded_gpkg and GERAR:
 
 else:
     st.info("⬆️ Envie os arquivos e clique em **Gerar mapa**.")
+``
