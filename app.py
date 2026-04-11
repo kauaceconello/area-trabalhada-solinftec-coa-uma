@@ -128,10 +128,6 @@ def formatar_numero(valor, casas=0):
 
 
 def gerar_faixas(vmin, vmax, passo, casas=0):
-    """
-    Gera faixas arredondadas:
-    ex. RPM -> 1700 a 1800, 1800 a 1900, ..., 2000+
-    """
     inicio = arredondar_para_baixo(vmin, passo)
     fim = arredondar_para_cima(vmax, passo)
 
@@ -207,160 +203,6 @@ def classificar_valor(valor, faixas):
             if a <= valor < b:
                 return label
     return None
-
-
-def desenhar_base_mapa(
-    ax,
-    base_fazenda,
-    facecolor="#F8FAFC",
-    mostrar_talhoes=True,
-    margem_rel_x=0.008,
-    margem_rel_y=0.020
-):
-    """
-    Mapa com zoom mais próximo e melhor leitura das linhas.
-    """
-    ax.set_facecolor("#EEF2F7")
-
-    base_fazenda.plot(ax=ax, facecolor=facecolor, edgecolor="#1F2937", linewidth=1.15, zorder=1)
-    base_fazenda.boundary.plot(ax=ax, color="#111827", linewidth=1.15, zorder=3)
-
-    if mostrar_talhoes and "TALHAO" in base_fazenda.columns:
-        for _, row in base_fazenda.iterrows():
-            if row.geometry.is_empty:
-                continue
-            centroid = row.geometry.centroid
-            ax.text(
-                centroid.x,
-                centroid.y,
-                str(row["TALHAO"]),
-                fontsize=8.2,
-                ha="center",
-                va="center",
-                color="#111827",
-                weight="bold",
-                zorder=4
-            )
-
-    minx, miny, maxx, maxy = base_fazenda.total_bounds
-    dx = maxx - minx
-    dy = maxy - miny
-
-    margem_x = max(dx * margem_rel_x, 0.8)
-    margem_y = max(dy * margem_rel_y, 1.2)
-
-    ax.set_xlim(minx - margem_x, maxx + margem_x)
-    ax.set_ylim(miny - margem_y, maxy + margem_y)
-    ax.set_aspect("equal")
-    ax.axis("off")
-
-
-def adicionar_resumo(fig, x, y, texto, cor_caixa):
-    fig.text(
-        x,
-        y,
-        texto,
-        fontsize=11,
-        bbox=dict(boxstyle="round,pad=0.8", facecolor=cor_caixa, edgecolor="black")
-    )
-
-
-def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_ini, periodo_fim, accent_color):
-    """
-    Cabeçalho superior centralizado, totalmente contido dentro da faixa branca.
-    """
-    header = FancyBboxPatch(
-        (0.02, 0.905),
-        0.96,
-        0.085,
-        boxstyle="round,pad=0.004,rounding_size=0.008",
-        transform=fig.transFigure,
-        facecolor=(0.965, 0.972, 0.980, 0.97),
-        edgecolor="#CBD5E1",
-        linewidth=0.9,
-        zorder=0
-    )
-    fig.add_artist(header)
-
-    # Sem linha solta no topo
-    fig.text(
-        0.50,
-        0.958,
-        titulo_mapa,
-        fontsize=15.5,
-        weight="bold",
-        color="#0F172A",
-        ha="center",
-        va="center"
-    )
-
-    fig.text(
-        0.50,
-        0.936,
-        f"Fazenda: {fazenda_id} – {nome_fazenda}",
-        fontsize=10.4,
-        color="#334155",
-        ha="center",
-        va="center"
-    )
-
-    fig.text(
-        0.50,
-        0.916,
-        f"Período: {periodo_ini} até {periodo_fim}",
-        fontsize=9.4,
-        color="#64748B",
-        ha="center",
-        va="center"
-    )
-
-    # Pequeno detalhe de cor para diferenciar RPM x Velocidade
-    detalhe = FancyBboxPatch(
-        (0.035, 0.928),
-        0.06,
-        0.012,
-        boxstyle="round,pad=0.001,rounding_size=0.003",
-        transform=fig.transFigure,
-        facecolor=accent_color,
-        edgecolor="none",
-        zorder=1
-    )
-    fig.add_artist(detalhe)
-
-
-def adicionar_footer(fig, cor_rodape="#2F3B4A"):
-    """
-    Rodapé mais escuro e centralizado.
-    """
-    brasilia = pytz.timezone("America/Sao_Paulo")
-    hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
-
-    fig.text(
-        0.50,
-        0.060,
-        "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos.",
-        ha="center",
-        fontsize=9.7,
-        color=cor_rodape
-    )
-
-    fig.text(
-        0.50,
-        0.038,
-        "Relatório elaborado com base em dados da Solinftec.",
-        ha="center",
-        fontsize=9.7,
-        color=cor_rodape
-    )
-
-    fig.text(
-        0.50,
-        0.016,
-        f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
-        ha="center",
-        fontsize=9.7,
-        color=cor_rodape
-    )
 
 
 def figura_para_pdf_bytes(fig):
@@ -521,6 +363,52 @@ def calcular_legenda_percentual(gdf_display, coluna_classe, faixas, mapa_cores):
     return pd.DataFrame(linhas)
 
 
+def desenhar_base_mapa(
+    ax,
+    base_fazenda,
+    facecolor="#F8FAFC",
+    mostrar_talhoes=True,
+    margem_rel_x=0.008,
+    margem_rel_y=0.020
+):
+    """
+    Mapa com zoom mais próximo e melhor leitura.
+    """
+    ax.set_facecolor("#EEF2F7")
+
+    base_fazenda.plot(ax=ax, facecolor=facecolor, edgecolor="#1F2937", linewidth=1.15, zorder=1)
+    base_fazenda.boundary.plot(ax=ax, color="#111827", linewidth=1.15, zorder=3)
+
+    if mostrar_talhoes and "TALHAO" in base_fazenda.columns:
+        for _, row in base_fazenda.iterrows():
+            if row.geometry.is_empty:
+                continue
+            centroid = row.geometry.centroid
+            ax.text(
+                centroid.x,
+                centroid.y,
+                str(row["TALHAO"]),
+                fontsize=8.2,
+                ha="center",
+                va="center",
+                color="#111827",
+                weight="bold",
+                zorder=4
+            )
+
+    minx, miny, maxx, maxy = base_fazenda.total_bounds
+    dx = maxx - minx
+    dy = maxy - miny
+
+    margem_x = max(dx * margem_rel_x, 0.8)
+    margem_y = max(dy * margem_rel_y, 1.2)
+
+    ax.set_xlim(minx - margem_x, maxx + margem_x)
+    ax.set_ylim(miny - margem_y, maxy + margem_y)
+    ax.set_aspect("equal")
+    ax.axis("off")
+
+
 def plotar_mapa_classes(ax, base_fazenda, gdf_plot, coluna_classe, mapa_cores, mostrar_talhoes=True):
     desenhar_base_mapa(
         ax,
@@ -552,6 +440,69 @@ def plotar_mapa_classes(ax, base_fazenda, gdf_plot, coluna_classe, mapa_cores, m
                 alpha=1.0,
                 zorder=2
             )
+
+
+def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_ini, periodo_fim, accent_color):
+    """
+    Cabeçalho superior centralizado, totalmente contido dentro da faixa branca.
+    """
+    header = FancyBboxPatch(
+        (0.02, 0.905),
+        0.96,
+        0.085,
+        boxstyle="round,pad=0.004,rounding_size=0.008",
+        transform=fig.transFigure,
+        facecolor=(0.965, 0.972, 0.980, 0.97),
+        edgecolor="#CBD5E1",
+        linewidth=0.9,
+        zorder=0
+    )
+    fig.add_artist(header)
+
+    # Sem linha sublinhando
+    fig.text(
+        0.50,
+        0.958,
+        titulo_mapa,
+        fontsize=15.5,
+        weight="bold",
+        color="#0F172A",
+        ha="center",
+        va="center"
+    )
+
+    fig.text(
+        0.50,
+        0.936,
+        f"Fazenda: {fazenda_id} – {nome_fazenda}",
+        fontsize=10.4,
+        color="#334155",
+        ha="center",
+        va="center"
+    )
+
+    fig.text(
+        0.50,
+        0.916,
+        f"Período: {periodo_ini} até {periodo_fim}",
+        fontsize=9.4,
+        color="#64748B",
+        ha="center",
+        va="center"
+    )
+
+    # detalhe sutil de cor
+    detalhe = FancyBboxPatch(
+        (0.035, 0.928),
+        0.06,
+        0.012,
+        boxstyle="round,pad=0.001,rounding_size=0.003",
+        transform=fig.transFigure,
+        facecolor=accent_color,
+        edgecolor="none",
+        zorder=1
+    )
+    fig.add_artist(detalhe)
 
 
 def desenhar_box_legenda_tematica(
@@ -616,20 +567,24 @@ def desenhar_box_legenda_tematica(
     )
     ax_box.add_patch(caixa)
 
-    # cabeçalho
-    ax_box.text(0.08, 0.93, titulo_box, fontsize=11.4, weight="bold", color=cor_titulo, va="top", zorder=2)
-    ax_box.text(0.08, 0.865, f"Faixa exibida: {faixa_exibida_txt}", fontsize=8.6, color=cor_sec, va="top", zorder=2)
-    ax_box.text(0.08, 0.805, media_txt, fontsize=9.5, color=cor_destaque, va="top", weight="bold", zorder=2)
+    # Texto centralizado na caixa
+    ax_box.text(0.50, 0.93, titulo_box, fontsize=11.4, weight="bold", color=cor_titulo,
+                va="top", ha="center", zorder=2)
+    ax_box.text(0.50, 0.865, f"Faixa exibida: {faixa_exibida_txt}", fontsize=8.6, color=cor_sec,
+                va="top", ha="center", zorder=2)
+    ax_box.text(0.50, 0.805, media_txt, fontsize=9.5, color=cor_destaque,
+                va="top", ha="center", weight="bold", zorder=2)
 
     ax_box.plot([0.08, 0.94], [0.74, 0.74], color=cor_borda, linewidth=0.9, zorder=2)
 
     # Cabeçalho das colunas
-    ax_box.text(0.30, 0.705, "Início", fontsize=8.5, color=cor_sec, va="bottom", zorder=2)
-    ax_box.text(0.60, 0.705, "Fim", fontsize=8.5, color=cor_sec, va="bottom", zorder=2)
-    ax_box.text(0.85, 0.705, "%", fontsize=8.5, color=cor_sec, va="bottom", zorder=2)
+    ax_box.text(0.32, 0.705, "Início", fontsize=8.5, color=cor_sec, va="bottom", ha="center", zorder=2)
+    ax_box.text(0.62, 0.705, "Fim", fontsize=8.5, color=cor_sec, va="bottom", ha="center", zorder=2)
+    ax_box.text(0.86, 0.705, "%", fontsize=8.5, color=cor_sec, va="bottom", ha="center", zorder=2)
 
     if df_legenda.empty:
-        ax_box.text(0.08, 0.58, "Sem dados válidos para exibir.", fontsize=8.6, color=cor_sec, zorder=2)
+        ax_box.text(0.50, 0.58, "Sem dados válidos para exibir.", fontsize=8.6, color=cor_sec,
+                    ha="center", zorder=2)
         return
 
     topo = 0.67
@@ -668,9 +623,9 @@ def desenhar_box_legenda_tematica(
 
         percentual = f'{row["percentual"]:.1f}%'.replace(".", ",")
 
-        ax_box.text(0.30, y_row, inicio, fontsize=fonte, va="center", color=cor_texto, zorder=3)
-        ax_box.text(0.60, y_row, str(fim), fontsize=fonte, va="center", color=cor_texto, zorder=3)
-        ax_box.text(0.84, y_row, percentual, fontsize=fonte, va="center", color=cor_texto, zorder=3)
+        ax_box.text(0.32, y_row, inicio, fontsize=fonte, va="center", ha="center", color=cor_texto, zorder=3)
+        ax_box.text(0.62, y_row, str(fim), fontsize=fonte, va="center", ha="center", color=cor_texto, zorder=3)
+        ax_box.text(0.86, y_row, percentual, fontsize=fonte, va="center", ha="center", color=cor_texto, zorder=3)
 
 
 def criar_figura_tematica(
@@ -691,7 +646,7 @@ def criar_figura_tematica(
     accent_color
 ):
     """
-    Figura temática com layout mais fechado, mapa com mais zoom
+    Figura temática com layout fechado, mapa com mais zoom
     e legenda única, bem encaixada.
     """
     fig = plt.figure(figsize=(14.0, 8.6))
@@ -725,7 +680,7 @@ def criar_figura_tematica(
     )
     fig.add_artist(painel_mapa)
 
-    # área reservada da legenda (sem quadrado interno adicional)
+    # área reservada da legenda
     reserva_leg = FancyBboxPatch(
         (0.76, 0.20),
         0.18,
@@ -739,7 +694,7 @@ def criar_figura_tematica(
     )
     fig.add_artist(reserva_leg)
 
-    # mapa um pouco menor lateralmente, mas com mais zoom
+    # mapa com mais zoom
     ax = fig.add_axes([0.12, 0.15, 0.42, 0.67])
 
     if gdf_display is not None and not gdf_display.empty:
@@ -779,6 +734,185 @@ def criar_figura_tematica(
         df_legenda=df_legenda,
         casas=casas,
         reserve_pos=(0.76, 0.20, 0.18, 0.58)
+    )
+
+    adicionar_footer(fig, "#2F3B4A")
+
+    return fig
+
+
+# =========================================================
+# MODELO VISUAL PARA ÁREA TRABALHADA
+# =========================================================
+def criar_figura_area(
+    base_fazenda,
+    area_trabalhada,
+    area_total_ha,
+    area_trab_ha,
+    area_nao_ha,
+    pct_trab,
+    pct_nao,
+    periodo_ini,
+    periodo_fim,
+    fazenda_id,
+    nome_fazenda,
+    mostrar_talhoes,
+    cor_trabalhada,
+    cor_nao_trab
+):
+    """
+    Aplica o mesmo modelo visual aos mapas de área trabalhada,
+    mantendo resumo e legenda da área.
+    """
+    fig = plt.figure(figsize=(14.0, 8.6))
+    fig.patch.set_facecolor("#E9EDF3")
+
+    # moldura externa
+    moldura = FancyBboxPatch(
+        (0.015, 0.01),
+        0.97,
+        0.97,
+        boxstyle="round,pad=0.0,rounding_size=0.008",
+        transform=fig.transFigure,
+        facecolor="none",
+        edgecolor="#CAD4E0",
+        linewidth=1.0,
+        zorder=0
+    )
+    fig.add_artist(moldura)
+
+    # header
+    adicionar_header_topo(
+        fig,
+        titulo_mapa="Mapa de Área Trabalhada",
+        fazenda_id=fazenda_id,
+        nome_fazenda=nome_fazenda,
+        periodo_ini=periodo_ini,
+        periodo_fim=periodo_fim,
+        accent_color="#62b27f"
+    )
+
+    # painel do mapa
+    painel_mapa = FancyBboxPatch(
+        (0.03, 0.11),
+        0.66,
+        0.79,
+        boxstyle="round,pad=0.004,rounding_size=0.012",
+        transform=fig.transFigure,
+        facecolor=(0.96, 0.97, 0.99, 0.58),
+        edgecolor="#D4DCE6",
+        linewidth=0.9,
+        zorder=0
+    )
+    fig.add_artist(painel_mapa)
+
+    # painel resumo à direita
+    painel_resumo = FancyBboxPatch(
+        (0.73, 0.26),
+        0.20,
+        0.42,
+        boxstyle="round,pad=0.004,rounding_size=0.012",
+        transform=fig.transFigure,
+        facecolor=(0.93, 0.94, 0.96, 0.22),
+        edgecolor="#D1D9E2",
+        linewidth=0.8,
+        zorder=0
+    )
+    fig.add_artist(painel_resumo)
+
+    # eixo do mapa
+    ax = fig.add_axes([0.11, 0.20, 0.42, 0.58])
+
+    base_fazenda.plot(ax=ax, facecolor=cor_nao_trab, edgecolor="black", linewidth=1.1, zorder=1)
+    gpd.GeoSeries(area_trabalhada, crs=base_fazenda.crs).plot(
+        ax=ax, color=cor_trabalhada, alpha=0.9, zorder=2
+    )
+    base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.15, zorder=3)
+
+    if mostrar_talhoes and "TALHAO" in base_fazenda.columns:
+        for _, row in base_fazenda.iterrows():
+            if row.geometry.is_empty:
+                continue
+            centroid = row.geometry.centroid
+            ax.text(
+                centroid.x,
+                centroid.y,
+                str(row["TALHAO"]),
+                fontsize=8.0,
+                ha="center",
+                va="center",
+                color="black",
+                weight="bold",
+                zorder=4
+            )
+
+    minx, miny, maxx, maxy = base_fazenda.total_bounds
+    dx = maxx - minx
+    dy = maxy - miny
+    margem_x = max(dx * 0.010, 0.8)
+    margem_y = max(dy * 0.020, 1.2)
+    ax.set_xlim(minx - margem_x, maxx + margem_x)
+    ax.set_ylim(miny - margem_y, maxy + margem_y)
+    ax.set_aspect("equal")
+    ax.axis("off")
+
+    # caixa de resumo
+    resumo_ax = fig.add_axes([0.755, 0.305, 0.15, 0.32])
+    resumo_ax.axis("off")
+
+    resumo_box = FancyBboxPatch(
+        (0, 0),
+        1,
+        1,
+        boxstyle="round,pad=0.018,rounding_size=0.028",
+        facecolor=(0.92, 0.94, 0.97, 0.95),
+        edgecolor="#7B8794",
+        linewidth=1.2
+    )
+    resumo_ax.add_patch(resumo_box)
+
+    resumo_ax.text(0.50, 0.92, "Resumo da Operação", ha="center", va="top",
+                   fontsize=11.2, fontweight="bold", color="#0F172A")
+
+    resumo_ax.text(
+        0.08, 0.78,
+        (
+            f"Área total: {area_total_ha} ha\n\n"
+            f"Trabalhada: {area_trab_ha} ha ({pct_trab}%)\n\n"
+            f"Não trabalhada: {area_nao_ha} ha ({pct_nao}%)"
+        ),
+        fontsize=9.5,
+        color="#0F172A",
+        va="top"
+    )
+
+    # legenda da área embaixo do mapa, sem invadir
+    leg_ax = fig.add_axes([0.11, 0.105, 0.42, 0.055])
+    leg_ax.axis("off")
+
+    legenda_box = FancyBboxPatch(
+        (0, 0),
+        1,
+        1,
+        boxstyle="round,pad=0.012,rounding_size=0.020",
+        facecolor=(0.93, 0.94, 0.97, 0.92),
+        edgecolor="#7B8794",
+        linewidth=1.0
+    )
+    leg_ax.add_patch(legenda_box)
+
+    handles = [
+        mpatches.Patch(color=cor_trabalhada, label="Área trabalhada"),
+        mpatches.Patch(color=cor_nao_trab, label="Área não trabalhada"),
+        mpatches.Patch(facecolor="white", edgecolor="black", label="Limites da fazenda")
+    ]
+
+    leg_ax.legend(
+        handles=handles,
+        loc="center",
+        ncol=3,
+        frameon=False,
+        fontsize=9.8
     )
 
     adicionar_footer(fig, "#2F3B4A")
@@ -971,9 +1105,7 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
 
             df = pd.concat(dfs, ignore_index=True)
 
-            # -------------------------
             # TRATAMENTO
-            # -------------------------
             df["dt_hr_local_inicial"] = pd.to_datetime(df["dt_hr_local_inicial"], errors="coerce")
             df["vl_latitude_inicial"] = pd.to_numeric(df["vl_latitude_inicial"], errors="coerce")
             df["vl_longitude_inicial"] = pd.to_numeric(df["vl_longitude_inicial"], errors="coerce")
@@ -998,9 +1130,7 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                 st.error("❌ Nenhum ponto válido encontrado após o tratamento dos dados.")
                 st.stop()
 
-            # -------------------------
             # GPKG
-            # -------------------------
             gpkg_path = os.path.join(tmpdir, "base.gpkg")
             with open(gpkg_path, "wb") as f:
                 f.write(uploaded_gpkg.read())
@@ -1013,9 +1143,7 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
             if "GLEBA" in base.columns:
                 base["GLEBA"] = base["GLEBA"].astype(str)
 
-            # -------------------------
             # CORES E FAIXAS
-            # -------------------------
             rpm_faixas = gerar_faixas(RPM_MIN, RPM_MAX, RPM_PASSO, casas=0) if MAPA_RPM else []
             vel_faixas = gerar_faixas(VEL_MIN, VEL_MAX, VEL_PASSO, casas=1) if MAPA_VEL else []
 
@@ -1028,9 +1156,7 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
             rpm_cores = dict(zip(rpm_labels, amostrar_cores_classes(rpm_cmap, len(rpm_labels)))) if MAPA_RPM else {}
             vel_cores = dict(zip(vel_labels, amostrar_cores_classes(vel_cmap, len(vel_labels)))) if MAPA_VEL else {}
 
-            # -------------------------
             # LOOP FAZENDAS
-            # -------------------------
             for FAZENDA_ID in df["cd_fazenda"].dropna().unique():
 
                 df_faz = df[df["cd_fazenda"] == FAZENDA_ID].copy()
@@ -1120,9 +1246,7 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
 
                 gdf_linhas = gpd.GeoDataFrame(linhas, geometry="geometry", crs=base_fazenda.crs)
 
-                # -------------------------
                 # ÁREA TRABALHADA
-                # -------------------------
                 largura_media = df_faz["vl_largura_implemento"].dropna().mean()
                 if pd.isna(largura_media):
                     continue
@@ -1149,9 +1273,7 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                 periodo_ini = dt_min.strftime("%d/%m/%Y %H:%M")
                 periodo_fim = dt_max.strftime("%d/%m/%Y %H:%M")
 
-                # -------------------------
                 # TABELA TALHÕES
-                # -------------------------
                 df_talhoes = None
 
                 if MOSTRAR_TALHOES and "TALHAO" in base_fazenda.columns and "GLEBA" in base_fazenda.columns:
@@ -1199,9 +1321,7 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                 rpm_med_real = round(rpm_validos.mean(), 0) if not rpm_validos.empty else np.nan
                 vel_med_real = round(vel_validos.mean(), 1) if not vel_validos.empty else np.nan
 
-                # -------------------------
                 # DISPLAY RPM / VELOCIDADE
-                # -------------------------
                 gdf_display = None
                 if MAPA_RPM or MAPA_VEL:
                     gdf_display = criar_poligonos_display(gdf_linhas, geom_fazenda)
@@ -1236,97 +1356,29 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                             vel_cores
                         )
 
-                # -------------------------
-                # EXPANDER
-                # -------------------------
                 with st.expander(f"🗺️ Mapa – {nome_fazenda}", expanded=False):
 
-                    # ÁREA TRABALHADA
+                    # ÁREA TRABALHADA (novo modelo visual)
                     if MAPA_AREA:
-                        fig, ax = plt.subplots(figsize=(FIG_WIDTH, FIG_HEIGHT))
-                        plt.subplots_adjust(left=0.15, right=0.85, bottom=0.25, top=0.88)
-
-                        base_fazenda.plot(ax=ax, facecolor=COR_NAO_TRAB, edgecolor="black", linewidth=1.2)
-                        gpd.GeoSeries(area_trabalhada, crs=base_fazenda.crs).plot(
-                            ax=ax, color=COR_TRABALHADA, alpha=0.9
-                        )
-                        base_fazenda.boundary.plot(ax=ax, color="black", linewidth=1.2)
-
-                        if "TALHAO" in base_fazenda.columns:
-                            for _, row in base_fazenda.iterrows():
-                                if row.geometry.is_empty:
-                                    continue
-                                centroid = row.geometry.centroid
-                                ax.text(
-                                    centroid.x,
-                                    centroid.y,
-                                    str(row["TALHAO"]),
-                                    fontsize=7,
-                                    ha="center",
-                                    va="center",
-                                    color="black",
-                                    weight="bold"
-                                )
-
-                        ax.axis("off")
-
-                        pos = ax.get_position()
-                        centro_mapa = (pos.x0 + pos.x1) / 2
-                        base_y = pos.y0
-
-                        ax.legend(
-                            handles=[
-                                mpatches.Patch(color=COR_TRABALHADA, label="Área trabalhada"),
-                                mpatches.Patch(color=COR_NAO_TRAB, label="Área não trabalhada"),
-                                mpatches.Patch(facecolor="none", edgecolor="black", label="Limites da fazenda"),
-                            ],
-                            loc="lower center",
-                            bbox_to_anchor=(centro_mapa, base_y - 0.35),
-                            ncol=3,
-                            frameon=True,
-                            fontsize=13
+                        fig_area = criar_figura_area(
+                            base_fazenda=base_fazenda,
+                            area_trabalhada=area_trabalhada,
+                            area_total_ha=area_total_ha,
+                            area_trab_ha=area_trab_ha,
+                            area_nao_ha=area_nao_ha,
+                            pct_trab=pct_trab,
+                            pct_nao=pct_nao,
+                            periodo_ini=periodo_ini,
+                            periodo_fim=periodo_fim,
+                            fazenda_id=FAZENDA_ID,
+                            nome_fazenda=nome_fazenda,
+                            mostrar_talhoes=True,
+                            cor_trabalhada=COR_TRABALHADA,
+                            cor_nao_trab=COR_NAO_TRAB
                         )
 
-                        resumo_area = (
-                            f"Resumo da operação\n\n"
-                            f"Fazenda: {FAZENDA_ID} – {nome_fazenda}\n\n"
-                            f"Área total: {area_total_ha} ha\n"
-                            f"Trabalhada: {area_trab_ha} ha ({pct_trab}%)\n"
-                            f"Não trabalhada: {area_nao_ha} ha ({pct_nao}%)\n\n"
-                            f"Período:\n{periodo_ini} até {periodo_fim}"
-                        )
-
-                        adicionar_resumo(fig, pos.x1 + 0.02, 0.50, resumo_area, COR_CAIXA)
-
-                        fig.text(
-                            centro_mapa,
-                            base_y - 0.11,
-                            "⚠️ Os resultados apresentados dependem da qualidade dos dados operacionais e geoespaciais fornecidos.",
-                            ha="center",
-                            fontsize=10,
-                            color=COR_RODAPE
-                        )
-                        fig.text(
-                            centro_mapa,
-                            base_y - 0.14,
-                            "Relatório elaborado com base em dados da Solinftec.",
-                            ha="center",
-                            fontsize=10,
-                            color=COR_RODAPE
-                        )
-                        brasilia = pytz.timezone("America/Sao_Paulo")
-                        hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
-                        fig.text(
-                            centro_mapa,
-                            base_y - 0.17,
-                            f"Desenvolvido por Kauã Ceconello • Gerado em {hora}",
-                            ha="center",
-                            fontsize=10,
-                            color=COR_RODAPE
-                        )
-
-                        st.pyplot(fig)
-                        pdf_area = figura_para_pdf_bytes(fig)
+                        st.pyplot(fig_area)
+                        pdf_area = figura_para_pdf_bytes(fig_area)
                         st.download_button(
                             "⬇️ Baixar PDF vetorial – Área Trabalhada",
                             data=pdf_area,
@@ -1334,7 +1386,7 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                             mime="application/pdf",
                             key=f"pdf_area_{FAZENDA_ID}"
                         )
-                        plt.close(fig)
+                        plt.close(fig_area)
 
                     # RPM
                     if MAPA_RPM:
@@ -1347,7 +1399,7 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                             titulo_mapa="Mapa de RPM",
                             titulo_box="Legenda de RPM",
                             faixa_exibida_txt=f"{int(arredondar_para_baixo(RPM_MIN, RPM_PASSO))} até {int(arredondar_para_cima(RPM_MAX, RPM_PASSO))}+",
-                            media_txt=f"RPM médio trabalhado: {formatar_numero(rpm_med_real, 0)}",
+                            media_txt=f"RPM médio: {formatar_numero(rpm_med_real, 0)}",
                             periodo_ini=periodo_ini,
                             periodo_fim=periodo_fim,
                             fazenda_id=FAZENDA_ID,
@@ -1378,7 +1430,7 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                             titulo_mapa="Mapa de Velocidade",
                             titulo_box="Legenda de Velocidade",
                             faixa_exibida_txt=f"{formatar_numero(arredondar_para_baixo(VEL_MIN, VEL_PASSO), 1)} até {formatar_numero(arredondar_para_cima(VEL_MAX, VEL_PASSO), 1)}+ km/h",
-                            media_txt=f"Velocidade média trabalhada: {formatar_numero(vel_med_real, 1)} km/h",
+                            media_txt=f"Vel. média: {formatar_numero(vel_med_real, 1)} km/h",
                             periodo_ini=periodo_ini,
                             periodo_fim=periodo_fim,
                             fazenda_id=FAZENDA_ID,
