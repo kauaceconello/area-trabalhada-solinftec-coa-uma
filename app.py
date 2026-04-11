@@ -6,7 +6,7 @@ import pandas as pd
 import geopandas as gpd
 import numpy as np
 
-from shapely.geometry import LineString, MultiLineString
+from shapely.geometry import LineString
 from shapely.ops import unary_union
 
 import matplotlib.pyplot as plt
@@ -54,8 +54,10 @@ st.markdown(
 def arredondar_para_baixo(valor, base):
     return np.floor(valor / base) * base
 
+
 def arredondar_para_cima(valor, base):
     return np.ceil(valor / base) * base
+
 
 def formatar_numero(valor, casas=0):
     if pd.isna(valor):
@@ -64,10 +66,11 @@ def formatar_numero(valor, casas=0):
         return f"{int(round(valor))}"
     return f"{valor:.{casas}f}".replace(".", ",")
 
+
 def gerar_faixas(vmin, vmax, passo, casas=0):
     """
-    Gera faixas arredondadas, por exemplo:
-    1700 a 1800, 1800 a 1900, ..., 2000+
+    Gera faixas arredondadas:
+    ex. RPM -> 1700 a 1800, 1800 a 1900, ..., 2000+
     """
     inicio = arredondar_para_baixo(vmin, passo)
     fim = arredondar_para_cima(vmax, passo)
@@ -91,6 +94,7 @@ def gerar_faixas(vmin, vmax, passo, casas=0):
     faixas.append((fim, np.inf, label_over))
 
     return faixas
+
 
 def criar_cmap_suave(tipo="rpm"):
     """
@@ -121,6 +125,7 @@ def criar_cmap_suave(tipo="rpm"):
 
     return LinearSegmentedColormap.from_list(f"cmap_{tipo}", cores, N=256)
 
+
 def amostrar_cores_classes(cmap, n_classes):
     """
     Retorna cores suaves para cada faixa.
@@ -129,6 +134,7 @@ def amostrar_cores_classes(cmap, n_classes):
         return [to_hex(cmap(0.5))]
     pontos = np.linspace(0.08, 0.95, n_classes)
     return [to_hex(cmap(x)) for x in pontos]
+
 
 def classificar_valor(valor, faixas):
     """
@@ -145,6 +151,7 @@ def classificar_valor(valor, faixas):
             if a <= valor < b:
                 return label
     return None
+
 
 def desenhar_base_mapa(ax, base_fazenda, facecolor="#f7f7f7", mostrar_talhoes=True):
     base_fazenda.plot(ax=ax, facecolor=facecolor, edgecolor="black", linewidth=1.2)
@@ -168,6 +175,7 @@ def desenhar_base_mapa(ax, base_fazenda, facecolor="#f7f7f7", mostrar_talhoes=Tr
 
     ax.axis("off")
 
+
 def adicionar_resumo(fig, x, y, texto, cor_caixa):
     fig.text(
         x,
@@ -176,6 +184,7 @@ def adicionar_resumo(fig, x, y, texto, cor_caixa):
         fontsize=11,
         bbox=dict(boxstyle="round,pad=0.8", facecolor=cor_caixa, edgecolor="black")
     )
+
 
 def adicionar_footer(fig, centro_mapa, base_y, cor_rodape):
     brasilia = pytz.timezone("America/Sao_Paulo")
@@ -208,9 +217,10 @@ def adicionar_footer(fig, centro_mapa, base_y, cor_rodape):
         color=cor_rodape
     )
 
+
 def desenhar_legenda_horizontal(fig, pos_ax, df_legenda, titulo):
     """
-    Legenda horizontal estilo faixa + % tempo,
+    Legenda horizontal com faixas + % do tempo,
     posicionada onde antes ficava a legenda do mapa de área.
     """
     leg_ax = fig.add_axes([pos_ax.x0 + 0.01, pos_ax.y0 - 0.16, pos_ax.width * 0.98, 0.09])
@@ -269,12 +279,11 @@ def desenhar_legenda_horizontal(fig, pos_ax, df_legenda, titulo):
             fontsize=7
         )
 
+
 def ler_csvs_de_zip(uploaded_zip, tmpdir, idx_zip):
     """
     Extrai cada ZIP em pasta própria e lê todos os CSVs encontrados.
     """
-    dados = []
-
     zip_path = os.path.join(tmpdir, uploaded_zip.name)
     with open(zip_path, "wb") as f:
         f.write(uploaded_zip.read())
@@ -292,6 +301,7 @@ def ler_csvs_de_zip(uploaded_zip, tmpdir, idx_zip):
                 csv_files.append(os.path.join(root, file))
 
     return csv_files
+
 
 def adicionar_segmento_clipado(
     linhas_saida,
@@ -338,6 +348,7 @@ def adicionar_segmento_clipado(
             "duracao_seg": duracao_seg
         })
 
+
 def criar_poligonos_display(gdf_linhas, geom_fazenda):
     """
     Para RPM/Velocidade:
@@ -355,8 +366,9 @@ def criar_poligonos_display(gdf_linhas, geom_fazenda):
         try:
             geom_disp = row.geometry.buffer(
                 largura / 2.0,
-                cap_style=2,   # flat
-                join_style=2   # mitre/bevel mais estável
+                cap_style=2,
+                join_style=2,
+                quad_segs=1
             ).intersection(geom_fazenda)
         except Exception:
             continue
@@ -377,12 +389,19 @@ def criar_poligonos_display(gdf_linhas, geom_fazenda):
 
     return gpd.GeoDataFrame(registros, geometry="geometry", crs=gdf_linhas.crs)
 
-def calcular_legenda_percentual(gdf_display, coluna_valor, faixas, mapa_cores):
+
+def calcular_legenda_percentual(gdf_display, coluna_valor, coluna_classe, faixas, mapa_cores):
     """
     Calcula % do tempo em cada faixa.
     Usa duracao_seg como peso.
     """
-    dados = gdf_display.dropna(subset=[coluna_valor]).copy()
+    if gdf_display is None or gdf_display.empty:
+        return pd.DataFrame(columns=["faixa", "percentual", "cor"])
+
+    if coluna_valor not in gdf_display.columns or coluna_classe not in gdf_display.columns:
+        return pd.DataFrame(columns=["faixa", "percentual", "cor"])
+
+    dados = gdf_display.dropna(subset=[coluna_valor, coluna_classe]).copy()
 
     if dados.empty:
         return pd.DataFrame(columns=["faixa", "percentual", "cor"])
@@ -392,12 +411,15 @@ def calcular_legenda_percentual(gdf_display, coluna_valor, faixas, mapa_cores):
 
     linhas = []
     for _, _, label in faixas:
-        subset = dados[dados["classe"] == label]
+        subset = dados[dados[coluna_classe] == label]
 
         if usar_contagem:
-            percentual = len(subset) / len(dados) * 100 if len(dados) > 0 else 0
+            percentual = (len(subset) / len(dados) * 100) if len(dados) > 0 else 0
         else:
-            percentual = subset["duracao_seg"].fillna(0).sum() / total_tempo * 100 if total_tempo > 0 else 0
+            percentual = (
+                subset["duracao_seg"].fillna(0).sum() / total_tempo * 100
+                if total_tempo > 0 else 0
+            )
 
         linhas.append({
             "faixa": label,
@@ -407,9 +429,10 @@ def calcular_legenda_percentual(gdf_display, coluna_valor, faixas, mapa_cores):
 
     return pd.DataFrame(linhas)
 
+
 def plotar_mapa_classes(ax, base_fazenda, gdf_plot, coluna_classe, mapa_cores, mostrar_talhoes=True):
     """
-    Plota o mapa por classe (muito mais leve que plotar elemento por elemento).
+    Plota o mapa por classe (mais leve que plotar elemento por elemento).
     """
     desenhar_base_mapa(ax, base_fazenda, facecolor="#f7f7f7", mostrar_talhoes=mostrar_talhoes)
 
@@ -830,9 +853,13 @@ if uploaded_zips and uploaded_gpkg and GERAR:
                 if MAPA_RPM or MAPA_VEL:
                     gdf_display = criar_poligonos_display(gdf_linhas, geom_fazenda)
 
-                    if not gdf_display.empty:
-                        gdf_display["classe_rpm"] = gdf_display["rpm_medio"].apply(lambda x: classificar_valor(x, rpm_faixas))
-                        gdf_display["classe_vel"] = gdf_display["vel_media"].apply(lambda x: classificar_valor(x, vel_faixas))
+                    if gdf_display is not None and not gdf_display.empty:
+                        gdf_display["classe_rpm"] = gdf_display["rpm_medio"].apply(
+                            lambda x: classificar_valor(x, rpm_faixas)
+                        )
+                        gdf_display["classe_vel"] = gdf_display["vel_media"].apply(
+                            lambda x: classificar_valor(x, vel_faixas)
+                        )
 
                 # Legendas (% tempo por faixa)
                 df_leg_rpm = pd.DataFrame(columns=["faixa", "percentual", "cor"])
@@ -842,12 +869,14 @@ if uploaded_zips and uploaded_gpkg and GERAR:
                     df_leg_rpm = calcular_legenda_percentual(
                         gdf_display,
                         "rpm_medio",
+                        "classe_rpm",
                         rpm_faixas,
                         rpm_cores
                     )
                     df_leg_vel = calcular_legenda_percentual(
                         gdf_display,
                         "vel_media",
+                        "classe_vel",
                         vel_faixas,
                         vel_cores
                     )
