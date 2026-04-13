@@ -39,6 +39,9 @@ mpl.rcParams["ps.fonttype"] = 42
 if "mapas_gerados" not in st.session_state:
     st.session_state["mapas_gerados"] = False
 
+if "modo_debug" not in st.session_state:
+    st.session_state["modo_debug"] = False
+
 
 # =========================================================
 # ESTILO GLOBAL
@@ -46,9 +49,6 @@ if "mapas_gerados" not in st.session_state:
 st.markdown(
     """
     <style>
-    /* =====================================================
-       FUNDO GERAL - REMOVE O BRANCO
-       ===================================================== */
     html, body, [data-testid="stApp"] {
         background: linear-gradient(180deg, #020617 0%, #0B1020 50%, #0F172A 100%) !important;
     }
@@ -76,9 +76,6 @@ st.markdown(
         background: transparent !important;
     }
 
-    /* =====================================================
-       TIPOGRAFIA GLOBAL
-       ===================================================== */
     * {
         font-family: "Inter", "Segoe UI", sans-serif;
     }
@@ -100,9 +97,6 @@ st.markdown(
         color: #94A3B8 !important;
     }
 
-    /* =====================================================
-       HERO / TOPO
-       ===================================================== */
     .hero-card {
         background: linear-gradient(135deg, #0B1020 0%, #111827 100%);
         border: 1px solid rgba(96, 165, 250, 0.18);
@@ -127,9 +121,6 @@ st.markdown(
         margin-bottom: 0;
     }
 
-    /* =====================================================
-       SIDEBAR
-       ===================================================== */
     section[data-testid="stSidebar"] {
         background: linear-gradient(180deg, #020617 0%, #0B1020 100%) !important;
         border-right: 1px solid rgba(255,255,255,0.06);
@@ -156,9 +147,6 @@ st.markdown(
         color: #F8FAFC !important;
     }
 
-    /* =====================================================
-       INPUTS / PARÂMETROS
-       ===================================================== */
     label {
         font-size: 0.84rem !important;
         font-weight: 600 !important;
@@ -209,9 +197,6 @@ st.markdown(
         color: #F8FAFC !important;
     }
 
-    /* =====================================================
-       BOTÕES
-       ===================================================== */
     div.stButton > button {
         width: 100%;
         height: 3.05em;
@@ -230,9 +215,6 @@ st.markdown(
         box-shadow: 0 14px 28px rgba(37, 99, 235, 0.45);
     }
 
-    /* =====================================================
-       CARD DE ENVIO
-       ===================================================== */
     .upload-hero {
         background: linear-gradient(135deg, #0B1020 0%, #111827 100%);
         border: 1px solid rgba(37, 99, 235, 0.22);
@@ -255,9 +237,6 @@ st.markdown(
         line-height: 1.45;
     }
 
-    /* =====================================================
-       UPLOADERS
-       ===================================================== */
     [data-testid="stFileUploader"] {
         background: linear-gradient(180deg, #0B1020 0%, #111827 100%) !important;
         border: 1px solid rgba(96, 165, 250, 0.22) !important;
@@ -312,9 +291,6 @@ st.markdown(
         fill: #93C5FD !important;
     }
 
-    /* =====================================================
-       EXPANDERS / ALERTAS / DATAFRAME
-       ===================================================== */
     [data-testid="stExpander"] {
         background: rgba(255,255,255,0.05) !important;
         border-radius: 16px !important;
@@ -399,9 +375,6 @@ def formatar_numero(valor, casas=0):
 
 
 def gerar_faixas(vmin, vmax, passo, casas=0):
-    """
-    Gera faixas arredondadas.
-    """
     inicio = arredondar_para_baixo(vmin, passo)
     fim = arredondar_para_cima(vmax, passo)
 
@@ -427,9 +400,6 @@ def gerar_faixas(vmin, vmax, passo, casas=0):
 
 
 def criar_cmap_suave(tipo="rpm"):
-    """
-    Paletas vivas e harmônicas.
-    """
     if tipo == "rpm":
         cores = [
             "#0B4F8A",
@@ -480,9 +450,6 @@ def classificar_valor(valor, faixas):
 
 
 def figura_para_pdf_bytes(fig):
-    """
-    Exporta a figura em PDF vetorial.
-    """
     buffer = io.BytesIO()
     fig.savefig(
         buffer,
@@ -506,12 +473,6 @@ def normalizar_nomes_colunas(df):
 
 
 def normalizar_id(valor):
-    """
-    Normaliza IDs como fazenda/equipamento:
-    - remove espaços
-    - converte 61142.0 -> 61142
-    - preserva texto quando necessário
-    """
     if pd.isna(valor):
         return np.nan
 
@@ -532,10 +493,6 @@ def normalizar_coluna_texto(serie):
 
 
 def ler_csv_flexivel(csv_path):
-    """
-    Tenta ler CSV com diferentes separadores.
-    Retorna o DataFrame com maior chance de parse correto.
-    """
     tentativas = [
         {"sep": ";", "encoding": "latin1", "engine": "python"},
         {"sep": ",", "encoding": "latin1", "engine": "python"},
@@ -625,10 +582,6 @@ def adicionar_segmento_clipado(
 
 
 def criar_poligonos_display(gdf_linhas, geom_fazenda):
-    """
-    Cria a faixa real da operação usando apenas a largura do implemento (em metros),
-    sem multiplicador extra.
-    """
     registros = []
 
     for row in gdf_linhas.itertuples():
@@ -715,9 +668,6 @@ def desenhar_base_mapa(
     margem_rel_x=0.020,
     margem_rel_y=0.030
 ):
-    """
-    Mapa com zoom melhor distribuído e leitura mais limpa.
-    """
     ax.set_facecolor("#F8FAFC")
 
     base_fazenda.plot(
@@ -808,9 +758,6 @@ def plotar_mapa_classes(ax, base_fazenda, gdf_plot, coluna_classe, mapa_cores, m
 
 
 def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_ini, periodo_fim):
-    """
-    Cabeçalho superior com aparência mais executiva.
-    """
     ax_header = fig.add_axes([0.025, 0.905, 0.95, 0.08])
     ax_header.axis("off")
 
@@ -855,9 +802,6 @@ def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_in
 
 
 def adicionar_footer(fig, cor_rodape="#64748B"):
-    """
-    Rodapé mais discreto e elegante.
-    """
     brasilia = pytz.timezone("America/Sao_Paulo")
     hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
 
@@ -889,9 +833,6 @@ def desenhar_box_legenda_tematica(
     casas=0,
     reserve_pos=(0.71, 0.16, 0.25, 0.68)
 ):
-    """
-    Card lateral da legenda com barras de percentual.
-    """
     rx, ry, rw, rh = reserve_pos
 
     ax_box = fig.add_axes([rx, ry, rw, rh])
@@ -1052,9 +993,6 @@ def criar_figura_tematica(
     nome_fazenda,
     casas
 ):
-    """
-    Figura temática com mapa + card lateral de legenda.
-    """
     fig = plt.figure(figsize=(15.5, 8.8))
     fig.patch.set_facecolor("#F4F7FB")
 
@@ -1126,9 +1064,6 @@ def criar_figura_tematica(
     return fig
 
 
-# =========================================================
-# MODELO VISUAL PARA ÁREA TRABALHADA
-# =========================================================
 def criar_figura_area(
     base_fazenda,
     area_trabalhada,
@@ -1145,9 +1080,6 @@ def criar_figura_area(
     cor_trabalhada,
     cor_nao_trab
 ):
-    """
-    Mapa de área trabalhada com visual mais executivo.
-    """
     fig = plt.figure(figsize=(15.5, 8.8))
     fig.patch.set_facecolor("#F4F7FB")
 
@@ -1371,6 +1303,14 @@ with sidebar_container():
     else:
         MOSTRAR_TALHOES = False
 
+with sidebar_container():
+    st.markdown("### 🧪 Debug")
+    MODO_DEBUG = st.checkbox(
+        "Mostrar diagnóstico detalhado",
+        value=False,
+        key="modo_debug_chk"
+    )
+
 RPM_MIN = 1200
 RPM_MAX = 2000
 RPM_PASSO = 100
@@ -1437,7 +1377,6 @@ TEMPO_MAX_SEG = 60
 
 COR_TRABALHADA = "#22C55E"
 COR_NAO_TRAB = "#E5E7EB"
-COR_RODAPE = "#64748B"
 
 if MAPA_RPM and RPM_MAX <= RPM_MIN:
     st.sidebar.error("⚠️ O RPM máximo deve ser maior que o RPM mínimo.")
@@ -1543,9 +1482,6 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
             df = pd.concat(dfs, ignore_index=True)
             df = normalizar_nomes_colunas(df)
 
-            # -------------------------------------------------
-            # VALIDAÇÃO DAS COLUNAS OBRIGATÓRIAS BASE
-            # -------------------------------------------------
             colunas_obrigatorias_base = [
                 "dt_hr_local_inicial",
                 "vl_latitude_inicial",
@@ -1567,21 +1503,14 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                 st.write("Colunas encontradas:", list(df.columns))
                 st.stop()
 
-            # -------------------------------------------------
-            # COLUNAS OPCIONAIS
-            # -------------------------------------------------
             coluna_rpm_existe = "vl_rpm" in df.columns
             coluna_vel_existe = "vl_velocidade" in df.columns
 
-            # Cria as colunas se não existirem para evitar KeyError no fluxo
             if not coluna_rpm_existe:
                 df["vl_rpm"] = np.nan
             if not coluna_vel_existe:
                 df["vl_velocidade"] = np.nan
 
-            # -------------------------------------------------
-            # CONVERSÕES
-            # -------------------------------------------------
             df["dt_hr_local_inicial"] = pd.to_datetime(df["dt_hr_local_inicial"], errors="coerce")
             df["vl_latitude_inicial"] = pd.to_numeric(df["vl_latitude_inicial"], errors="coerce")
             df["vl_longitude_inicial"] = pd.to_numeric(df["vl_longitude_inicial"], errors="coerce")
@@ -1589,17 +1518,11 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
             df["vl_rpm"] = pd.to_numeric(df["vl_rpm"], errors="coerce")
             df["vl_velocidade"] = pd.to_numeric(df["vl_velocidade"], errors="coerce")
 
-            # -------------------------------------------------
-            # NORMALIZAÇÃO DE CAMPOS-CHAVE
-            # -------------------------------------------------
             df["cd_estado_norm"] = normalizar_coluna_texto(df["cd_estado"])
             df["cd_operacao_parada_num"] = pd.to_numeric(df["cd_operacao_parada"], errors="coerce")
             df["cd_fazenda"] = normalizar_coluna_id(df["cd_fazenda"])
             df["cd_equipamento"] = normalizar_coluna_id(df["cd_equipamento"])
 
-            # -------------------------------------------------
-            # FILTRO OPERACIONAL
-            # -------------------------------------------------
             total_antes_filtro = len(df)
 
             df = df[
@@ -1609,7 +1532,6 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
 
             total_depois_filtro = len(df)
 
-            # Remove linhas sem coordenadas ou data
             df = df.dropna(subset=[
                 "dt_hr_local_inicial",
                 "vl_latitude_inicial",
@@ -1628,9 +1550,6 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                 st.error("❌ Nenhum ponto válido encontrado após o tratamento dos dados.")
                 st.stop()
 
-            # -------------------------------------------------
-            # DEFINIÇÃO DOS MAPAS REALMENTE DISPONÍVEIS
-            # -------------------------------------------------
             MAPA_RPM_DISPONIVEL = MAPA_RPM
             MAPA_VEL_DISPONIVEL = MAPA_VEL
 
@@ -1652,9 +1571,6 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                 st.error("❌ Nenhum mapa pôde ser gerado com os dados enviados.")
                 st.stop()
 
-            # -------------------------------------------------
-            # LEITURA DA BASE CARTOGRÁFICA
-            # -------------------------------------------------
             gpkg_path = os.path.join(tmpdir, "base.gpkg")
             with open(gpkg_path, "wb") as f:
                 f.write(uploaded_gpkg.read())
@@ -1674,13 +1590,16 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
             if "PROPRIEDADE" not in base.columns:
                 base["PROPRIEDADE"] = base["FAZENDA"]
 
-            # -------------------------------------------------
-            # CRUZAMENTO ENTRE CSV E BASE
-            # -------------------------------------------------
             fazendas_csv = sorted(df["cd_fazenda"].dropna().unique().tolist())
             fazendas_base = sorted(base["FAZENDA"].dropna().unique().tolist())
 
             fazendas_em_comum = sorted(set(fazendas_csv).intersection(set(fazendas_base)))
+
+            if MODO_DEBUG:
+                with st.expander("🧪 Debug – Cruzamento de fazendas", expanded=True):
+                    st.write("Fazendas no CSV:", fazendas_csv[:50])
+                    st.write("Fazendas na base:", fazendas_base[:50])
+                    st.write("Fazendas em comum:", fazendas_em_comum[:50])
 
             if not fazendas_em_comum:
                 st.error("❌ Nenhuma fazenda do CSV foi encontrada na base cartográfica.")
@@ -1688,9 +1607,6 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                 st.write("Fazendas encontradas na base:", fazendas_base[:50])
                 st.stop()
 
-            # -------------------------------------------------
-            # PARÂMETROS TEMÁTICOS
-            # -------------------------------------------------
             rpm_faixas = gerar_faixas(RPM_MIN, RPM_MAX, RPM_PASSO, casas=0) if MAPA_RPM_DISPONIVEL else []
             vel_faixas = gerar_faixas(VEL_MIN, VEL_MAX, VEL_PASSO, casas=1) if MAPA_VEL_DISPONIVEL else []
 
@@ -1712,14 +1628,22 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                 base_fazenda = base[base["FAZENDA"] == FAZENDA_ID].copy()
 
                 if df_faz.empty:
+                    st.warning(f"⚠️ Fazenda {FAZENDA_ID}: sem dados operacionais após filtros.")
                     motivos_sem_mapa.append(f"Fazenda {FAZENDA_ID}: sem dados operacionais após filtros.")
                     continue
 
                 if base_fazenda.empty:
+                    st.warning(f"⚠️ Fazenda {FAZENDA_ID}: não encontrada na base cartográfica.")
                     motivos_sem_mapa.append(f"Fazenda {FAZENDA_ID}: não encontrada na base cartográfica.")
                     continue
 
                 nome_fazenda = str(base_fazenda["PROPRIEDADE"].iloc[0])
+
+                if MODO_DEBUG:
+                    st.write(f"--- DEBUG FAZENDA {FAZENDA_ID} ---")
+                    st.write("Registros da fazenda:", len(df_faz))
+                    st.write("Features da base:", len(base_fazenda))
+                    st.write("Equipamentos:", df_faz['cd_equipamento'].nunique())
 
                 gdf_pts = gpd.GeoDataFrame(
                     df_faz,
@@ -1796,13 +1720,21 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                     )
 
                 if not linhas:
+                    st.warning(f"⚠️ Fazenda {FAZENDA_ID}: não foi possível formar linhas operacionais.")
                     motivos_sem_mapa.append(f"Fazenda {FAZENDA_ID}: não foi possível formar linhas operacionais.")
                     continue
 
                 gdf_linhas = gpd.GeoDataFrame(linhas, geometry="geometry", crs=base_fazenda.crs)
 
+                if MODO_DEBUG:
+                    st.write("Linhas geradas:", len(gdf_linhas))
+
                 largura_media = df_faz["vl_largura_implemento"].dropna().mean()
+                if MODO_DEBUG:
+                    st.write("Largura média implemento:", largura_media)
+
                 if pd.isna(largura_media):
+                    st.warning(f"⚠️ Fazenda {FAZENDA_ID}: sem largura válida de implemento.")
                     motivos_sem_mapa.append(f"Fazenda {FAZENDA_ID}: sem largura válida de implemento.")
                     continue
 
@@ -1816,7 +1748,14 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                 area_trab_ha = round(area_trabalhada.area / 10000, 2)
                 area_nao_ha = round(area_nao_trabalhada.area / 10000, 2)
 
+                if MODO_DEBUG:
+                    st.write("Área trabalhada (ha):", area_trab_ha)
+                    st.write("Área total (ha):", area_total_ha)
+
                 if area_trab_ha < AREA_MIN_HA:
+                    st.warning(
+                        f"⚠️ Fazenda {FAZENDA_ID}: área trabalhada ({area_trab_ha:.2f} ha) abaixo do mínimo configurado ({AREA_MIN_HA:.2f} ha)."
+                    )
                     motivos_sem_mapa.append(
                         f"Fazenda {FAZENDA_ID}: área trabalhada ({area_trab_ha:.2f} ha) abaixo do mínimo configurado ({AREA_MIN_HA:.2f} ha)."
                     )
@@ -2027,5 +1966,6 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                     with st.expander("🔎 Ver motivos", expanded=True):
                         for motivo in motivos_sem_mapa:
                             st.write(f"- {motivo}")
+
 else:
     st.info("⬆️ Envie os arquivos e clique em **Gerar mapa**.")
