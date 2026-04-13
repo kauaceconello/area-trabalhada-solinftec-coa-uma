@@ -1,11 +1,5 @@
 # APP STREAMLIT – ÁREA TRABALHADA (SOLINFTEC)
 # Desenvolvido por Kauã Ceconello
-# Versão ajustada:
-# - formação de linhas quebrando somente por tempo
-# - mapas de RPM e Velocidade sem buffer extra
-# - largura dos mapas temáticos = largura informada no CSV
-# - sem dissolve nos mapas temáticos
-# - faixas abaixo do mínimo e acima do máximo
 
 import io
 import os
@@ -1526,23 +1520,41 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
 
             df = pd.concat(dfs, ignore_index=True)
 
+            # =========================================================
+            # VALIDAÇÃO DE COLUNAS OBRIGATÓRIAS
+            # =========================================================
+            # Sempre obrigatórias
             colunas_csv_obrigatorias = [
                 "dt_hr_local_inicial",
                 "vl_latitude_inicial",
                 "vl_longitude_inicial",
                 "vl_largura_implemento",
-                "vl_rpm",
-                "vl_velocidade",
                 "cd_estado",
                 "cd_operacao_parada",
                 "cd_fazenda",
                 "cd_equipamento"
             ]
+
+            # Obrigatórias apenas conforme mapas selecionados
+            if MAPA_RPM:
+                colunas_csv_obrigatorias.append("vl_rpm")
+
+            if MAPA_VEL:
+                colunas_csv_obrigatorias.append("vl_velocidade")
+
             faltantes_csv = validar_colunas(df, colunas_csv_obrigatorias)
             if faltantes_csv:
-                st.error("❌ O(s) CSV(s) não possuem as colunas obrigatórias: " + ", ".join(faltantes_csv))
+                st.error("❌ O(s) CSV(s) não possuem as colunas obrigatórias para os mapas selecionados: " + ", ".join(faltantes_csv))
                 st.stop()
 
+            # Se as colunas opcionais não existirem, cria com NaN
+            if "vl_rpm" not in df.columns:
+                df["vl_rpm"] = np.nan
+
+            if "vl_velocidade" not in df.columns:
+                df["vl_velocidade"] = np.nan
+
+            # Conversões
             df["dt_hr_local_inicial"] = pd.to_datetime(df["dt_hr_local_inicial"], errors="coerce")
             df["vl_latitude_inicial"] = pd.to_numeric(df["vl_latitude_inicial"], errors="coerce")
             df["vl_longitude_inicial"] = pd.to_numeric(df["vl_longitude_inicial"], errors="coerce")
@@ -1651,7 +1663,6 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                         else:
                             delta = (tempo - ultimo_tempo).total_seconds()
 
-                            # Mantido como no seu fluxo original:
                             # quebra SOMENTE por tempo
                             if delta <= TEMPO_MAX_SEG:
                                 linha_atual.append(row.geometry)
@@ -1775,7 +1786,6 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
 
                 gdf_display = None
                 if MAPA_RPM or MAPA_VEL:
-                    # IMPORTANTÍSSIMO:
                     # mapas temáticos usam EXATAMENTE a largura do CSV, sem multiplicador
                     gdf_display = criar_poligonos_display(gdf_linhas, geom_fazenda)
 
@@ -1814,10 +1824,10 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                     if gdf_display is not None and not gdf_display.empty:
                         col_debug1, col_debug2 = st.columns(2)
                         with col_debug1:
-                            if MAPA_RPM:
+                            if MAPA_RPM and "classe_rpm" in gdf_display.columns:
                                 st.caption(f"Trechos RPM sem classe: {int(gdf_display['classe_rpm'].isna().sum())}")
                         with col_debug2:
-                            if MAPA_VEL:
+                            if MAPA_VEL and "classe_vel" in gdf_display.columns:
                                 st.caption(f"Trechos Velocidade sem classe: {int(gdf_display['classe_vel'].isna().sum())}")
 
                     if MAPA_AREA:
