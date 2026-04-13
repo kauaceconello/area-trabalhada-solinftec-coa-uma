@@ -13,7 +13,6 @@ import geopandas as gpd
 import streamlit as st
 import pytz
 
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.colors import LinearSegmentedColormap, to_hex
@@ -31,16 +30,8 @@ st.set_page_config(
     layout="wide"
 )
 
-# Ajustes para exportação vetorial mais fiel
-mpl.rcParams["path.simplify"] = False
-mpl.rcParams["pdf.fonttype"] = 42
-mpl.rcParams["ps.fonttype"] = 42
-
 if "mapas_gerados" not in st.session_state:
     st.session_state["mapas_gerados"] = False
-
-if "modo_debug" not in st.session_state:
-    st.session_state["modo_debug"] = False
 
 
 # =========================================================
@@ -49,6 +40,9 @@ if "modo_debug" not in st.session_state:
 st.markdown(
     """
     <style>
+    /* =====================================================
+       FUNDO GERAL - REMOVE O BRANCO
+       ===================================================== */
     html, body, [data-testid="stApp"] {
         background: linear-gradient(180deg, #020617 0%, #0B1020 50%, #0F172A 100%) !important;
     }
@@ -76,6 +70,9 @@ st.markdown(
         background: transparent !important;
     }
 
+    /* =====================================================
+       TIPOGRAFIA GLOBAL
+       ===================================================== */
     * {
         font-family: "Inter", "Segoe UI", sans-serif;
     }
@@ -97,6 +94,9 @@ st.markdown(
         color: #94A3B8 !important;
     }
 
+    /* =====================================================
+       HERO / TOPO
+       ===================================================== */
     .hero-card {
         background: linear-gradient(135deg, #0B1020 0%, #111827 100%);
         border: 1px solid rgba(96, 165, 250, 0.18);
@@ -121,6 +121,9 @@ st.markdown(
         margin-bottom: 0;
     }
 
+    /* =====================================================
+       SIDEBAR
+       ===================================================== */
     section[data-testid="stSidebar"] {
         background: linear-gradient(180deg, #020617 0%, #0B1020 100%) !important;
         border-right: 1px solid rgba(255,255,255,0.06);
@@ -147,12 +150,16 @@ st.markdown(
         color: #F8FAFC !important;
     }
 
+    /* =====================================================
+       INPUTS / PARÂMETROS
+       ===================================================== */
     label {
         font-size: 0.84rem !important;
         font-weight: 600 !important;
         color: #CBD5E1 !important;
     }
 
+    /* Input base */
     input, textarea {
         background-color: #020617 !important;
         color: #F8FAFC !important;
@@ -166,12 +173,14 @@ st.markdown(
         color: #64748B !important;
     }
 
+    /* NumberInput */
     [data-testid="stNumberInput"] input {
         background-color: #020617 !important;
         color: #F8FAFC !important;
         border: 1px solid rgba(255,255,255,0.12) !important;
     }
 
+    /* Botões + e - do number input */
     [data-testid="stNumberInput"] button {
         background: rgba(255,255,255,0.04) !important;
         color: #F8FAFC !important;
@@ -182,6 +191,7 @@ st.markdown(
         fill: #F8FAFC !important;
     }
 
+    /* Selectbox */
     [data-baseweb="select"] > div {
         background-color: #020617 !important;
         color: #F8FAFC !important;
@@ -193,10 +203,14 @@ st.markdown(
         color: #F8FAFC !important;
     }
 
+    /* Checkbox */
     [data-testid="stCheckbox"] label {
         color: #F8FAFC !important;
     }
 
+    /* =====================================================
+       BOTÕES
+       ===================================================== */
     div.stButton > button {
         width: 100%;
         height: 3.05em;
@@ -215,6 +229,9 @@ st.markdown(
         box-shadow: 0 14px 28px rgba(37, 99, 235, 0.45);
     }
 
+    /* =====================================================
+       CARD DE ENVIO
+       ===================================================== */
     .upload-hero {
         background: linear-gradient(135deg, #0B1020 0%, #111827 100%);
         border: 1px solid rgba(37, 99, 235, 0.22);
@@ -237,6 +254,9 @@ st.markdown(
         line-height: 1.45;
     }
 
+    /* =====================================================
+       UPLOADERS
+       ===================================================== */
     [data-testid="stFileUploader"] {
         background: linear-gradient(180deg, #0B1020 0%, #111827 100%) !important;
         border: 1px solid rgba(96, 165, 250, 0.22) !important;
@@ -291,6 +311,9 @@ st.markdown(
         fill: #93C5FD !important;
     }
 
+    /* =====================================================
+       EXPANDERS / ALERTAS / DATAFRAME
+       ===================================================== */
     [data-testid="stExpander"] {
         background: rgba(255,255,255,0.05) !important;
         border-radius: 16px !important;
@@ -319,6 +342,9 @@ st.markdown(
         border: 1px solid rgba(255,255,255,0.12) !important;
     }
 
+    /* =====================================================
+       AJUSTES FINOS
+       ===================================================== */
     hr {
         border-color: rgba(255,255,255,0.08) !important;
     }
@@ -375,6 +401,9 @@ def formatar_numero(valor, casas=0):
 
 
 def gerar_faixas(vmin, vmax, passo, casas=0):
+    """
+    Gera faixas arredondadas.
+    """
     inicio = arredondar_para_baixo(vmin, passo)
     fim = arredondar_para_cima(vmax, passo)
 
@@ -400,6 +429,9 @@ def gerar_faixas(vmin, vmax, passo, casas=0):
 
 
 def criar_cmap_suave(tipo="rpm"):
+    """
+    Paletas vivas e harmônicas.
+    """
     if tipo == "rpm":
         cores = [
             "#0B4F8A",
@@ -450,6 +482,9 @@ def classificar_valor(valor, faixas):
 
 
 def figura_para_pdf_bytes(fig):
+    """
+    Exporta a figura em PDF vetorial.
+    """
     buffer = io.BytesIO()
     fig.savefig(
         buffer,
@@ -459,63 +494,6 @@ def figura_para_pdf_bytes(fig):
     )
     buffer.seek(0)
     return buffer.getvalue()
-
-
-def normalizar_nomes_colunas(df):
-    df = df.copy()
-    df.columns = (
-        pd.Index(df.columns)
-        .astype(str)
-        .str.strip()
-        .str.lower()
-    )
-    return df
-
-
-def normalizar_id(valor):
-    if pd.isna(valor):
-        return np.nan
-
-    txt = str(valor).strip()
-
-    if txt.endswith(".0"):
-        txt = txt[:-2]
-
-    return txt
-
-
-def normalizar_coluna_id(serie):
-    return serie.apply(normalizar_id)
-
-
-def normalizar_coluna_texto(serie):
-    return serie.astype(str).str.strip().str.upper()
-
-
-def ler_csv_flexivel(csv_path):
-    tentativas = [
-        {"sep": ";", "encoding": "latin1", "engine": "python"},
-        {"sep": ",", "encoding": "latin1", "engine": "python"},
-        {"sep": None, "encoding": "latin1", "engine": "python"},
-    ]
-
-    melhor_df = None
-    melhor_qtd_colunas = -1
-    ultimo_erro = None
-
-    for params in tentativas:
-        try:
-            df_temp = pd.read_csv(csv_path, **params)
-            if df_temp is not None and len(df_temp.columns) > melhor_qtd_colunas:
-                melhor_df = df_temp
-                melhor_qtd_colunas = len(df_temp.columns)
-        except Exception as e:
-            ultimo_erro = e
-
-    if melhor_df is None:
-        raise ValueError(f"Não foi possível ler o CSV. Último erro: {ultimo_erro}")
-
-    return melhor_df
 
 
 def ler_csvs_de_zip(uploaded_zip, tmpdir, idx_zip):
@@ -582,10 +560,14 @@ def adicionar_segmento_clipado(
 
 
 def criar_poligonos_display(gdf_linhas, geom_fazenda):
+    """
+    Cria a faixa real da operação usando apenas a largura do implemento (em metros),
+    sem multiplicador extra.
+    """
     registros = []
 
-    for row in gdf_linhas.itertuples():
-        largura = row.largura_media
+    for _, row in gdf_linhas.iterrows():
+        largura = row["largura_media"]
 
         if pd.isna(largura) or largura <= 0:
             continue
@@ -605,10 +587,10 @@ def criar_poligonos_display(gdf_linhas, geom_fazenda):
 
         registros.append({
             "geometry": geom_disp,
-            "rpm_medio": row.rpm_medio,
-            "vel_media": row.vel_media,
-            "largura_media": row.largura_media,
-            "duracao_seg": row.duracao_seg
+            "rpm_medio": row["rpm_medio"],
+            "vel_media": row["vel_media"],
+            "largura_media": row["largura_media"],
+            "duracao_seg": row["duracao_seg"]
         })
 
     if not registros:
@@ -668,6 +650,9 @@ def desenhar_base_mapa(
     margem_rel_x=0.020,
     margem_rel_y=0.030
 ):
+    """
+    Mapa com zoom melhor distribuído e leitura mais limpa.
+    """
     ax.set_facecolor("#F8FAFC")
 
     base_fazenda.plot(
@@ -675,16 +660,14 @@ def desenhar_base_mapa(
         facecolor=facecolor,
         edgecolor="#334155",
         linewidth=1.0,
-        zorder=1,
-        rasterized=False
+        zorder=1
     )
 
     base_fazenda.boundary.plot(
         ax=ax,
         color="#0F172A",
         linewidth=1.1,
-        zorder=3,
-        rasterized=False
+        zorder=3
     )
 
     if mostrar_talhoes and "TALHAO" in base_fazenda.columns:
@@ -752,12 +735,14 @@ def plotar_mapa_classes(ax, base_fazenda, gdf_plot, coluna_classe, mapa_cores, m
                 color=mapa_cores[classe],
                 edgecolor="none",
                 alpha=1.0,
-                zorder=2,
-                rasterized=False
+                zorder=2
             )
 
 
 def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_ini, periodo_fim):
+    """
+    Cabeçalho superior com aparência mais executiva.
+    """
     ax_header = fig.add_axes([0.025, 0.905, 0.95, 0.08])
     ax_header.axis("off")
 
@@ -802,6 +787,9 @@ def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_in
 
 
 def adicionar_footer(fig, cor_rodape="#64748B"):
+    """
+    Rodapé mais discreto e elegante.
+    """
     brasilia = pytz.timezone("America/Sao_Paulo")
     hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
 
@@ -833,6 +821,9 @@ def desenhar_box_legenda_tematica(
     casas=0,
     reserve_pos=(0.71, 0.16, 0.25, 0.68)
 ):
+    """
+    Card lateral da legenda com barras de percentual.
+    """
     rx, ry, rw, rh = reserve_pos
 
     ax_box = fig.add_axes([rx, ry, rw, rh])
@@ -993,6 +984,9 @@ def criar_figura_tematica(
     nome_fazenda,
     casas
 ):
+    """
+    Figura temática com mapa + card lateral de legenda.
+    """
     fig = plt.figure(figsize=(15.5, 8.8))
     fig.patch.set_facecolor("#F4F7FB")
 
@@ -1064,6 +1058,9 @@ def criar_figura_tematica(
     return fig
 
 
+# =========================================================
+# MODELO VISUAL PARA ÁREA TRABALHADA
+# =========================================================
 def criar_figura_area(
     base_fazenda,
     area_trabalhada,
@@ -1080,6 +1077,9 @@ def criar_figura_area(
     cor_trabalhada,
     cor_nao_trab
 ):
+    """
+    Mapa de área trabalhada com visual mais executivo.
+    """
     fig = plt.figure(figsize=(15.5, 8.8))
     fig.patch.set_facecolor("#F4F7FB")
 
@@ -1125,24 +1125,21 @@ def criar_figura_area(
         facecolor=cor_nao_trab,
         edgecolor="#334155",
         linewidth=1.0,
-        zorder=1,
-        rasterized=False
+        zorder=1
     )
 
     gpd.GeoSeries(area_trabalhada, crs=base_fazenda.crs).plot(
         ax=ax,
         color=cor_trabalhada,
         alpha=0.88,
-        zorder=2,
-        rasterized=False
+        zorder=2
     )
 
     base_fazenda.boundary.plot(
         ax=ax,
         color="#0F172A",
         linewidth=1.1,
-        zorder=3,
-        rasterized=False
+        zorder=3
     )
 
     if mostrar_talhoes and "TALHAO" in base_fazenda.columns:
@@ -1303,14 +1300,6 @@ with sidebar_container():
     else:
         MOSTRAR_TALHOES = False
 
-with sidebar_container():
-    st.markdown("### 🧪 Debug")
-    MODO_DEBUG = st.checkbox(
-        "Mostrar diagnóstico detalhado",
-        value=False,
-        key="modo_debug_chk"
-    )
-
 RPM_MIN = 1200
 RPM_MAX = 2000
 RPM_PASSO = 100
@@ -1377,6 +1366,20 @@ TEMPO_MAX_SEG = 60
 
 COR_TRABALHADA = "#22C55E"
 COR_NAO_TRAB = "#E5E7EB"
+COR_CAIXA = "#FFFFFF"
+COR_RODAPE = "#64748B"
+
+COR_FUNDO_FIG = "#F4F7FB"
+COR_CARD = "#FFFFFF"
+COR_BORDA = "#D8E1EB"
+COR_TEXTO = "#0F172A"
+COR_TEXTO_SEC = "#475569"
+COR_LINHA_SUAVE = "#E2E8F0"
+COR_DESTAQUE = "#2563EB"
+COR_SUCESSO = "#16A34A"
+
+FIG_WIDTH = 25
+FIG_HEIGHT = 9
 
 if MAPA_RPM and RPM_MAX <= RPM_MIN:
     st.sidebar.error("⚠️ O RPM máximo deve ser maior que o RPM mínimo.")
@@ -1469,8 +1472,12 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
 
                 for csv_path in csv_files:
                     try:
-                        df_temp = ler_csv_flexivel(csv_path)
-                        df_temp = normalizar_nomes_colunas(df_temp)
+                        df_temp = pd.read_csv(
+                            csv_path,
+                            sep=";",
+                            encoding="latin1",
+                            engine="python"
+                        )
                         dfs.append(df_temp)
                     except Exception as e:
                         st.error(f"❌ Erro ao ler CSV {os.path.basename(csv_path)}: {e}")
@@ -1480,36 +1487,6 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                 st.stop()
 
             df = pd.concat(dfs, ignore_index=True)
-            df = normalizar_nomes_colunas(df)
-
-            colunas_obrigatorias_base = [
-                "dt_hr_local_inicial",
-                "vl_latitude_inicial",
-                "vl_longitude_inicial",
-                "vl_largura_implemento",
-                "cd_estado",
-                "cd_operacao_parada",
-                "cd_fazenda",
-                "cd_equipamento",
-            ]
-
-            faltando_base = [col for col in colunas_obrigatorias_base if col not in df.columns]
-
-            if faltando_base:
-                st.error(
-                    "❌ Os seguintes campos obrigatórios não foram encontrados nos CSVs: "
-                    + ", ".join(faltando_base)
-                )
-                st.write("Colunas encontradas:", list(df.columns))
-                st.stop()
-
-            coluna_rpm_existe = "vl_rpm" in df.columns
-            coluna_vel_existe = "vl_velocidade" in df.columns
-
-            if not coluna_rpm_existe:
-                df["vl_rpm"] = np.nan
-            if not coluna_vel_existe:
-                df["vl_velocidade"] = np.nan
 
             df["dt_hr_local_inicial"] = pd.to_datetime(df["dt_hr_local_inicial"], errors="coerce")
             df["vl_latitude_inicial"] = pd.to_numeric(df["vl_latitude_inicial"], errors="coerce")
@@ -1518,19 +1495,12 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
             df["vl_rpm"] = pd.to_numeric(df["vl_rpm"], errors="coerce")
             df["vl_velocidade"] = pd.to_numeric(df["vl_velocidade"], errors="coerce")
 
-            df["cd_estado_norm"] = normalizar_coluna_texto(df["cd_estado"])
-            df["cd_operacao_parada_num"] = pd.to_numeric(df["cd_operacao_parada"], errors="coerce")
-            df["cd_fazenda"] = normalizar_coluna_id(df["cd_fazenda"])
-            df["cd_equipamento"] = normalizar_coluna_id(df["cd_equipamento"])
-
-            total_antes_filtro = len(df)
-
             df = df[
-                (df["cd_estado_norm"] == "E") &
-                (df["cd_operacao_parada_num"] == -1)
+                (df["cd_estado"] == "E") &
+                (df["cd_operacao_parada"] == -1)
             ].copy()
 
-            total_depois_filtro = len(df)
+            df["cd_fazenda"] = df["cd_fazenda"].astype(str)
 
             df = df.dropna(subset=[
                 "dt_hr_local_inicial",
@@ -1538,37 +1508,8 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                 "vl_longitude_inicial"
             ])
 
-            total_final = len(df)
-
-            st.caption(
-                f"📌 Registros lidos: {total_antes_filtro:,} | "
-                f"Após filtro operacional: {total_depois_filtro:,} | "
-                f"Válidos para mapa: {total_final:,}".replace(",", ".")
-            )
-
             if df.empty:
                 st.error("❌ Nenhum ponto válido encontrado após o tratamento dos dados.")
-                st.stop()
-
-            MAPA_RPM_DISPONIVEL = MAPA_RPM
-            MAPA_VEL_DISPONIVEL = MAPA_VEL
-
-            if MAPA_RPM and not coluna_rpm_existe:
-                st.warning("⚠️ Mapa de RPM selecionado, mas a coluna 'vl_rpm' não foi encontrada nos arquivos enviados. O mapa de RPM não será gerado.")
-                MAPA_RPM_DISPONIVEL = False
-            elif MAPA_RPM and df["vl_rpm"].dropna().empty:
-                st.warning("⚠️ Mapa de RPM selecionado, mas não há valores válidos de RPM nos arquivos enviados. O mapa de RPM não será gerado.")
-                MAPA_RPM_DISPONIVEL = False
-
-            if MAPA_VEL and not coluna_vel_existe:
-                st.warning("⚠️ Mapa de Velocidade selecionado, mas a coluna 'vl_velocidade' não foi encontrada nos arquivos enviados. O mapa de Velocidade não será gerado.")
-                MAPA_VEL_DISPONIVEL = False
-            elif MAPA_VEL and df["vl_velocidade"].dropna().empty:
-                st.warning("⚠️ Mapa de Velocidade selecionado, mas não há valores válidos de Velocidade nos arquivos enviados. O mapa de Velocidade não será gerado.")
-                MAPA_VEL_DISPONIVEL = False
-
-            if not MAPA_AREA and not MAPA_RPM_DISPONIVEL and not MAPA_VEL_DISPONIVEL:
-                st.error("❌ Nenhum mapa pôde ser gerado com os dados enviados.")
                 st.stop()
 
             gpkg_path = os.path.join(tmpdir, "base.gpkg")
@@ -1576,74 +1517,34 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                 f.write(uploaded_gpkg.read())
 
             base = gpd.read_file(gpkg_path)
-
-            if "FAZENDA" not in base.columns:
-                st.error("❌ A base GPKG não possui a coluna obrigatória 'FAZENDA'.")
-                st.stop()
-
-            base["FAZENDA"] = normalizar_coluna_id(base["FAZENDA"])
+            base["FAZENDA"] = base["FAZENDA"].astype(str)
 
             if "TALHAO" in base.columns:
-                base["TALHAO"] = normalizar_coluna_id(base["TALHAO"])
+                base["TALHAO"] = base["TALHAO"].astype(str)
             if "GLEBA" in base.columns:
-                base["GLEBA"] = normalizar_coluna_id(base["GLEBA"])
-            if "PROPRIEDADE" not in base.columns:
-                base["PROPRIEDADE"] = base["FAZENDA"]
+                base["GLEBA"] = base["GLEBA"].astype(str)
 
-            fazendas_csv = sorted(df["cd_fazenda"].dropna().unique().tolist())
-            fazendas_base = sorted(base["FAZENDA"].dropna().unique().tolist())
-
-            fazendas_em_comum = sorted(set(fazendas_csv).intersection(set(fazendas_base)))
-
-            if MODO_DEBUG:
-                with st.expander("🧪 Debug – Cruzamento de fazendas", expanded=True):
-                    st.write("Fazendas no CSV:", fazendas_csv[:50])
-                    st.write("Fazendas na base:", fazendas_base[:50])
-                    st.write("Fazendas em comum:", fazendas_em_comum[:50])
-
-            if not fazendas_em_comum:
-                st.error("❌ Nenhuma fazenda do CSV foi encontrada na base cartográfica.")
-                st.write("Fazendas encontradas no CSV:", fazendas_csv[:50])
-                st.write("Fazendas encontradas na base:", fazendas_base[:50])
-                st.stop()
-
-            rpm_faixas = gerar_faixas(RPM_MIN, RPM_MAX, RPM_PASSO, casas=0) if MAPA_RPM_DISPONIVEL else []
-            vel_faixas = gerar_faixas(VEL_MIN, VEL_MAX, VEL_PASSO, casas=1) if MAPA_VEL_DISPONIVEL else []
+            rpm_faixas = gerar_faixas(RPM_MIN, RPM_MAX, RPM_PASSO, casas=0) if MAPA_RPM else []
+            vel_faixas = gerar_faixas(VEL_MIN, VEL_MAX, VEL_PASSO, casas=1) if MAPA_VEL else []
 
             rpm_cmap = criar_cmap_suave("rpm")
             vel_cmap = criar_cmap_suave("vel")
 
-            rpm_labels = [f[2] for f in rpm_faixas] if MAPA_RPM_DISPONIVEL else []
-            vel_labels = [f[2] for f in vel_faixas] if MAPA_VEL_DISPONIVEL else []
+            rpm_labels = [f[2] for f in rpm_faixas] if MAPA_RPM else []
+            vel_labels = [f[2] for f in vel_faixas] if MAPA_VEL else []
 
-            rpm_cores = dict(zip(rpm_labels, amostrar_cores_classes(rpm_cmap, len(rpm_labels)))) if MAPA_RPM_DISPONIVEL else {}
-            vel_cores = dict(zip(vel_labels, amostrar_cores_classes(vel_cmap, len(vel_labels)))) if MAPA_VEL_DISPONIVEL else {}
+            rpm_cores = dict(zip(rpm_labels, amostrar_cores_classes(rpm_cmap, len(rpm_labels)))) if MAPA_RPM else {}
+            vel_cores = dict(zip(vel_labels, amostrar_cores_classes(vel_cmap, len(vel_labels)))) if MAPA_VEL else {}
 
-            mapas_gerados_total = 0
-            motivos_sem_mapa = []
-
-            for FAZENDA_ID in fazendas_em_comum:
+            for FAZENDA_ID in df["cd_fazenda"].dropna().unique():
 
                 df_faz = df[df["cd_fazenda"] == FAZENDA_ID].copy()
                 base_fazenda = base[base["FAZENDA"] == FAZENDA_ID].copy()
 
-                if df_faz.empty:
-                    st.warning(f"⚠️ Fazenda {FAZENDA_ID}: sem dados operacionais após filtros.")
-                    motivos_sem_mapa.append(f"Fazenda {FAZENDA_ID}: sem dados operacionais após filtros.")
+                if df_faz.empty or base_fazenda.empty:
                     continue
 
-                if base_fazenda.empty:
-                    st.warning(f"⚠️ Fazenda {FAZENDA_ID}: não encontrada na base cartográfica.")
-                    motivos_sem_mapa.append(f"Fazenda {FAZENDA_ID}: não encontrada na base cartográfica.")
-                    continue
-
-                nome_fazenda = str(base_fazenda["PROPRIEDADE"].iloc[0])
-
-                if MODO_DEBUG:
-                    st.write(f"--- DEBUG FAZENDA {FAZENDA_ID} ---")
-                    st.write("Registros da fazenda:", len(df_faz))
-                    st.write("Features da base:", len(base_fazenda))
-                    st.write("Equipamentos:", df_faz['cd_equipamento'].nunique())
+                nome_fazenda = base_fazenda["PROPRIEDADE"].iloc[0]
 
                 gdf_pts = gpd.GeoDataFrame(
                     df_faz,
@@ -1720,22 +1621,12 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                     )
 
                 if not linhas:
-                    st.warning(f"⚠️ Fazenda {FAZENDA_ID}: não foi possível formar linhas operacionais.")
-                    motivos_sem_mapa.append(f"Fazenda {FAZENDA_ID}: não foi possível formar linhas operacionais.")
                     continue
 
                 gdf_linhas = gpd.GeoDataFrame(linhas, geometry="geometry", crs=base_fazenda.crs)
 
-                if MODO_DEBUG:
-                    st.write("Linhas geradas:", len(gdf_linhas))
-
                 largura_media = df_faz["vl_largura_implemento"].dropna().mean()
-                if MODO_DEBUG:
-                    st.write("Largura média implemento:", largura_media)
-
                 if pd.isna(largura_media):
-                    st.warning(f"⚠️ Fazenda {FAZENDA_ID}: sem largura válida de implemento.")
-                    motivos_sem_mapa.append(f"Fazenda {FAZENDA_ID}: sem largura válida de implemento.")
                     continue
 
                 largura_final = largura_media * MULTIPLICADOR_BUFFER
@@ -1748,17 +1639,7 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                 area_trab_ha = round(area_trabalhada.area / 10000, 2)
                 area_nao_ha = round(area_nao_trabalhada.area / 10000, 2)
 
-                if MODO_DEBUG:
-                    st.write("Área trabalhada (ha):", area_trab_ha)
-                    st.write("Área total (ha):", area_total_ha)
-
                 if area_trab_ha < AREA_MIN_HA:
-                    st.warning(
-                        f"⚠️ Fazenda {FAZENDA_ID}: área trabalhada ({area_trab_ha:.2f} ha) abaixo do mínimo configurado ({AREA_MIN_HA:.2f} ha)."
-                    )
-                    motivos_sem_mapa.append(
-                        f"Fazenda {FAZENDA_ID}: área trabalhada ({area_trab_ha:.2f} ha) abaixo do mínimo configurado ({AREA_MIN_HA:.2f} ha)."
-                    )
                     continue
 
                 pct_trab = round(area_trab_ha / area_total_ha * 100, 1) if area_total_ha > 0 else 0
@@ -1817,19 +1698,16 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                 rpm_med_real = round(rpm_validos.mean(), 0) if not rpm_validos.empty else np.nan
                 vel_med_real = round(vel_validos.mean(), 1) if not vel_validos.empty else np.nan
 
-                rpm_faz_disponivel = MAPA_RPM_DISPONIVEL and not rpm_validos.empty
-                vel_faz_disponivel = MAPA_VEL_DISPONIVEL and not vel_validos.empty
-
                 gdf_display = None
-                if rpm_faz_disponivel or vel_faz_disponivel:
+                if MAPA_RPM or MAPA_VEL:
                     gdf_display = criar_poligonos_display(gdf_linhas, geom_fazenda)
 
                     if gdf_display is not None and not gdf_display.empty:
-                        if rpm_faz_disponivel:
+                        if MAPA_RPM:
                             gdf_display["classe_rpm"] = gdf_display["rpm_medio"].apply(
                                 lambda x: classificar_valor(x, rpm_faixas)
                             )
-                        if vel_faz_disponivel:
+                        if MAPA_VEL:
                             gdf_display["classe_vel"] = gdf_display["vel_media"].apply(
                                 lambda x: classificar_valor(x, vel_faixas)
                             )
@@ -1838,7 +1716,7 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                 df_leg_vel = pd.DataFrame(columns=["cor", "inicio", "fim", "faixa", "percentual"])
 
                 if gdf_display is not None and not gdf_display.empty:
-                    if rpm_faz_disponivel:
+                    if MAPA_RPM:
                         df_leg_rpm = calcular_legenda_percentual(
                             gdf_display,
                             "classe_rpm",
@@ -1846,7 +1724,7 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                             rpm_cores
                         )
 
-                    if vel_faz_disponivel:
+                    if MAPA_VEL:
                         df_leg_vel = calcular_legenda_percentual(
                             gdf_display,
                             "classe_vel",
@@ -1875,8 +1753,6 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                         )
 
                         st.pyplot(fig_area)
-                        mapas_gerados_total += 1
-
                         pdf_area = figura_para_pdf_bytes(fig_area)
                         st.download_button(
                             "⬇️ Baixar PDF vetorial – Área Trabalhada",
@@ -1888,84 +1764,66 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                         plt.close(fig_area)
 
                     if MAPA_RPM:
-                        if rpm_faz_disponivel and gdf_display is not None and not gdf_display.empty:
-                            fig_rpm = criar_figura_tematica(
-                                base_fazenda=base_fazenda,
-                                gdf_display=gdf_display,
-                                coluna_classe="classe_rpm",
-                                mapa_cores=rpm_cores,
-                                df_legenda=df_leg_rpm,
-                                titulo_mapa="Mapa de RPM",
-                                titulo_box="Legenda de RPM",
-                                faixa_exibida_txt=f"{int(arredondar_para_baixo(RPM_MIN, RPM_PASSO))} até {int(arredondar_para_cima(RPM_MAX, RPM_PASSO))}+",
-                                media_txt=f"RPM médio: {formatar_numero(rpm_med_real, 0)}",
-                                periodo_ini=periodo_ini,
-                                periodo_fim=periodo_fim,
-                                fazenda_id=FAZENDA_ID,
-                                nome_fazenda=nome_fazenda,
-                                casas=0
-                            )
+                        fig_rpm = criar_figura_tematica(
+                            base_fazenda=base_fazenda,
+                            gdf_display=gdf_display,
+                            coluna_classe="classe_rpm",
+                            mapa_cores=rpm_cores,
+                            df_legenda=df_leg_rpm,
+                            titulo_mapa="Mapa de RPM",
+                            titulo_box="Legenda de RPM",
+                            faixa_exibida_txt=f"{int(arredondar_para_baixo(RPM_MIN, RPM_PASSO))} até {int(arredondar_para_cima(RPM_MAX, RPM_PASSO))}+",
+                            media_txt=f"RPM médio: {formatar_numero(rpm_med_real, 0)}",
+                            periodo_ini=periodo_ini,
+                            periodo_fim=periodo_fim,
+                            fazenda_id=FAZENDA_ID,
+                            nome_fazenda=nome_fazenda,
+                            casas=0
+                        )
 
-                            st.pyplot(fig_rpm)
-                            mapas_gerados_total += 1
-
-                            pdf_rpm = figura_para_pdf_bytes(fig_rpm)
-                            st.download_button(
-                                "⬇️ Baixar PDF vetorial – RPM",
-                                data=pdf_rpm,
-                                file_name=f"mapa_rpm_{FAZENDA_ID}.pdf",
-                                mime="application/pdf",
-                                key=f"pdf_rpm_{FAZENDA_ID}"
-                            )
-                            plt.close(fig_rpm)
-                        else:
-                            st.info("ℹ️ Não há valores válidos de RPM para esta fazenda/período. O mapa de RPM não foi gerado.")
+                        st.pyplot(fig_rpm)
+                        pdf_rpm = figura_para_pdf_bytes(fig_rpm)
+                        st.download_button(
+                            "⬇️ Baixar PDF vetorial – RPM",
+                            data=pdf_rpm,
+                            file_name=f"mapa_rpm_{FAZENDA_ID}.pdf",
+                            mime="application/pdf",
+                            key=f"pdf_rpm_{FAZENDA_ID}"
+                        )
+                        plt.close(fig_rpm)
 
                     if MAPA_VEL:
-                        if vel_faz_disponivel and gdf_display is not None and not gdf_display.empty:
-                            fig_vel = criar_figura_tematica(
-                                base_fazenda=base_fazenda,
-                                gdf_display=gdf_display,
-                                coluna_classe="classe_vel",
-                                mapa_cores=vel_cores,
-                                df_legenda=df_leg_vel,
-                                titulo_mapa="Mapa de Velocidade",
-                                titulo_box="Legenda de Velocidade",
-                                faixa_exibida_txt=f"{formatar_numero(arredondar_para_baixo(VEL_MIN, VEL_PASSO), 1)} até {formatar_numero(arredondar_para_cima(VEL_MAX, VEL_PASSO), 1)}+ km/h",
-                                media_txt=f"Vel. média: {formatar_numero(vel_med_real, 1)} km/h",
-                                periodo_ini=periodo_ini,
-                                periodo_fim=periodo_fim,
-                                fazenda_id=FAZENDA_ID,
-                                nome_fazenda=nome_fazenda,
-                                casas=1
-                            )
+                        fig_vel = criar_figura_tematica(
+                            base_fazenda=base_fazenda,
+                            gdf_display=gdf_display,
+                            coluna_classe="classe_vel",
+                            mapa_cores=vel_cores,
+                            df_legenda=df_leg_vel,
+                            titulo_mapa="Mapa de Velocidade",
+                            titulo_box="Legenda de Velocidade",
+                            faixa_exibida_txt=f"{formatar_numero(arredondar_para_baixo(VEL_MIN, VEL_PASSO), 1)} até {formatar_numero(arredondar_para_cima(VEL_MAX, VEL_PASSO), 1)}+ km/h",
+                            media_txt=f"Vel. média: {formatar_numero(vel_med_real, 1)} km/h",
+                            periodo_ini=periodo_ini,
+                            periodo_fim=periodo_fim,
+                            fazenda_id=FAZENDA_ID,
+                            nome_fazenda=nome_fazenda,
+                            casas=1
+                        )
 
-                            st.pyplot(fig_vel)
-                            mapas_gerados_total += 1
-
-                            pdf_vel = figura_para_pdf_bytes(fig_vel)
-                            st.download_button(
-                                "⬇️ Baixar PDF vetorial – Velocidade",
-                                data=pdf_vel,
-                                file_name=f"mapa_velocidade_{FAZENDA_ID}.pdf",
-                                mime="application/pdf",
-                                key=f"pdf_vel_{FAZENDA_ID}"
-                            )
-                            plt.close(fig_vel)
-                        else:
-                            st.info("ℹ️ Não há valores válidos de Velocidade para esta fazenda/período. O mapa de Velocidade não foi gerado.")
+                        st.pyplot(fig_vel)
+                        pdf_vel = figura_para_pdf_bytes(fig_vel)
+                        st.download_button(
+                            "⬇️ Baixar PDF vetorial – Velocidade",
+                            data=pdf_vel,
+                            file_name=f"mapa_velocidade_{FAZENDA_ID}.pdf",
+                            mime="application/pdf",
+                            key=f"pdf_vel_{FAZENDA_ID}"
+                        )
+                        plt.close(fig_vel)
 
                     if df_talhoes is not None:
                         st.markdown("### 🌾 Área por Gleba / Talhão")
                         st.dataframe(df_talhoes, use_container_width=True, hide_index=True)
-
-            if mapas_gerados_total == 0:
-                st.warning("⚠️ Nenhum mapa foi gerado com os dados e parâmetros atuais.")
-
-                if motivos_sem_mapa:
-                    with st.expander("🔎 Ver motivos", expanded=True):
-                        for motivo in motivos_sem_mapa:
-                            st.write(f"- {motivo}")
 
 else:
     st.info("⬆️ Envie os arquivos e clique em **Gerar mapa**.")
