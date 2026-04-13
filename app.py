@@ -1,5 +1,13 @@
 # APP STREAMLIT – ÁREA TRABALHADA (SOLINFTEC)
 # Desenvolvido por Kauã Ceconello
+# Versão revisada com correções de:
+# - linhas a menos / a mais em mapas de RPM e Velocidade
+# - quebra por distância
+# - remoção de dissolve
+# - faixas abaixo do mínimo
+# - rateio de duração em geometrias clipadas
+# - validação de colunas obrigatórias
+# - leitura robusta de CSV
 
 import io
 import os
@@ -40,9 +48,6 @@ if "mapas_gerados" not in st.session_state:
 st.markdown(
     """
     <style>
-    /* =====================================================
-       FUNDO GERAL - REMOVE O BRANCO
-       ===================================================== */
     html, body, [data-testid="stApp"] {
         background: linear-gradient(180deg, #020617 0%, #0B1020 50%, #0F172A 100%) !important;
     }
@@ -70,9 +75,6 @@ st.markdown(
         background: transparent !important;
     }
 
-    /* =====================================================
-       TIPOGRAFIA GLOBAL
-       ===================================================== */
     * {
         font-family: "Inter", "Segoe UI", sans-serif;
     }
@@ -94,9 +96,6 @@ st.markdown(
         color: #94A3B8 !important;
     }
 
-    /* =====================================================
-       HERO / TOPO
-       ===================================================== */
     .hero-card {
         background: linear-gradient(135deg, #0B1020 0%, #111827 100%);
         border: 1px solid rgba(96, 165, 250, 0.18);
@@ -121,9 +120,6 @@ st.markdown(
         margin-bottom: 0;
     }
 
-    /* =====================================================
-       SIDEBAR
-       ===================================================== */
     section[data-testid="stSidebar"] {
         background: linear-gradient(180deg, #020617 0%, #0B1020 100%) !important;
         border-right: 1px solid rgba(255,255,255,0.06);
@@ -150,16 +146,12 @@ st.markdown(
         color: #F8FAFC !important;
     }
 
-    /* =====================================================
-       INPUTS / PARÂMETROS
-       ===================================================== */
     label {
         font-size: 0.84rem !important;
         font-weight: 600 !important;
         color: #CBD5E1 !important;
     }
 
-    /* Input base */
     input, textarea {
         background-color: #020617 !important;
         color: #F8FAFC !important;
@@ -173,14 +165,12 @@ st.markdown(
         color: #64748B !important;
     }
 
-    /* NumberInput */
     [data-testid="stNumberInput"] input {
         background-color: #020617 !important;
         color: #F8FAFC !important;
         border: 1px solid rgba(255,255,255,0.12) !important;
     }
 
-    /* Botões + e - do number input */
     [data-testid="stNumberInput"] button {
         background: rgba(255,255,255,0.04) !important;
         color: #F8FAFC !important;
@@ -191,7 +181,6 @@ st.markdown(
         fill: #F8FAFC !important;
     }
 
-    /* Selectbox */
     [data-baseweb="select"] > div {
         background-color: #020617 !important;
         color: #F8FAFC !important;
@@ -203,14 +192,10 @@ st.markdown(
         color: #F8FAFC !important;
     }
 
-    /* Checkbox */
     [data-testid="stCheckbox"] label {
         color: #F8FAFC !important;
     }
 
-    /* =====================================================
-       BOTÕES
-       ===================================================== */
     div.stButton > button {
         width: 100%;
         height: 3.05em;
@@ -229,9 +214,6 @@ st.markdown(
         box-shadow: 0 14px 28px rgba(37, 99, 235, 0.45);
     }
 
-    /* =====================================================
-       CARD DE ENVIO
-       ===================================================== */
     .upload-hero {
         background: linear-gradient(135deg, #0B1020 0%, #111827 100%);
         border: 1px solid rgba(37, 99, 235, 0.22);
@@ -254,9 +236,6 @@ st.markdown(
         line-height: 1.45;
     }
 
-    /* =====================================================
-       UPLOADERS
-       ===================================================== */
     [data-testid="stFileUploader"] {
         background: linear-gradient(180deg, #0B1020 0%, #111827 100%) !important;
         border: 1px solid rgba(96, 165, 250, 0.22) !important;
@@ -311,9 +290,6 @@ st.markdown(
         fill: #93C5FD !important;
     }
 
-    /* =====================================================
-       EXPANDERS / ALERTAS / DATAFRAME
-       ===================================================== */
     [data-testid="stExpander"] {
         background: rgba(255,255,255,0.05) !important;
         border-radius: 16px !important;
@@ -342,9 +318,6 @@ st.markdown(
         border: 1px solid rgba(255,255,255,0.12) !important;
     }
 
-    /* =====================================================
-       AJUSTES FINOS
-       ===================================================== */
     hr {
         border-color: rgba(255,255,255,0.08) !important;
     }
@@ -375,9 +348,6 @@ st.markdown(
 # FUNÇÕES AUXILIARES
 # =========================================================
 def sidebar_container():
-    """
-    Compatibilidade com versões do Streamlit.
-    """
     try:
         return st.sidebar.container(border=True)
     except TypeError:
@@ -400,9 +370,17 @@ def formatar_numero(valor, casas=0):
     return f"{valor:.{casas}f}".replace(".", ",")
 
 
+def validar_colunas(df, colunas_obrigatorias, nome_arquivo="arquivo"):
+    faltantes = [c for c in colunas_obrigatorias if c not in df.columns]
+    return faltantes
+
+
 def gerar_faixas(vmin, vmax, passo, casas=0):
     """
-    Gera faixas arredondadas.
+    Gera faixas incluindo:
+    - abaixo do mínimo
+    - intervalos internos
+    - acima do máximo
     """
     inicio = arredondar_para_baixo(vmin, passo)
     fim = arredondar_para_cima(vmax, passo)
@@ -410,28 +388,33 @@ def gerar_faixas(vmin, vmax, passo, casas=0):
     edges = np.arange(inicio, fim + passo, passo)
     faixas = []
 
+    # Abaixo do mínimo exibido
+    if casas == 0:
+        faixas.append((-np.inf, inicio, f"< {int(inicio)}"))
+    else:
+        faixas.append((-np.inf, inicio, f"< {inicio:.{casas}f}".replace(".", ",")))
+
     for i in range(len(edges) - 1):
         a = edges[i]
         b = edges[i + 1]
+
         if casas == 0:
             label = f"{int(a)} a {int(b)}"
         else:
             label = f"{a:.{casas}f} a {b:.{casas}f}".replace(".", ",")
+
         faixas.append((a, b, label))
 
     if casas == 0:
         label_over = f"{int(fim)}+"
     else:
         label_over = f"{fim:.{casas}f}+".replace(".", ",")
-    faixas.append((fim, np.inf, label_over))
 
+    faixas.append((fim, np.inf, label_over))
     return faixas
 
 
 def criar_cmap_suave(tipo="rpm"):
-    """
-    Paletas vivas e harmônicas.
-    """
     if tipo == "rpm":
         cores = [
             "#0B4F8A",
@@ -463,7 +446,7 @@ def criar_cmap_suave(tipo="rpm"):
 def amostrar_cores_classes(cmap, n_classes):
     if n_classes <= 1:
         return [to_hex(cmap(0.55))]
-    pontos = np.linspace(0.10, 0.98, n_classes)
+    pontos = np.linspace(0.08, 0.98, n_classes)
     return [to_hex(cmap(x)) for x in pontos]
 
 
@@ -472,7 +455,9 @@ def classificar_valor(valor, faixas):
         return None
 
     for a, b, label in faixas:
-        if np.isinf(b):
+        if np.isneginf(a) and valor < b:
+            return label
+        elif np.isinf(b):
             if valor >= a:
                 return label
         else:
@@ -482,9 +467,6 @@ def classificar_valor(valor, faixas):
 
 
 def figura_para_pdf_bytes(fig):
-    """
-    Exporta a figura em PDF vetorial.
-    """
     buffer = io.BytesIO()
     fig.savefig(
         buffer,
@@ -494,6 +476,24 @@ def figura_para_pdf_bytes(fig):
     )
     buffer.seek(0)
     return buffer.getvalue()
+
+
+def ler_csv_robusto(csv_path):
+    tentativas = [
+        {"sep": ";", "encoding": "latin1"},
+        {"sep": ";", "encoding": "utf-8"},
+        {"sep": ",", "encoding": "utf-8"},
+        {"sep": ",", "encoding": "latin1"},
+    ]
+
+    ultimo_erro = None
+    for cfg in tentativas:
+        try:
+            return pd.read_csv(csv_path, engine="python", **cfg)
+        except Exception as e:
+            ultimo_erro = e
+
+    raise ultimo_erro
 
 
 def ler_csvs_de_zip(uploaded_zip, tmpdir, idx_zip):
@@ -526,10 +526,21 @@ def adicionar_segmento_clipado(
     t_fim,
     geom_fazenda
 ):
+    """
+    Cria uma LineString com os pontos, faz clip na fazenda e,
+    se o clip gerar múltiplos trechos, rateia a duração pela proporção do comprimento.
+    """
     if len(pontos) < 2:
         return
 
-    linha = LineString(pontos)
+    try:
+        linha = LineString(pontos)
+    except Exception:
+        return
+
+    if linha.is_empty or linha.length == 0:
+        return
+
     linha_clip = linha.intersection(geom_fazenda)
 
     if linha_clip.is_empty:
@@ -538,31 +549,44 @@ def adicionar_segmento_clipado(
     rpm_medio = float(np.nanmean(rpms)) if len(rpms) else np.nan
     vel_media = float(np.nanmean(vels)) if len(vels) else np.nan
     largura_media = float(np.nanmean(larguras)) if len(larguras) else np.nan
-    duracao_seg = (t_fim - t_inicio).total_seconds() if t_inicio is not None and t_fim is not None else np.nan
+    duracao_seg = (
+        (t_fim - t_inicio).total_seconds()
+        if t_inicio is not None and t_fim is not None else np.nan
+    )
 
     geoms = []
     if linha_clip.geom_type == "LineString":
         geoms = [linha_clip]
     elif linha_clip.geom_type == "MultiLineString":
-        geoms = list(linha_clip.geoms)
+        geoms = [g for g in linha_clip.geoms if not g.is_empty and g.length > 0]
+
+    comprimento_total_clipado = sum(g.length for g in geoms) if geoms else 0
 
     for geom in geoms:
         if geom.is_empty or geom.length == 0:
             continue
+
+        if (
+            pd.notna(duracao_seg)
+            and comprimento_total_clipado > 0
+        ):
+            duracao_rateada = duracao_seg * (geom.length / comprimento_total_clipado)
+        else:
+            duracao_rateada = np.nan
 
         linhas_saida.append({
             "geometry": geom,
             "rpm_medio": rpm_medio,
             "vel_media": vel_media,
             "largura_media": largura_media,
-            "duracao_seg": duracao_seg
+            "duracao_seg": duracao_rateada
         })
 
 
-def criar_poligonos_display(gdf_linhas, geom_fazenda):
+def criar_poligonos_display(gdf_linhas, geom_fazenda, multiplicador_buffer=1.0):
     """
-    Cria a faixa real da operação usando apenas a largura do implemento (em metros),
-    sem multiplicador extra.
+    Cria a faixa de display dos mapas temáticos usando a largura do implemento
+    e o mesmo multiplicador de buffer aplicado no mapa de área.
     """
     registros = []
 
@@ -572,9 +596,11 @@ def criar_poligonos_display(gdf_linhas, geom_fazenda):
         if pd.isna(largura) or largura <= 0:
             continue
 
+        largura_final = largura * multiplicador_buffer
+
         try:
             geom_disp = row.geometry.buffer(
-                largura / 2.0,
+                largura_final / 2.0,
                 cap_style=2,
                 join_style=2,
                 quad_segs=1
@@ -607,7 +633,6 @@ def calcular_legenda_percentual(gdf_display, coluna_classe, faixas, mapa_cores):
         return pd.DataFrame(columns=["cor", "inicio", "fim", "faixa", "percentual"])
 
     dados = gdf_display.dropna(subset=[coluna_classe]).copy()
-
     if dados.empty:
         return pd.DataFrame(columns=["cor", "inicio", "fim", "faixa", "percentual"])
 
@@ -627,10 +652,11 @@ def calcular_legenda_percentual(gdf_display, coluna_classe, faixas, mapa_cores):
             )
 
         fim_txt = "+" if np.isinf(b) else b
+        inicio_txt = "-" if np.isneginf(a) else a
 
         linhas.append({
             "cor": mapa_cores.get(label, "#cccccc"),
-            "inicio": a,
+            "inicio": inicio_txt,
             "fim": fim_txt,
             "faixa": label,
             "percentual": percentual
@@ -650,9 +676,6 @@ def desenhar_base_mapa(
     margem_rel_x=0.020,
     margem_rel_y=0.030
 ):
-    """
-    Mapa com zoom melhor distribuído e leitura mais limpa.
-    """
     ax.set_facecolor("#F8FAFC")
 
     base_fazenda.plot(
@@ -707,6 +730,10 @@ def desenhar_base_mapa(
 
 
 def plotar_mapa_classes(ax, base_fazenda, gdf_plot, coluna_classe, mapa_cores, mostrar_talhoes=True):
+    """
+    Importante: NÃO faz dissolve.
+    Assim preserva a separação visual dos trechos/faixas.
+    """
     desenhar_base_mapa(
         ax,
         base_fazenda,
@@ -716,23 +743,19 @@ def plotar_mapa_classes(ax, base_fazenda, gdf_plot, coluna_classe, mapa_cores, m
         margem_rel_y=0.030
     )
 
-    if gdf_plot.empty:
+    if gdf_plot is None or gdf_plot.empty:
         return
 
     gdf_tmp = gdf_plot[[coluna_classe, "geometry"]].dropna(subset=[coluna_classe]).copy()
     if gdf_tmp.empty:
         return
 
-    gdf_diss = gdf_tmp.dissolve(by=coluna_classe, as_index=False)
-
-    classes_na_ordem = [c for c in mapa_cores.keys() if c in gdf_diss[coluna_classe].dropna().unique()]
-
-    for classe in classes_na_ordem:
-        sub = gdf_diss[gdf_diss[coluna_classe] == classe]
+    for classe, cor in mapa_cores.items():
+        sub = gdf_tmp[gdf_tmp[coluna_classe] == classe]
         if not sub.empty:
             sub.plot(
                 ax=ax,
-                color=mapa_cores[classe],
+                color=cor,
                 edgecolor="none",
                 alpha=1.0,
                 zorder=2
@@ -740,9 +763,6 @@ def plotar_mapa_classes(ax, base_fazenda, gdf_plot, coluna_classe, mapa_cores, m
 
 
 def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_ini, periodo_fim):
-    """
-    Cabeçalho superior com aparência mais executiva.
-    """
     ax_header = fig.add_axes([0.025, 0.905, 0.95, 0.08])
     ax_header.axis("off")
 
@@ -787,9 +807,6 @@ def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_in
 
 
 def adicionar_footer(fig, cor_rodape="#64748B"):
-    """
-    Rodapé mais discreto e elegante.
-    """
     brasilia = pytz.timezone("America/Sao_Paulo")
     hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
 
@@ -818,12 +835,8 @@ def desenhar_box_legenda_tematica(
     faixa_exibida_txt,
     media_txt,
     df_legenda,
-    casas=0,
     reserve_pos=(0.71, 0.16, 0.25, 0.68)
 ):
-    """
-    Card lateral da legenda com barras de percentual.
-    """
     rx, ry, rw, rh = reserve_pos
 
     ax_box = fig.add_axes([rx, ry, rw, rh])
@@ -981,12 +994,8 @@ def criar_figura_tematica(
     periodo_ini,
     periodo_fim,
     fazenda_id,
-    nome_fazenda,
-    casas
+    nome_fazenda
 ):
-    """
-    Figura temática com mapa + card lateral de legenda.
-    """
     fig = plt.figure(figsize=(15.5, 8.8))
     fig.patch.set_facecolor("#F4F7FB")
 
@@ -1050,7 +1059,6 @@ def criar_figura_tematica(
         faixa_exibida_txt=faixa_exibida_txt,
         media_txt=media_txt,
         df_legenda=df_legenda,
-        casas=casas,
         reserve_pos=(0.71, 0.16, 0.25, 0.68)
     )
 
@@ -1077,9 +1085,6 @@ def criar_figura_area(
     cor_trabalhada,
     cor_nao_trab
 ):
-    """
-    Mapa de área trabalhada com visual mais executivo.
-    """
     fig = plt.figure(figsize=(15.5, 8.8))
     fig.patch.set_facecolor("#F4F7FB")
 
@@ -1128,12 +1133,13 @@ def criar_figura_area(
         zorder=1
     )
 
-    gpd.GeoSeries(area_trabalhada, crs=base_fazenda.crs).plot(
-        ax=ax,
-        color=cor_trabalhada,
-        alpha=0.88,
-        zorder=2
-    )
+    if not area_trabalhada.is_empty:
+        gpd.GeoSeries([area_trabalhada], crs=base_fazenda.crs).plot(
+            ax=ax,
+            color=cor_trabalhada,
+            alpha=0.88,
+            zorder=2
+        )
 
     base_fazenda.boundary.plot(
         ax=ax,
@@ -1224,7 +1230,7 @@ def criar_figura_area(
     resumo_ax.add_patch(
         FancyBboxPatch(
             (0.08, 0.28),
-            0.84 * (pct_trab / 100 if pct_trab <= 100 else 1),
+            0.84 * min(max(pct_trab / 100, 0), 1),
             0.06,
             boxstyle="round,pad=0.004,rounding_size=0.015",
             facecolor=cor_trabalhada,
@@ -1275,7 +1281,7 @@ with sidebar_container():
 
 with sidebar_container():
     MULTIPLICADOR_BUFFER = st.number_input(
-        "Tamanho do Buffer",
+        "Fator de expansão da faixa operacional",
         min_value=1.0,
         max_value=10.0,
         value=2.5,
@@ -1289,6 +1295,24 @@ with sidebar_container():
         value=0.50,
         step=0.1,
         key="area_min_input"
+    )
+
+    TEMPO_MAX_SEG = st.number_input(
+        "Tempo máximo entre pontos do mesmo segmento (seg)",
+        min_value=5,
+        max_value=600,
+        value=60,
+        step=5,
+        key="tempo_max_seg_input"
+    )
+
+    DIST_MAX_METROS = st.number_input(
+        "Distância máxima entre pontos do mesmo segmento (m)",
+        min_value=1.0,
+        max_value=500.0,
+        value=35.0,
+        step=1.0,
+        key="dist_max_metros_input"
     )
 
     if not (MAPA_RPM or MAPA_VEL):
@@ -1362,24 +1386,8 @@ if MAPA_VEL:
             key="vel_passo_input"
         )
 
-TEMPO_MAX_SEG = 60
-
 COR_TRABALHADA = "#22C55E"
 COR_NAO_TRAB = "#E5E7EB"
-COR_CAIXA = "#FFFFFF"
-COR_RODAPE = "#64748B"
-
-COR_FUNDO_FIG = "#F4F7FB"
-COR_CARD = "#FFFFFF"
-COR_BORDA = "#D8E1EB"
-COR_TEXTO = "#0F172A"
-COR_TEXTO_SEC = "#475569"
-COR_LINHA_SUAVE = "#E2E8F0"
-COR_DESTAQUE = "#2563EB"
-COR_SUCESSO = "#16A34A"
-
-FIG_WIDTH = 25
-FIG_HEIGHT = 9
 
 if MAPA_RPM and RPM_MAX <= RPM_MIN:
     st.sidebar.error("⚠️ O RPM máximo deve ser maior que o RPM mínimo.")
@@ -1472,12 +1480,7 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
 
                 for csv_path in csv_files:
                     try:
-                        df_temp = pd.read_csv(
-                            csv_path,
-                            sep=";",
-                            encoding="latin1",
-                            engine="python"
-                        )
+                        df_temp = ler_csv_robusto(csv_path)
                         dfs.append(df_temp)
                     except Exception as e:
                         st.error(f"❌ Erro ao ler CSV {os.path.basename(csv_path)}: {e}")
@@ -1487,6 +1490,23 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                 st.stop()
 
             df = pd.concat(dfs, ignore_index=True)
+
+            colunas_csv_obrigatorias = [
+                "dt_hr_local_inicial",
+                "vl_latitude_inicial",
+                "vl_longitude_inicial",
+                "vl_largura_implemento",
+                "vl_rpm",
+                "vl_velocidade",
+                "cd_estado",
+                "cd_operacao_parada",
+                "cd_fazenda",
+                "cd_equipamento"
+            ]
+            faltantes_csv = validar_colunas(df, colunas_csv_obrigatorias, "CSV")
+            if faltantes_csv:
+                st.error("❌ O(s) CSV(s) não possuem as colunas obrigatórias: " + ", ".join(faltantes_csv))
+                st.stop()
 
             df["dt_hr_local_inicial"] = pd.to_datetime(df["dt_hr_local_inicial"], errors="coerce")
             df["vl_latitude_inicial"] = pd.to_numeric(df["vl_latitude_inicial"], errors="coerce")
@@ -1501,6 +1521,7 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
             ].copy()
 
             df["cd_fazenda"] = df["cd_fazenda"].astype(str)
+            df["cd_equipamento"] = df["cd_equipamento"].astype(str)
 
             df = df.dropna(subset=[
                 "dt_hr_local_inicial",
@@ -1517,6 +1538,13 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                 f.write(uploaded_gpkg.read())
 
             base = gpd.read_file(gpkg_path)
+
+            colunas_gpkg_obrigatorias = ["FAZENDA", "PROPRIEDADE", "geometry"]
+            faltantes_gpkg = validar_colunas(base, colunas_gpkg_obrigatorias, "GPKG")
+            if faltantes_gpkg:
+                st.error("❌ O GPKG não possui as colunas obrigatórias: " + ", ".join(faltantes_gpkg))
+                st.stop()
+
             base["FAZENDA"] = base["FAZENDA"].astype(str)
 
             if "TALHAO" in base.columns:
@@ -1536,7 +1564,6 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
             rpm_cores = dict(zip(rpm_labels, amostrar_cores_classes(rpm_cmap, len(rpm_labels)))) if MAPA_RPM else {}
             vel_cores = dict(zip(vel_labels, amostrar_cores_classes(vel_cmap, len(vel_labels)))) if MAPA_VEL else {}
 
-            # NOVO: controle simples de mapas gerados
             mapas_gerados_total = 0
             motivos_sem_mapa = []
 
@@ -1560,6 +1587,7 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                     crs="EPSG:4326"
                 )
 
+                # Mantido o CRS projetado utilizado por você
                 base_fazenda = base_fazenda.to_crs(epsg=31983)
                 gdf_pts = gdf_pts.to_crs(epsg=31983)
 
@@ -1576,21 +1604,24 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                     larguras_atuais = []
                     tempo_inicio = None
                     ultimo_tempo = None
+                    ultimo_ponto = None
 
                     for _, row in grupo.iterrows():
                         tempo = row["dt_hr_local_inicial"]
+                        ponto = row.geometry
 
                         if ultimo_tempo is None:
-                            linha_atual = [row.geometry]
+                            linha_atual = [ponto]
                             rpm_atual = [row["vl_rpm"]]
                             vel_atual = [row["vl_velocidade"]]
                             larguras_atuais = [row["vl_largura_implemento"]]
                             tempo_inicio = tempo
                         else:
                             delta = (tempo - ultimo_tempo).total_seconds()
+                            dist = ponto.distance(ultimo_ponto) if ultimo_ponto is not None else 0
 
-                            if delta <= TEMPO_MAX_SEG:
-                                linha_atual.append(row.geometry)
+                            if delta <= TEMPO_MAX_SEG and dist <= DIST_MAX_METROS:
+                                linha_atual.append(ponto)
                                 rpm_atual.append(row["vl_rpm"])
                                 vel_atual.append(row["vl_velocidade"])
                                 larguras_atuais.append(row["vl_largura_implemento"])
@@ -1606,13 +1637,14 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                                     geom_fazenda=geom_fazenda
                                 )
 
-                                linha_atual = [row.geometry]
+                                linha_atual = [ponto]
                                 rpm_atual = [row["vl_rpm"]]
                                 vel_atual = [row["vl_velocidade"]]
                                 larguras_atuais = [row["vl_largura_implemento"]]
                                 tempo_inicio = tempo
 
                         ultimo_tempo = tempo
+                        ultimo_ponto = ponto
 
                     adicionar_segmento_clipado(
                         linhas_saida=linhas,
@@ -1631,8 +1663,11 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
 
                 gdf_linhas = gpd.GeoDataFrame(linhas, geometry="geometry", crs=base_fazenda.crs)
 
+                # Área trabalhada:
+                # mantido o método do buffer com largura média global, mas agora coerente
+                # com os mapas temáticos por usar o mesmo multiplicador nas faixas temáticas
                 largura_media = df_faz["vl_largura_implemento"].dropna().mean()
-                if pd.isna(largura_media):
+                if pd.isna(largura_media) or largura_media <= 0:
                     motivos_sem_mapa.append(f"Fazenda {FAZENDA_ID}: sem largura válida de implemento.")
                     continue
 
@@ -1642,7 +1677,7 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                 area_trabalhada = unary_union(buffer_linhas).intersection(geom_fazenda)
                 area_nao_trabalhada = geom_fazenda.difference(area_trabalhada)
 
-                area_total_ha = round(base_fazenda.geometry.area.sum() / 10000, 2)
+                area_total_ha = round(geom_fazenda.area / 10000, 2)
                 area_trab_ha = round(area_trabalhada.area / 10000, 2)
                 area_nao_ha = round(area_nao_trabalhada.area / 10000, 2)
 
@@ -1710,7 +1745,11 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
 
                 gdf_display = None
                 if MAPA_RPM or MAPA_VEL:
-                    gdf_display = criar_poligonos_display(gdf_linhas, geom_fazenda)
+                    gdf_display = criar_poligonos_display(
+                        gdf_linhas,
+                        geom_fazenda,
+                        multiplicador_buffer=MULTIPLICADOR_BUFFER
+                    )
 
                     if gdf_display is not None and not gdf_display.empty:
                         if MAPA_RPM:
@@ -1744,6 +1783,18 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
 
                 with st.expander(f"🗺️ Mapa – {nome_fazenda}", expanded=False):
 
+                    # Bloco opcional de debug
+                    if gdf_display is not None and not gdf_display.empty:
+                        col_debug1, col_debug2 = st.columns(2)
+                        with col_debug1:
+                            if MAPA_RPM:
+                                sem_classe_rpm = int(gdf_display["classe_rpm"].isna().sum())
+                                st.caption(f"Trechos RPM sem classe: {sem_classe_rpm}")
+                        with col_debug2:
+                            if MAPA_VEL:
+                                sem_classe_vel = int(gdf_display["classe_vel"].isna().sum())
+                                st.caption(f"Trechos Velocidade sem classe: {sem_classe_vel}")
+
                     if MAPA_AREA:
                         fig_area = criar_figura_area(
                             base_fazenda=base_fazenda,
@@ -1775,6 +1826,9 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                         plt.close(fig_area)
 
                     if MAPA_RPM:
+                        faixa_rpm_ini = int(arredondar_para_baixo(RPM_MIN, RPM_PASSO))
+                        faixa_rpm_fim = int(arredondar_para_cima(RPM_MAX, RPM_PASSO))
+
                         fig_rpm = criar_figura_tematica(
                             base_fazenda=base_fazenda,
                             gdf_display=gdf_display,
@@ -1783,13 +1837,12 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                             df_legenda=df_leg_rpm,
                             titulo_mapa="Mapa de RPM",
                             titulo_box="Legenda de RPM",
-                            faixa_exibida_txt=f"{int(arredondar_para_baixo(RPM_MIN, RPM_PASSO))} até {int(arredondar_para_cima(RPM_MAX, RPM_PASSO))}+",
+                            faixa_exibida_txt=f"< {faixa_rpm_ini} | {faixa_rpm_ini} até {faixa_rpm_fim}+",
                             media_txt=f"RPM médio: {formatar_numero(rpm_med_real, 0)}",
                             periodo_ini=periodo_ini,
                             periodo_fim=periodo_fim,
                             fazenda_id=FAZENDA_ID,
-                            nome_fazenda=nome_fazenda,
-                            casas=0
+                            nome_fazenda=nome_fazenda
                         )
 
                         st.pyplot(fig_rpm)
@@ -1805,6 +1858,9 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                         plt.close(fig_rpm)
 
                     if MAPA_VEL:
+                        faixa_vel_ini = arredondar_para_baixo(VEL_MIN, VEL_PASSO)
+                        faixa_vel_fim = arredondar_para_cima(VEL_MAX, VEL_PASSO)
+
                         fig_vel = criar_figura_tematica(
                             base_fazenda=base_fazenda,
                             gdf_display=gdf_display,
@@ -1813,13 +1869,12 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                             df_legenda=df_leg_vel,
                             titulo_mapa="Mapa de Velocidade",
                             titulo_box="Legenda de Velocidade",
-                            faixa_exibida_txt=f"{formatar_numero(arredondar_para_baixo(VEL_MIN, VEL_PASSO), 1)} até {formatar_numero(arredondar_para_cima(VEL_MAX, VEL_PASSO), 1)}+ km/h",
+                            faixa_exibida_txt=f"< {formatar_numero(faixa_vel_ini, 1)} | {formatar_numero(faixa_vel_ini, 1)} até {formatar_numero(faixa_vel_fim, 1)}+ km/h",
                             media_txt=f"Vel. média: {formatar_numero(vel_med_real, 1)} km/h",
                             periodo_ini=periodo_ini,
                             periodo_fim=periodo_fim,
                             fazenda_id=FAZENDA_ID,
-                            nome_fazenda=nome_fazenda,
-                            casas=1
+                            nome_fazenda=nome_fazenda
                         )
 
                         st.pyplot(fig_vel)
@@ -1838,7 +1893,6 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                         st.markdown("### 🌾 Área por Gleba / Talhão")
                         st.dataframe(df_talhoes, use_container_width=True, hide_index=True)
 
-            # NOVO: mensagem simples quando nenhum mapa for gerado
             if mapas_gerados_total == 0:
                 st.warning("⚠️ Não foi possível gerar nenhum mapa com os dados enviados.")
 
