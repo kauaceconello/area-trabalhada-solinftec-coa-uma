@@ -1536,12 +1536,17 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
             rpm_cores = dict(zip(rpm_labels, amostrar_cores_classes(rpm_cmap, len(rpm_labels)))) if MAPA_RPM else {}
             vel_cores = dict(zip(vel_labels, amostrar_cores_classes(vel_cmap, len(vel_labels)))) if MAPA_VEL else {}
 
+            # NOVO: controle simples de mapas gerados
+            mapas_gerados_total = 0
+            motivos_sem_mapa = []
+
             for FAZENDA_ID in df["cd_fazenda"].dropna().unique():
 
                 df_faz = df[df["cd_fazenda"] == FAZENDA_ID].copy()
                 base_fazenda = base[base["FAZENDA"] == FAZENDA_ID].copy()
 
                 if df_faz.empty or base_fazenda.empty:
+                    motivos_sem_mapa.append(f"Fazenda {FAZENDA_ID}: sem correspondência entre CSV e base cartográfica.")
                     continue
 
                 nome_fazenda = base_fazenda["PROPRIEDADE"].iloc[0]
@@ -1621,12 +1626,14 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                     )
 
                 if not linhas:
+                    motivos_sem_mapa.append(f"Fazenda {FAZENDA_ID}: não foi possível formar linhas operacionais.")
                     continue
 
                 gdf_linhas = gpd.GeoDataFrame(linhas, geometry="geometry", crs=base_fazenda.crs)
 
                 largura_media = df_faz["vl_largura_implemento"].dropna().mean()
                 if pd.isna(largura_media):
+                    motivos_sem_mapa.append(f"Fazenda {FAZENDA_ID}: sem largura válida de implemento.")
                     continue
 
                 largura_final = largura_media * MULTIPLICADOR_BUFFER
@@ -1640,6 +1647,9 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                 area_nao_ha = round(area_nao_trabalhada.area / 10000, 2)
 
                 if area_trab_ha < AREA_MIN_HA:
+                    motivos_sem_mapa.append(
+                        f"Fazenda {FAZENDA_ID}: área trabalhada abaixo do mínimo configurado ({AREA_MIN_HA:.2f} ha)."
+                    )
                     continue
 
                 pct_trab = round(area_trab_ha / area_total_ha * 100, 1) if area_total_ha > 0 else 0
@@ -1753,6 +1763,7 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                         )
 
                         st.pyplot(fig_area)
+                        mapas_gerados_total += 1
                         pdf_area = figura_para_pdf_bytes(fig_area)
                         st.download_button(
                             "⬇️ Baixar PDF vetorial – Área Trabalhada",
@@ -1782,6 +1793,7 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                         )
 
                         st.pyplot(fig_rpm)
+                        mapas_gerados_total += 1
                         pdf_rpm = figura_para_pdf_bytes(fig_rpm)
                         st.download_button(
                             "⬇️ Baixar PDF vetorial – RPM",
@@ -1811,6 +1823,7 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                         )
 
                         st.pyplot(fig_vel)
+                        mapas_gerados_total += 1
                         pdf_vel = figura_para_pdf_bytes(fig_vel)
                         st.download_button(
                             "⬇️ Baixar PDF vetorial – Velocidade",
@@ -1824,6 +1837,17 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                     if df_talhoes is not None:
                         st.markdown("### 🌾 Área por Gleba / Talhão")
                         st.dataframe(df_talhoes, use_container_width=True, hide_index=True)
+
+            # NOVO: mensagem simples quando nenhum mapa for gerado
+            if mapas_gerados_total == 0:
+                st.warning("⚠️ Não foi possível gerar nenhum mapa com os dados enviados.")
+
+                if motivos_sem_mapa:
+                    with st.expander("Ver detalhes", expanded=False):
+                        for motivo in sorted(set(motivos_sem_mapa)):
+                            st.write(f"- {motivo}")
+                else:
+                    st.info("Verifique se os dados possuem correspondência com a base cartográfica e se a área trabalhada atende ao mínimo configurado.")
 
 else:
     st.info("⬆️ Envie os arquivos e clique em **Gerar mapa**.")
