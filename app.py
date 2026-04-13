@@ -505,6 +505,32 @@ def normalizar_nomes_colunas(df):
     return df
 
 
+def normalizar_id(valor):
+    """
+    Normaliza IDs como fazenda/equipamento:
+    - remove espaços
+    - converte 61142.0 -> 61142
+    - preserva texto quando necessário
+    """
+    if pd.isna(valor):
+        return np.nan
+
+    txt = str(valor).strip()
+
+    if txt.endswith(".0"):
+        txt = txt[:-2]
+
+    return txt
+
+
+def normalizar_coluna_id(serie):
+    return serie.apply(normalizar_id)
+
+
+def normalizar_coluna_texto(serie):
+    return serie.astype(str).str.strip().str.upper()
+
+
 def ler_csv_flexivel(csv_path):
     """
     Tenta ler CSV com diferentes separadores.
@@ -1564,21 +1590,39 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
             df["vl_velocidade"] = pd.to_numeric(df["vl_velocidade"], errors="coerce")
 
             # -------------------------------------------------
+            # NORMALIZAÇÃO DE CAMPOS-CHAVE
+            # -------------------------------------------------
+            df["cd_estado_norm"] = normalizar_coluna_texto(df["cd_estado"])
+            df["cd_operacao_parada_num"] = pd.to_numeric(df["cd_operacao_parada"], errors="coerce")
+            df["cd_fazenda"] = normalizar_coluna_id(df["cd_fazenda"])
+            df["cd_equipamento"] = normalizar_coluna_id(df["cd_equipamento"])
+
+            # -------------------------------------------------
             # FILTRO OPERACIONAL
             # -------------------------------------------------
+            total_antes_filtro = len(df)
+
             df = df[
-                (df["cd_estado"].astype(str) == "E") &
-                (pd.to_numeric(df["cd_operacao_parada"], errors="coerce") == -1)
+                (df["cd_estado_norm"] == "E") &
+                (df["cd_operacao_parada_num"] == -1)
             ].copy()
 
-            df["cd_fazenda"] = df["cd_fazenda"].astype(str)
-            df["cd_equipamento"] = df["cd_equipamento"].astype(str)
+            total_depois_filtro = len(df)
 
+            # Remove linhas sem coordenadas ou data
             df = df.dropna(subset=[
                 "dt_hr_local_inicial",
                 "vl_latitude_inicial",
                 "vl_longitude_inicial"
             ])
+
+            total_final = len(df)
+
+            st.caption(
+                f"📌 Registros lidos: {total_antes_filtro:,} | "
+                f"Após filtro operacional: {total_depois_filtro:,} | "
+                f"Válidos para mapa: {total_final:,}".replace(",", ".")
+            )
 
             if df.empty:
                 st.error("❌ Nenhum ponto válido encontrado após o tratamento dos dados.")
@@ -1621,14 +1665,28 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                 st.error("❌ A base GPKG não possui a coluna obrigatória 'FAZENDA'.")
                 st.stop()
 
-            base["FAZENDA"] = base["FAZENDA"].astype(str)
+            base["FAZENDA"] = normalizar_coluna_id(base["FAZENDA"])
 
             if "TALHAO" in base.columns:
-                base["TALHAO"] = base["TALHAO"].astype(str)
+                base["TALHAO"] = normalizar_coluna_id(base["TALHAO"])
             if "GLEBA" in base.columns:
-                base["GLEBA"] = base["GLEBA"].astype(str)
+                base["GLEBA"] = normalizar_coluna_id(base["GLEBA"])
             if "PROPRIEDADE" not in base.columns:
                 base["PROPRIEDADE"] = base["FAZENDA"]
+
+            # -------------------------------------------------
+            # CRUZAMENTO ENTRE CSV E BASE
+            # -------------------------------------------------
+            fazendas_csv = sorted(df["cd_fazenda"].dropna().unique().tolist())
+            fazendas_base = sorted(base["FAZENDA"].dropna().unique().tolist())
+
+            fazendas_em_comum = sorted(set(fazendas_csv).intersection(set(fazendas_base)))
+
+            if not fazendas_em_comum:
+                st.error("❌ Nenhuma fazenda do CSV foi encontrada na base cartográfica.")
+                st.write("Fazendas encontradas no CSV:", fazendas_csv[:50])
+                st.write("Fazendas encontradas na base:", fazendas_base[:50])
+                st.stop()
 
             # -------------------------------------------------
             # PARÂMETROS TEMÁTICOS
@@ -1645,17 +1703,21 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
             rpm_cores = dict(zip(rpm_labels, amostrar_cores_classes(rpm_cmap, len(rpm_labels)))) if MAPA_RPM_DISPONIVEL else {}
             vel_cores = dict(zip(vel_labels, amostrar_cores_classes(vel_cmap, len(vel_labels)))) if MAPA_VEL_DISPONIVEL else {}
 
-            fazendas_processadas = 0
+            mapas_gerados_total = 0
+            motivos_sem_mapa = []
 
-            for FAZENDA_ID in df["cd_fazenda"].dropna().unique():
+            for FAZENDA_ID in fazendas_em_comum:
 
                 df_faz = df[df["cd_fazenda"] == FAZENDA_ID].copy()
                 base_fazenda = base[base["FAZENDA"] == FAZENDA_ID].copy()
 
-                if df_faz.empty or base_fazenda.empty:
+                if df_faz.empty:
+                    motivos_sem_mapa.append(f"Fazenda {FAZENDA_ID}: sem dados operacionais após filtros.")
                     continue
 
-                fazendas_processadas += 1
+                if base_fazenda.empty:
+                    motivos_sem_mapa.append(f"Fazenda {FAZENDA_ID}: não encontrada na base cartográfica.")
+                    continue
 
                 nome_fazenda = str(base_fazenda["PROPRIEDADE"].iloc[0])
 
@@ -1734,12 +1796,14 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                     )
 
                 if not linhas:
+                    motivos_sem_mapa.append(f"Fazenda {FAZENDA_ID}: não foi possível formar linhas operacionais.")
                     continue
 
                 gdf_linhas = gpd.GeoDataFrame(linhas, geometry="geometry", crs=base_fazenda.crs)
 
                 largura_media = df_faz["vl_largura_implemento"].dropna().mean()
                 if pd.isna(largura_media):
+                    motivos_sem_mapa.append(f"Fazenda {FAZENDA_ID}: sem largura válida de implemento.")
                     continue
 
                 largura_final = largura_media * MULTIPLICADOR_BUFFER
@@ -1753,6 +1817,9 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                 area_nao_ha = round(area_nao_trabalhada.area / 10000, 2)
 
                 if area_trab_ha < AREA_MIN_HA:
+                    motivos_sem_mapa.append(
+                        f"Fazenda {FAZENDA_ID}: área trabalhada ({area_trab_ha:.2f} ha) abaixo do mínimo configurado ({AREA_MIN_HA:.2f} ha)."
+                    )
                     continue
 
                 pct_trab = round(area_trab_ha / area_total_ha * 100, 1) if area_total_ha > 0 else 0
@@ -1869,6 +1936,8 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                         )
 
                         st.pyplot(fig_area)
+                        mapas_gerados_total += 1
+
                         pdf_area = figura_para_pdf_bytes(fig_area)
                         st.download_button(
                             "⬇️ Baixar PDF vetorial – Área Trabalhada",
@@ -1899,6 +1968,8 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                             )
 
                             st.pyplot(fig_rpm)
+                            mapas_gerados_total += 1
+
                             pdf_rpm = figura_para_pdf_bytes(fig_rpm)
                             st.download_button(
                                 "⬇️ Baixar PDF vetorial – RPM",
@@ -1931,6 +2002,8 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                             )
 
                             st.pyplot(fig_vel)
+                            mapas_gerados_total += 1
+
                             pdf_vel = figura_para_pdf_bytes(fig_vel)
                             st.download_button(
                                 "⬇️ Baixar PDF vetorial – Velocidade",
@@ -1947,7 +2020,12 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                         st.markdown("### 🌾 Área por Gleba / Talhão")
                         st.dataframe(df_talhoes, use_container_width=True, hide_index=True)
 
-            if fazendas_processadas == 0:
-                st.warning("⚠️ Nenhuma fazenda compatível entre os CSVs e a base cartográfica foi encontrada.")
+            if mapas_gerados_total == 0:
+                st.warning("⚠️ Nenhum mapa foi gerado com os dados e parâmetros atuais.")
+
+                if motivos_sem_mapa:
+                    with st.expander("🔎 Ver motivos", expanded=True):
+                        for motivo in motivos_sem_mapa:
+                            st.write(f"- {motivo}")
 else:
     st.info("⬆️ Envie os arquivos e clique em **Gerar mapa**.")
