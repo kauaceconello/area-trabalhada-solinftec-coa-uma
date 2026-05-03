@@ -3,6 +3,7 @@
 
 import io
 import os
+import re
 import zipfile
 import tempfile
 from datetime import datetime
@@ -369,6 +370,57 @@ def formatar_area_ha(valor):
     return f"{float(valor):.2f}".replace(".", ",") + " ha"
 
 
+def chave_ordenacao_mista(valor):
+    texto = str(valor).strip()
+    return re.sub(
+        r"\d+",
+        lambda m: f"{int(m.group()):010d}",
+        texto
+    )
+
+
+def ordenar_tabela_talhoes(df_talhoes):
+    if df_talhoes is None or df_talhoes.empty:
+        return df_talhoes
+
+    df = df_talhoes.copy()
+
+    if "Gleba" not in df.columns or "Talhão" not in df.columns:
+        return df
+
+    df_total = df[df["Gleba"].astype(str).str.upper() == "TOTAL"].copy()
+    df_dados = df[df["Gleba"].astype(str).str.upper() != "TOTAL"].copy()
+
+    df_dados["_ord_gleba"] = df_dados["Gleba"].apply(chave_ordenacao_mista)
+    df_dados["_ord_talhao"] = df_dados["Talhão"].apply(chave_ordenacao_mista)
+
+    df_dados = df_dados.sort_values(
+        by=["_ord_gleba", "_ord_talhao"],
+        ascending=[True, True]
+    ).drop(columns=["_ord_gleba", "_ord_talhao"])
+
+    if not df_total.empty:
+        return pd.concat([df_dados, df_total], ignore_index=True)
+
+    return df_dados.reset_index(drop=True)
+
+
+def criar_zip_csv_talhoes(df_talhoes_exibicao, nome_csv):
+    buffer_zip = io.BytesIO()
+
+    csv_bytes = df_talhoes_exibicao.to_csv(
+        index=False,
+        sep=";",
+        encoding="utf-8-sig"
+    ).encode("utf-8-sig")
+
+    with zipfile.ZipFile(buffer_zip, "w", zipfile.ZIP_DEFLATED) as zipf:
+        zipf.writestr(nome_csv, csv_bytes)
+
+    buffer_zip.seek(0)
+    return buffer_zip.getvalue()
+
+
 def validar_colunas(df, colunas_obrigatorias):
     return [c for c in colunas_obrigatorias if c not in df.columns]
 
@@ -409,13 +461,28 @@ def gerar_faixas(vmin, vmax, passo, casas=0):
 def criar_cmap_suave(tipo="rpm"):
     if tipo == "rpm":
         cores = [
-            "#0B4F8A", "#1F78B4", "#2D9CDB", "#1FBBA6", "#20B15A",
-            "#8FD14F", "#F2C94C", "#F2994A", "#E05A47",
+            "#0B4F8A",
+            "#1F78B4",
+            "#2D9CDB",
+            "#1FBBA6",
+            "#20B15A",
+            "#8FD14F",
+            "#F2C94C",
+            "#F2994A",
+            "#E05A47",
         ]
     else:
         cores = [
-            "#0A5E8A", "#1479C9", "#16A5C8", "#18B7B2", "#1DBE6B",
-            "#86D44E", "#DCEB46", "#F4C542", "#F59E32", "#E1594F",
+            "#0A5E8A",
+            "#1479C9",
+            "#16A5C8",
+            "#18B7B2",
+            "#1DBE6B",
+            "#86D44E",
+            "#DCEB46",
+            "#F4C542",
+            "#F59E32",
+            "#E1594F",
         ]
     return LinearSegmentedColormap.from_list(f"cmap_{tipo}", cores, N=256)
 
@@ -513,7 +580,7 @@ def preparar_tabela_talhoes_resumo(df_talhoes, max_linhas=6):
     if df_talhoes is None or df_talhoes.empty:
         return None
 
-    df_resumo = df_talhoes.copy()
+    df_resumo = ordenar_tabela_talhoes(df_talhoes)
 
     if "Gleba" not in df_resumo.columns:
         return None
@@ -522,7 +589,9 @@ def preparar_tabela_talhoes_resumo(df_talhoes, max_linhas=6):
     if "Área trabalhada (ha)" not in df_resumo.columns:
         return None
 
-    df_resumo = df_resumo[df_resumo["Gleba"] != "TOTAL"].copy()
+    df_resumo = df_resumo[
+        df_resumo["Gleba"].astype(str).str.upper() != "TOTAL"
+    ].copy()
 
     if df_resumo.empty:
         return None
@@ -532,12 +601,9 @@ def preparar_tabela_talhoes_resumo(df_talhoes, max_linhas=6):
         errors="coerce"
     ).fillna(0).round(2)
 
-    df_resumo = df_resumo[["Gleba", "Talhão", "Área trabalhada (ha)"]].copy()
-
-    df_resumo = df_resumo.sort_values(
-        "Área trabalhada (ha)",
-        ascending=False
-    )
+    df_resumo = df_resumo[
+        ["Gleba", "Talhão", "Área trabalhada (ha)"]
+    ].copy()
 
     return df_resumo.head(max_linhas)
 
@@ -546,7 +612,7 @@ def preparar_tabela_talhoes_exportacao(df_talhoes, incluir_area_total=True):
     if df_talhoes is None or df_talhoes.empty:
         return pd.DataFrame()
 
-    df_exp = df_talhoes.copy()
+    df_exp = ordenar_tabela_talhoes(df_talhoes)
 
     colunas = ["Gleba", "Talhão"]
 
@@ -560,7 +626,10 @@ def preparar_tabela_talhoes_exportacao(df_talhoes, incluir_area_total=True):
 
     for col in ["Área total (ha)", "Área trabalhada (ha)"]:
         if col in df_exp.columns:
-            df_exp[col] = pd.to_numeric(df_exp[col], errors="coerce").fillna(0).round(2)
+            df_exp[col] = pd.to_numeric(
+                df_exp[col],
+                errors="coerce"
+            ).fillna(0).round(2)
             df_exp[col] = df_exp[col].apply(formatar_area_ha)
 
     return df_exp
@@ -1100,9 +1169,6 @@ def criar_figura_tematica(
     return fig
 
 
-# =========================================================
-# MAPA DE ÁREA TRABALHADA
-# =========================================================
 def criar_figura_area(
     base_fazenda,
     area_trabalhada,
@@ -1183,7 +1249,7 @@ def criar_figura_area(
         zorder=3
     )
 
-    # Talhão sempre visível no mapa, independente do checkbox de tabela.
+    # Número do talhão sempre visível no mapa.
     if "TALHAO" in base_fazenda.columns:
         for _, row in base_fazenda.iterrows():
             if row.geometry.is_empty:
@@ -1375,12 +1441,41 @@ def criar_figura_tabela_talhoes_pdf(
     fazenda_id,
     nome_fazenda,
     pagina_atual=1,
-    total_paginas=1
+    total_paginas=1,
+    area_total_trabalhada=None
 ):
-    df_pdf = preparar_tabela_talhoes_exportacao(
-        df_talhoes,
-        incluir_area_total=False
-    )
+    df_base = ordenar_tabela_talhoes(df_talhoes)
+
+    if df_base is None or df_base.empty:
+        df_base = pd.DataFrame(columns=["Gleba", "Talhão", "Área trabalhada (ha)"])
+
+    df_dados = df_base[
+        df_base["Gleba"].astype(str).str.upper() != "TOTAL"
+    ].copy()
+
+    if "Área trabalhada (ha)" in df_dados.columns:
+        df_dados["Área trabalhada (ha)"] = pd.to_numeric(
+            df_dados["Área trabalhada (ha)"],
+            errors="coerce"
+        ).fillna(0).round(2)
+
+    if area_total_trabalhada is None:
+        if "Área trabalhada (ha)" in df_base.columns:
+            linha_total = df_base[
+                df_base["Gleba"].astype(str).str.upper() == "TOTAL"
+            ]
+
+            if not linha_total.empty:
+                area_total_trabalhada = pd.to_numeric(
+                    linha_total["Área trabalhada (ha)"].iloc[0],
+                    errors="coerce"
+                )
+            else:
+                area_total_trabalhada = df_dados["Área trabalhada (ha)"].sum()
+        else:
+            area_total_trabalhada = 0
+
+    area_total_txt = formatar_area_ha(area_total_trabalhada)
 
     fig = plt.figure(figsize=(11.69, 8.27))
     fig.patch.set_facecolor("#F4F7FB")
@@ -1443,7 +1538,7 @@ def criar_figura_tabela_talhoes_pdf(
         va="center"
     )
 
-    ax_card = fig.add_axes([0.06, 0.115, 0.88, 0.735])
+    ax_card = fig.add_axes([0.06, 0.105, 0.88, 0.75])
     ax_card.set_xlim(0, 1)
     ax_card.set_ylim(0, 1)
     ax_card.axis("off")
@@ -1459,66 +1554,138 @@ def criar_figura_tabela_talhoes_pdf(
     )
     ax_card.add_patch(card)
 
-    if df_pdf.empty:
+    ax_card.text(
+        0.50,
+        0.94,
+        f"ÁREA TOTAL: {area_total_txt}",
+        fontsize=13,
+        weight="bold",
+        color="#0F172A",
+        ha="center",
+        va="center"
+    )
+
+    if df_dados.empty:
         ax_card.text(
             0.50,
-            0.55,
+            0.52,
             "Sem dados de área por talhão para exibir.",
             fontsize=11,
             color="#64748B",
             ha="center",
             va="center"
         )
+
         adicionar_footer(fig, "#64748B")
         return fig
 
-    ax_table = fig.add_axes([0.095, 0.155, 0.81, 0.645])
-    ax_table.axis("off")
+    blocos_por_pagina = 3
+    linhas_por_bloco = 12
 
-    tabela = ax_table.table(
-        cellText=df_pdf.values,
-        colLabels=df_pdf.columns,
-        loc="upper center",
-        cellLoc="center",
-        colLoc="center",
-        colWidths=[0.22, 0.22, 0.30]
-    )
+    blocos = [
+        df_dados.iloc[i:i + linhas_por_bloco].copy()
+        for i in range(0, len(df_dados), linhas_por_bloco)
+    ]
 
-    tabela.auto_set_font_size(False)
-    tabela.set_fontsize(9.2)
-    tabela.scale(1, 1.35)
+    blocos = blocos[:blocos_por_pagina]
 
-    for (row, col), cell in tabela.get_celld().items():
-        cell.set_edgecolor("#CBD5E1")
-        cell.set_linewidth(0.55)
+    largura_bloco = 0.26
+    espaco = 0.035
+    inicio_x = 0.08
+    y_base = 0.14
+    altura_bloco = 0.70
 
-        if row == 0:
-            cell.set_facecolor("#E2E8F0")
-            cell.set_text_props(weight="bold", color="#0F172A")
-        else:
-            cell.set_facecolor("#FFFFFF")
-            cell.set_text_props(color="#0F172A")
+    for idx_bloco, df_bloco in enumerate(blocos):
+        x = inicio_x + idx_bloco * (largura_bloco + espaco)
 
-            try:
-                gleba_val = str(df_pdf.iloc[row - 1]["Gleba"])
-                if gleba_val == "TOTAL":
-                    cell.set_facecolor("#DCFCE7")
-                    cell.set_text_props(weight="bold", color="#166534")
-            except Exception:
-                pass
+        ax_tab = fig.add_axes([
+            0.06 + x * 0.88,
+            0.105 + y_base * 0.75,
+            largura_bloco * 0.88,
+            altura_bloco * 0.75
+        ])
+
+        ax_tab.axis("off")
+
+        df_tab = df_bloco[
+            ["Gleba", "Talhão", "Área trabalhada (ha)"]
+        ].copy()
+
+        df_tab["Área trabalhada (ha)"] = df_tab["Área trabalhada (ha)"].apply(
+            formatar_area_ha
+        )
+
+        df_tab = df_tab.rename(columns={
+            "Gleba": "GLEBA",
+            "Talhão": "TALHÃO",
+            "Área trabalhada (ha)": "ÁREA (ha)"
+        })
+
+        tabela = ax_tab.table(
+            cellText=df_tab.values,
+            colLabels=df_tab.columns,
+            loc="upper center",
+            cellLoc="center",
+            colLoc="center",
+            colWidths=[0.27, 0.30, 0.43]
+        )
+
+        tabela.auto_set_font_size(False)
+        tabela.set_fontsize(7.8)
+        tabela.scale(1, 1.23)
+
+        for (row, col), cell in tabela.get_celld().items():
+            cell.set_edgecolor("#334155")
+            cell.set_linewidth(0.45)
+
+            if row == 0:
+                cell.set_facecolor("#E2E8F0")
+                cell.set_text_props(weight="bold", color="#0F172A")
+            else:
+                cell.set_facecolor("#FFFFFF")
+                cell.set_text_props(color="#0F172A")
 
     adicionar_footer(fig, "#64748B")
     return fig
 
 
-def criar_figuras_tabela_talhoes_pdf(df_talhoes, fazenda_id, nome_fazenda, linhas_por_pagina=24):
+def criar_figuras_tabela_talhoes_pdf(
+    df_talhoes,
+    fazenda_id,
+    nome_fazenda,
+    linhas_por_pagina=36
+):
     if df_talhoes is None or df_talhoes.empty:
         return []
 
+    df_ordenado = ordenar_tabela_talhoes(df_talhoes)
+
+    df_total = df_ordenado[
+        df_ordenado["Gleba"].astype(str).str.upper() == "TOTAL"
+    ].copy()
+
+    df_dados = df_ordenado[
+        df_ordenado["Gleba"].astype(str).str.upper() != "TOTAL"
+    ].copy()
+
+    if not df_total.empty:
+        area_total_trabalhada = pd.to_numeric(
+            df_total["Área trabalhada (ha)"].iloc[0],
+            errors="coerce"
+        )
+    else:
+        area_total_trabalhada = pd.to_numeric(
+            df_dados["Área trabalhada (ha)"],
+            errors="coerce"
+        ).fillna(0).sum()
+
     paginas_df = [
-        df_talhoes.iloc[i:i + linhas_por_pagina].copy()
-        for i in range(0, len(df_talhoes), linhas_por_pagina)
+        df_dados.iloc[i:i + linhas_por_pagina].copy()
+        for i in range(0, len(df_dados), linhas_por_pagina)
     ]
+
+    if not paginas_df:
+        paginas_df = [df_dados.copy()]
 
     total_paginas = len(paginas_df)
     figuras = []
@@ -1529,8 +1696,10 @@ def criar_figuras_tabela_talhoes_pdf(df_talhoes, fazenda_id, nome_fazenda, linha
             fazenda_id=fazenda_id,
             nome_fazenda=nome_fazenda,
             pagina_atual=idx,
-            total_paginas=total_paginas
+            total_paginas=total_paginas,
+            area_total_trabalhada=area_total_trabalhada
         )
+
         figuras.append(fig_pag)
 
     return figuras
@@ -2004,6 +2173,7 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                     })
 
                     df_talhoes = pd.concat([df_talhoes, total_row], ignore_index=True)
+                    df_talhoes = ordenar_tabela_talhoes(df_talhoes)
 
                 rpm_validos = df_faz["vl_rpm"].dropna()
                 vel_validos = df_faz["vl_velocidade"].dropna()
@@ -2088,7 +2258,7 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                                 df_talhoes=df_talhoes,
                                 fazenda_id=FAZENDA_ID,
                                 nome_fazenda=nome_fazenda,
-                                linhas_por_pagina=24
+                                linhas_por_pagina=36
                             )
 
                             figuras_pdf_area.extend(figuras_tabela_pdf)
@@ -2186,18 +2356,17 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                             hide_index=True
                         )
 
-                        csv_talhoes = df_talhoes_exibicao.to_csv(
-                            index=False,
-                            sep=";",
-                            encoding="utf-8-sig"
-                        ).encode("utf-8-sig")
+                        zip_csv_talhoes = criar_zip_csv_talhoes(
+                            df_talhoes_exibicao=df_talhoes_exibicao,
+                            nome_csv=f"area_por_talhao_{FAZENDA_ID}.csv"
+                        )
 
                         st.download_button(
-                            "⬇️ Baixar CSV – Área por Gleba / Talhão",
-                            data=csv_talhoes,
-                            file_name=f"area_por_talhao_{FAZENDA_ID}.csv",
-                            mime="text/csv",
-                            key=f"csv_talhoes_{FAZENDA_ID}"
+                            "⬇️ Baixar ZIP com CSV – Área por Gleba / Talhão",
+                            data=zip_csv_talhoes,
+                            file_name=f"area_por_talhao_{FAZENDA_ID}.zip",
+                            mime="application/zip",
+                            key=f"zip_csv_talhoes_{FAZENDA_ID}"
                         )
 
             if mapas_gerados_total == 0:
@@ -2211,4 +2380,4 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                     st.info("Verifique se os dados possuem correspondência com a base cartográfica e se a área trabalhada atende ao mínimo configurado.")
 
 else:
-    st.info("⬆️ Envie os arquivos e clique em **Gerar mapa**.")
+    st.info("⬆️ Envie os arquivos e clique em
