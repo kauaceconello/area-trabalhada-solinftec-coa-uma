@@ -1584,7 +1584,7 @@ with sidebar_container():
 
     if MAPA_AREA:
         MOSTRAR_TALHOES = st.checkbox(
-            "📄 Incluir tabela por Gleba / Talhão no PDF e na tela",
+            "📊 Gerar área trabalhada por Gleba/Talhão",
             value=False,
             key="mostrar_talhoes_chk"
         )
