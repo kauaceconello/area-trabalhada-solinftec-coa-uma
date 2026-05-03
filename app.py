@@ -372,11 +372,7 @@ def formatar_area_ha(valor):
 
 def chave_ordenacao_mista(valor):
     texto = str(valor).strip()
-    return re.sub(
-        r"\d+",
-        lambda m: f"{int(m.group()):010d}",
-        texto
-    )
+    return re.sub(r"\d+", lambda m: f"{int(m.group()):010d}", texto)
 
 
 def ordenar_tabela_talhoes(df_talhoes):
@@ -461,28 +457,13 @@ def gerar_faixas(vmin, vmax, passo, casas=0):
 def criar_cmap_suave(tipo="rpm"):
     if tipo == "rpm":
         cores = [
-            "#0B4F8A",
-            "#1F78B4",
-            "#2D9CDB",
-            "#1FBBA6",
-            "#20B15A",
-            "#8FD14F",
-            "#F2C94C",
-            "#F2994A",
-            "#E05A47",
+            "#0B4F8A", "#1F78B4", "#2D9CDB", "#1FBBA6", "#20B15A",
+            "#8FD14F", "#F2C94C", "#F2994A", "#E05A47",
         ]
     else:
         cores = [
-            "#0A5E8A",
-            "#1479C9",
-            "#16A5C8",
-            "#18B7B2",
-            "#1DBE6B",
-            "#86D44E",
-            "#DCEB46",
-            "#F4C542",
-            "#F59E32",
-            "#E1594F",
+            "#0A5E8A", "#1479C9", "#16A5C8", "#18B7B2", "#1DBE6B",
+            "#86D44E", "#DCEB46", "#F4C542", "#F59E32", "#E1594F",
         ]
     return LinearSegmentedColormap.from_list(f"cmap_{tipo}", cores, N=256)
 
@@ -576,17 +557,17 @@ def ler_csvs_de_zip(uploaded_zip, tmpdir, idx_zip):
     return csv_files
 
 
-def preparar_tabela_talhoes_resumo(df_talhoes, max_linhas=6):
+def preparar_tabela_talhoes_resumo(df_talhoes):
+    """
+    Prepara tabela compacta para o card pequeno no mapa.
+    Mantém todas as linhas para calcular o total e exibe apenas as primeiras no mapa.
+    """
     if df_talhoes is None or df_talhoes.empty:
         return None
 
     df_resumo = ordenar_tabela_talhoes(df_talhoes)
 
-    if "Gleba" not in df_resumo.columns:
-        return None
-    if "Talhão" not in df_resumo.columns:
-        return None
-    if "Área trabalhada (ha)" not in df_resumo.columns:
+    if "Talhão" not in df_resumo.columns or "Área trabalhada (ha)" not in df_resumo.columns:
         return None
 
     df_resumo = df_resumo[
@@ -601,11 +582,9 @@ def preparar_tabela_talhoes_resumo(df_talhoes, max_linhas=6):
         errors="coerce"
     ).fillna(0).round(2)
 
-    df_resumo = df_resumo[
-        ["Gleba", "Talhão", "Área trabalhada (ha)"]
-    ].copy()
+    df_resumo = df_resumo[["Talhão", "Área trabalhada (ha)"]].copy()
 
-    return df_resumo.head(max_linhas)
+    return df_resumo
 
 
 def preparar_tabela_talhoes_exportacao(df_talhoes, incluir_area_total=True):
@@ -626,10 +605,7 @@ def preparar_tabela_talhoes_exportacao(df_talhoes, incluir_area_total=True):
 
     for col in ["Área total (ha)", "Área trabalhada (ha)"]:
         if col in df_exp.columns:
-            df_exp[col] = pd.to_numeric(
-                df_exp[col],
-                errors="coerce"
-            ).fillna(0).round(2)
+            df_exp[col] = pd.to_numeric(df_exp[col], errors="coerce").fillna(0).round(2)
             df_exp[col] = df_exp[col].apply(formatar_area_ha)
 
     return df_exp
@@ -1353,6 +1329,9 @@ def criar_figura_area(
         weight="bold"
     )
 
+    # =====================================================
+    # TABELA COMPACTA NO MAPA - ESTILO MINI-TABELA
+    # =====================================================
     if df_talhoes_resumo is not None and not df_talhoes_resumo.empty:
         tabela_ax = fig.add_axes([0.71, 0.13, 0.25, 0.22])
         tabela_ax.set_xlim(0, 1)
@@ -1370,46 +1349,103 @@ def criar_figura_area(
         )
         tabela_ax.add_patch(tabela_box)
 
+        area_total_mapa = pd.to_numeric(
+            df_talhoes_resumo["Área trabalhada (ha)"],
+            errors="coerce"
+        ).fillna(0).sum()
+
         tabela_ax.text(
-            0.08,
-            0.88,
-            "Área por Talhão",
-            ha="left",
+            0.50,
+            0.91,
+            f"ÁREA TOTAL: {formatar_area_ha(area_total_mapa)}",
+            ha="center",
             va="center",
-            fontsize=10.6,
+            fontsize=8.4,
             fontweight="bold",
             color="#0F172A"
         )
 
-        tabela_ax.text(0.08, 0.75, "Gleba", fontsize=7.6, color="#64748B", weight="bold", ha="left", va="center")
-        tabela_ax.text(0.34, 0.75, "Talhão", fontsize=7.6, color="#64748B", weight="bold", ha="left", va="center")
-        tabela_ax.text(0.92, 0.75, "Área", fontsize=7.6, color="#64748B", weight="bold", ha="right", va="center")
+        # Mini tabela compacta, semelhante ao exemplo enviado.
+        x0, x1 = 0.12, 0.88
+        x_mid = 0.43
+        y_top = 0.80
+        y_head = 0.70
+        y_bottom = 0.20
 
-        tabela_ax.plot([0.08, 0.92], [0.69, 0.69], color="#E2E8F0", linewidth=0.8)
+        tabela_ax.plot([x0, x1], [y_top, y_top], color="#334155", linewidth=0.55)
+        tabela_ax.plot([x0, x1], [y_head, y_head], color="#334155", linewidth=0.55)
+        tabela_ax.plot([x0, x1], [y_bottom, y_bottom], color="#334155", linewidth=0.55)
+        tabela_ax.plot([x0, x0], [y_bottom, y_top], color="#334155", linewidth=0.55)
+        tabela_ax.plot([x_mid, x_mid], [y_bottom, y_top], color="#334155", linewidth=0.55)
+        tabela_ax.plot([x1, x1], [y_bottom, y_top], color="#334155", linewidth=0.55)
 
-        df_plot_tab = df_talhoes_resumo.copy().head(6)
+        tabela_ax.text(
+            (x0 + x_mid) / 2,
+            0.75,
+            "TALHÃO",
+            fontsize=6.8,
+            color="#0F172A",
+            weight="bold",
+            ha="center",
+            va="center"
+        )
 
-        y = 0.60
-        passo = 0.087
+        tabela_ax.text(
+            (x_mid + x1) / 2,
+            0.75,
+            "ÁREA",
+            fontsize=6.8,
+            color="#0F172A",
+            weight="bold",
+            ha="center",
+            va="center"
+        )
+
+        df_plot_tab = df_talhoes_resumo.copy().head(8)
+
+        y = 0.65
+        passo = 0.055
 
         for _, row in df_plot_tab.iterrows():
-            gleba = str(row["Gleba"])
             talhao = str(row["Talhão"])
             area = pd.to_numeric(row["Área trabalhada (ha)"], errors="coerce")
-            area_txt = "-" if pd.isna(area) else formatar_area_ha(area)
+            area_txt = "-" if pd.isna(area) else f"{area:.2f}".replace(".", ",")
 
-            tabela_ax.text(0.08, y, gleba, fontsize=7.3, color="#0F172A", ha="left", va="center")
-            tabela_ax.text(0.34, y, talhao, fontsize=7.3, color="#0F172A", ha="left", va="center")
-            tabela_ax.text(0.92, y, area_txt, fontsize=7.3, color="#16A34A", ha="right", va="center", weight="bold")
+            tabela_ax.text(
+                (x0 + x_mid) / 2,
+                y,
+                talhao,
+                fontsize=6.5,
+                color="#0F172A",
+                ha="center",
+                va="center"
+            )
+
+            tabela_ax.text(
+                (x_mid + x1) / 2,
+                y,
+                area_txt,
+                fontsize=6.5,
+                color="#0F172A",
+                ha="center",
+                va="center"
+            )
+
+            tabela_ax.plot(
+                [x0, x1],
+                [y - 0.030, y - 0.030],
+                color="#CBD5E1",
+                linewidth=0.35
+            )
 
             y -= passo
 
-        if len(df_talhoes_resumo) >= 6:
+        if len(df_talhoes_resumo) > 8:
             tabela_ax.text(
                 0.50,
-                0.055,
-                "Tabela completa nas páginas seguintes do PDF",
-                fontsize=6.8,
+                0.08,
+                f"+ {len(df_talhoes_resumo) - 8} talhões no PDF",
+                fontsize=6.2,
                 color="#64748B",
                 ha="center",
                 va="center"
@@ -1442,40 +1478,42 @@ def criar_figura_tabela_talhoes_pdf(
     nome_fazenda,
     pagina_atual=1,
     total_paginas=1,
-    area_total_trabalhada=None
+    area_total_trabalhada=None,
+    area_total_fazenda=None
 ):
+    """
+    Página PDF completa da área por Gleba/Talhão.
+    Aqui a tabela é maior e mais explicada, mostrando área total e trabalhada.
+    """
     df_base = ordenar_tabela_talhoes(df_talhoes)
 
     if df_base is None or df_base.empty:
-        df_base = pd.DataFrame(columns=["Gleba", "Talhão", "Área trabalhada (ha)"])
+        df_base = pd.DataFrame(columns=[
+            "Gleba",
+            "Talhão",
+            "Área total (ha)",
+            "Área trabalhada (ha)"
+        ])
 
     df_dados = df_base[
         df_base["Gleba"].astype(str).str.upper() != "TOTAL"
     ].copy()
 
-    if "Área trabalhada (ha)" in df_dados.columns:
-        df_dados["Área trabalhada (ha)"] = pd.to_numeric(
-            df_dados["Área trabalhada (ha)"],
-            errors="coerce"
-        ).fillna(0).round(2)
+    for col in ["Área total (ha)", "Área trabalhada (ha)"]:
+        if col in df_dados.columns:
+            df_dados[col] = pd.to_numeric(df_dados[col], errors="coerce").fillna(0).round(2)
 
     if area_total_trabalhada is None:
-        if "Área trabalhada (ha)" in df_base.columns:
-            linha_total = df_base[
-                df_base["Gleba"].astype(str).str.upper() == "TOTAL"
-            ]
+        area_total_trabalhada = pd.to_numeric(
+            df_dados.get("Área trabalhada (ha)", pd.Series(dtype=float)),
+            errors="coerce"
+        ).fillna(0).sum()
 
-            if not linha_total.empty:
-                area_total_trabalhada = pd.to_numeric(
-                    linha_total["Área trabalhada (ha)"].iloc[0],
-                    errors="coerce"
-                )
-            else:
-                area_total_trabalhada = df_dados["Área trabalhada (ha)"].sum()
-        else:
-            area_total_trabalhada = 0
-
-    area_total_txt = formatar_area_ha(area_total_trabalhada)
+    if area_total_fazenda is None:
+        area_total_fazenda = pd.to_numeric(
+            df_dados.get("Área total (ha)", pd.Series(dtype=float)),
+            errors="coerce"
+        ).fillna(0).sum()
 
     fig = plt.figure(figsize=(11.69, 8.27))
     fig.patch.set_facecolor("#F4F7FB")
@@ -1555,12 +1593,23 @@ def criar_figura_tabela_talhoes_pdf(
     ax_card.add_patch(card)
 
     ax_card.text(
-        0.50,
+        0.28,
         0.94,
-        f"ÁREA TOTAL: {area_total_txt}",
-        fontsize=13,
+        f"Área total: {formatar_area_ha(area_total_fazenda)}",
+        fontsize=11.5,
         weight="bold",
         color="#0F172A",
+        ha="center",
+        va="center"
+    )
+
+    ax_card.text(
+        0.72,
+        0.94,
+        f"Área trabalhada: {formatar_area_ha(area_total_trabalhada)}",
+        fontsize=11.5,
+        weight="bold",
+        color="#16A34A",
         ha="center",
         va="center"
     )
@@ -1579,71 +1628,47 @@ def criar_figura_tabela_talhoes_pdf(
         adicionar_footer(fig, "#64748B")
         return fig
 
-    blocos_por_pagina = 3
-    linhas_por_bloco = 12
+    df_tab = df_dados[["Gleba", "Talhão", "Área total (ha)", "Área trabalhada (ha)"]].copy()
 
-    blocos = [
-        df_dados.iloc[i:i + linhas_por_bloco].copy()
-        for i in range(0, len(df_dados), linhas_por_bloco)
-    ]
+    df_tab["Área total (ha)"] = df_tab["Área total (ha)"].apply(formatar_area_ha)
+    df_tab["Área trabalhada (ha)"] = df_tab["Área trabalhada (ha)"].apply(formatar_area_ha)
 
-    blocos = blocos[:blocos_por_pagina]
+    df_tab = df_tab.rename(columns={
+        "Gleba": "GLEBA",
+        "Talhão": "TALHÃO",
+        "Área total (ha)": "ÁREA TOTAL",
+        "Área trabalhada (ha)": "ÁREA TRABALHADA"
+    })
 
-    largura_bloco = 0.26
-    espaco = 0.035
-    inicio_x = 0.08
-    y_base = 0.14
-    altura_bloco = 0.70
+    ax_table = fig.add_axes([0.095, 0.155, 0.81, 0.62])
+    ax_table.axis("off")
 
-    for idx_bloco, df_bloco in enumerate(blocos):
-        x = inicio_x + idx_bloco * (largura_bloco + espaco)
+    tabela = ax_table.table(
+        cellText=df_tab.values,
+        colLabels=df_tab.columns,
+        loc="upper center",
+        cellLoc="center",
+        colLoc="center",
+        colWidths=[0.17, 0.17, 0.28, 0.28]
+    )
 
-        ax_tab = fig.add_axes([
-            0.06 + x * 0.88,
-            0.105 + y_base * 0.75,
-            largura_bloco * 0.88,
-            altura_bloco * 0.75
-        ])
+    tabela.auto_set_font_size(False)
+    tabela.set_fontsize(8.6)
+    tabela.scale(1, 1.25)
 
-        ax_tab.axis("off")
+    for (row, col), cell in tabela.get_celld().items():
+        cell.set_edgecolor("#CBD5E1")
+        cell.set_linewidth(0.55)
 
-        df_tab = df_bloco[
-            ["Gleba", "Talhão", "Área trabalhada (ha)"]
-        ].copy()
+        if row == 0:
+            cell.set_facecolor("#E2E8F0")
+            cell.set_text_props(weight="bold", color="#0F172A")
+        else:
+            cell.set_facecolor("#FFFFFF")
+            cell.set_text_props(color="#0F172A")
 
-        df_tab["Área trabalhada (ha)"] = df_tab["Área trabalhada (ha)"].apply(
-            formatar_area_ha
-        )
-
-        df_tab = df_tab.rename(columns={
-            "Gleba": "GLEBA",
-            "Talhão": "TALHÃO",
-            "Área trabalhada (ha)": "ÁREA (ha)"
-        })
-
-        tabela = ax_tab.table(
-            cellText=df_tab.values,
-            colLabels=df_tab.columns,
-            loc="upper center",
-            cellLoc="center",
-            colLoc="center",
-            colWidths=[0.27, 0.30, 0.43]
-        )
-
-        tabela.auto_set_font_size(False)
-        tabela.set_fontsize(7.8)
-        tabela.scale(1, 1.23)
-
-        for (row, col), cell in tabela.get_celld().items():
-            cell.set_edgecolor("#334155")
-            cell.set_linewidth(0.45)
-
-            if row == 0:
-                cell.set_facecolor("#E2E8F0")
-                cell.set_text_props(weight="bold", color="#0F172A")
-            else:
-                cell.set_facecolor("#FFFFFF")
-                cell.set_text_props(color="#0F172A")
+            if col == 3:
+                cell.set_text_props(color="#166534", weight="bold")
 
     adicionar_footer(fig, "#64748B")
     return fig
@@ -1653,7 +1678,7 @@ def criar_figuras_tabela_talhoes_pdf(
     df_talhoes,
     fazenda_id,
     nome_fazenda,
-    linhas_por_pagina=36
+    linhas_por_pagina=24
 ):
     if df_talhoes is None or df_talhoes.empty:
         return []
@@ -1673,9 +1698,17 @@ def criar_figuras_tabela_talhoes_pdf(
             df_total["Área trabalhada (ha)"].iloc[0],
             errors="coerce"
         )
+        area_total_fazenda = pd.to_numeric(
+            df_total["Área total (ha)"].iloc[0],
+            errors="coerce"
+        )
     else:
         area_total_trabalhada = pd.to_numeric(
             df_dados["Área trabalhada (ha)"],
+            errors="coerce"
+        ).fillna(0).sum()
+        area_total_fazenda = pd.to_numeric(
+            df_dados["Área total (ha)"],
             errors="coerce"
         ).fillna(0).sum()
 
@@ -1697,7 +1730,8 @@ def criar_figuras_tabela_talhoes_pdf(
             nome_fazenda=nome_fazenda,
             pagina_atual=idx,
             total_paginas=total_paginas,
-            area_total_trabalhada=area_total_trabalhada
+            area_total_trabalhada=area_total_trabalhada,
+            area_total_fazenda=area_total_fazenda
         )
 
         figuras.append(fig_pag)
@@ -2258,7 +2292,7 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                                 df_talhoes=df_talhoes,
                                 fazenda_id=FAZENDA_ID,
                                 nome_fazenda=nome_fazenda,
-                                linhas_por_pagina=36
+                                linhas_por_pagina=24
                             )
 
                             figuras_pdf_area.extend(figuras_tabela_pdf)
@@ -2380,4 +2414,4 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                     st.info("Verifique se os dados possuem correspondência com a base cartográfica e se a área trabalhada atende ao mínimo configurado.")
 
 else:
-    st.info("⬆️ Envie os arquivos e clique em **Gerar Mapa**")
+    st.info("⬆️ Envie os arquivos e clique em **Gerar mapa**.")
