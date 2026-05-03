@@ -2380,4 +2380,4 @@ if uploaded_zips and uploaded_gpkg and st.session_state.get("mapas_gerados", Fal
                     st.info("Verifique se os dados possuem correspondência com a base cartográfica e se a área trabalhada atende ao mínimo configurado.")
 
 else:
-    st.info("⬆️ Envie os arquivos e clique em
+    st.info("⬆️ Envie os arquivos e clique em **Gerar Mapa**")
