@@ -765,7 +765,9 @@ with sidebar_container():
     st.markdown("### 🧭 Base cartográfica")
     st.caption(os.path.basename(BASE_PADRAO_PATH))
 
-if MAPA_AREA:
+# Velocidade e RPM não utilizam parâmetros de buffer.
+# Por isso, os parâmetros de Área Trabalhada só aparecem quando Área Trabalhada está selecionada sozinha.
+if MAPA_AREA and not (MAPA_VEL or MAPA_RPM):
     with sidebar_container():
         st.markdown("### 📐 Área Trabalhada")
         MULTIPLICADOR_BUFFER_AREA = st.number_input("Tamanho do Buffer", min_value=0.0, max_value=20.0, value=2.5, step=0.1, key="buffer_area_mult_input")
@@ -780,6 +782,8 @@ if MAPA_AREA:
             AREA_MAX_BURACO_HA = st.number_input("Preencher buracos até (ha)", min_value=0.0, max_value=10.0, value=0.50, step=0.10, key="area_max_buraco_ha_input")
         MOSTRAR_TALHOES = st.checkbox("📄 Incluir tabela por Gleba / Talhão no PDF e CSV", value=False, key="mostrar_talhoes_chk")
 else:
+    # Padrões internos usados quando os controles ficam ocultos.
+    # Caso o arquivo enviado seja MULTIPOLYGON/POLYGON, a Área Trabalhada ainda usa estes valores.
     MULTIPLICADOR_BUFFER_AREA = 2.5
     AREA_MIN_HA = 0.50
     BUFFER_MINIMO_M = 8.0
