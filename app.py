@@ -30,18 +30,6 @@ CRS_METRICO = 31983
 TEMPO_MAX_SEG = 60
 LARGURA_PADRAO_M = 3.0
 
-# Colhedoras cadastradas no sistema, em ordem e sem duplicidade.
-COLHEDORAS_CADASTRADAS = [
-    "4.121",
-    "4.122",
-    "4.125",
-    "4.126",
-    "4.127",
-    "4.130",
-    "4.132",
-    "4.133",
-]
-
 if "mapas_gerados" not in st.session_state:
     st.session_state["mapas_gerados"] = False
 
@@ -658,12 +646,9 @@ def adicionar_header(fig, titulo, fazenda_id, nome_fazenda, periodo_ini, periodo
     card = mpatches.FancyBboxPatch((0, 0), 1, 1, boxstyle="round,pad=0.012,rounding_size=0.02", facecolor="#FFFFFF", edgecolor="#D8E1EB", linewidth=1.0)
     axh.add_patch(card)
 
-    # Evita que o período passe por cima de títulos longos.
     fonte_titulo = 14.2 if len(str(titulo)) > 58 else 14.8 if len(str(titulo)) > 48 else 16
     axh.text(0.03, 0.64, titulo, fontsize=fonte_titulo, weight="bold", color="#0F172A", ha="left", va="center")
     axh.text(0.03, 0.26, f"Fazenda {fazenda_id} • {nome_fazenda}", fontsize=10.2, color="#475569", ha="left", va="center")
-
-    # Período na linha inferior direita, separado do título.
     axh.text(0.97, 0.26, f"Período: {periodo_ini} até {periodo_fim}", fontsize=9.2, color="#64748B", ha="right", va="center")
 
 
@@ -761,7 +746,6 @@ def criar_figura_area_colhedora(base_fazenda, gdf_area_colhedora, df_legenda, co
     titulo = f"Mapa de Área por Colhedora/Operador • {prefixo_frente}{turno} ({intervalo_turno(turno)})"
     adicionar_header(fig, titulo, fazenda_id, nome_fazenda, periodo_txt, periodo_txt)
 
-    # Mesmo padrão visual dos demais mapas: mapa à esquerda e resumo/legenda à direita.
     ax = fig.add_axes([0.06, 0.16, 0.58, 0.66])
     base_fazenda.plot(ax=ax, facecolor="#FFFFFF", edgecolor="#334155", linewidth=1.0, zorder=1)
     if gdf_area_colhedora is not None and not gdf_area_colhedora.empty:
@@ -811,16 +795,10 @@ def criar_figura_area_colhedora(base_fazenda, gdf_area_colhedora, df_legenda, co
         topo_texto = 0.850
         base_texto = 0.075
         altura_disponivel = topo_texto - base_texto
-
-        # Espaçamento adaptativo:
-        # - poucos operadores: não espalha demais;
-        # - muitos operadores: reduz o espaçamento para caber tudo;
-        # - mantém distância equivalente entre as linhas.
         if total_linhas <= 1:
             espacamento = 0.050
         else:
             espacamento = min(0.052, altura_disponivel / max(total_linhas - 1, 1))
-
         altura_usada = espacamento * max(total_linhas - 1, 0)
         y_inicio = min(topo_texto, base_texto + altura_disponivel / 2 + altura_usada / 2)
 
@@ -1034,39 +1012,8 @@ if MAPA_OPERADOR:
             step=0.10,
             key="area_min_operador_input",
         )
-
-    with sidebar_container():
-        st.markdown("### 🚜 Frentes")
-        st.caption("Selecione as colhedoras de cada frente. As escolhidas somem das próximas frentes.")
-
-        FRENTE_1_NOME = st.text_input("Nome da F1", value="F1", key="frente_1_nome")
-        FRENTE_1_COLHEDORAS = st.multiselect(
-            "Colhedoras da F1",
-            options=COLHEDORAS_CADASTRADAS,
-            key="frente_1_colhedoras",
-        )
-
-        restantes_f2 = [c for c in COLHEDORAS_CADASTRADAS if c not in FRENTE_1_COLHEDORAS]
-        FRENTE_2_NOME = st.text_input("Nome da F2", value="F2", key="frente_2_nome")
-        FRENTE_2_COLHEDORAS = st.multiselect(
-            "Colhedoras da F2",
-            options=restantes_f2,
-            key="frente_2_colhedoras",
-        )
-
-        selecionadas_ate_f2 = set(FRENTE_1_COLHEDORAS) | set(FRENTE_2_COLHEDORAS)
-        restantes_f3 = [c for c in COLHEDORAS_CADASTRADAS if c not in selecionadas_ate_f2]
-        FRENTE_3_NOME = st.text_input("Nome da F3", value="F3", key="frente_3_nome")
-        FRENTE_3_COLHEDORAS = st.multiselect(
-            "Colhedoras da F3",
-            options=restantes_f3,
-            key="frente_3_colhedoras",
-        )
-
 else:
     AREA_MIN_OPERADOR_HA = 0.50
-    FRENTE_1_NOME, FRENTE_2_NOME, FRENTE_3_NOME = "F1", "F2", "F3"
-    FRENTE_1_COLHEDORAS, FRENTE_2_COLHEDORAS, FRENTE_3_COLHEDORAS = [], [], []
 
 RPM_MIN, RPM_MAX, RPM_PASSO = 1200, 2000, 100
 VEL_MIN, VEL_MAX, VEL_PASSO = 4.0, 8.0, 1.0
@@ -1113,6 +1060,73 @@ uploaded_zips = st.file_uploader(
     accept_multiple_files=True,
     key=f"upload_{MODO_MAPA}",
 )
+
+FRENTE_FAZENDAS = {"F1": [], "F2": [], "F3": []}
+
+# No modo Colhedora/operador, o app primeiro lê o ZIP para descobrir as fazendas
+# e então pergunta qual fazenda pertence a cada frente.
+if uploaded_zips and MAPA_OPERADOR and os.path.exists(BASE_PADRAO_PATH):
+    try:
+        with tempfile.TemporaryDirectory() as tmpdir_preview:
+            dfs_preview = []
+            for i_preview, uploaded_zip_preview in enumerate(uploaded_zips):
+                try:
+                    uploaded_zip_preview.seek(0)
+                except Exception:
+                    pass
+                csv_files_preview = ler_csvs_de_zip(uploaded_zip_preview, tmpdir_preview, i_preview)
+                for csv_path_preview in csv_files_preview:
+                    try:
+                        dfs_preview.append(ler_csv_robusto(csv_path_preview))
+                    except Exception:
+                        pass
+                try:
+                    uploaded_zip_preview.seek(0)
+                except Exception:
+                    pass
+
+            if dfs_preview:
+                df_preview = pd.concat(dfs_preview, ignore_index=True)
+                if "cd_fazenda" in df_preview.columns:
+                    df_preview["cd_fazenda"] = df_preview["cd_fazenda"].apply(normalizar_codigo)
+                    fazendas_csv = sorted(df_preview["cd_fazenda"].dropna().astype(str).unique(), key=chave_ordenacao_mista)
+
+                    base_preview = gpd.read_file(BASE_PADRAO_PATH)
+                    base_preview["FAZENDA"] = base_preview["FAZENDA"].apply(normalizar_codigo)
+                    mapa_nome_fazenda = {}
+                    if "PROPRIEDADE" in base_preview.columns:
+                        mapa_nome_fazenda = dict(zip(base_preview["FAZENDA"].astype(str), base_preview["PROPRIEDADE"].astype(str)))
+
+                    opcoes_fazendas = []
+                    label_para_codigo = {}
+                    for cod_fazenda in fazendas_csv:
+                        nome_fazenda = mapa_nome_fazenda.get(cod_fazenda, "Sem nome na base")
+                        label = f"{cod_fazenda} - {nome_fazenda}"
+                        opcoes_fazendas.append(label)
+                        label_para_codigo[label] = cod_fazenda
+
+                    st.markdown("### 🚜 Definição das frentes")
+                    st.caption("Selecione em qual frente cada fazenda será considerada. O que não for selecionado não será gerado.")
+
+                    fazendas_f1_label = st.multiselect("Fazendas da F1", opcoes_fazendas, key="fazendas_f1_select")
+                    restantes_f2 = [op for op in opcoes_fazendas if op not in fazendas_f1_label]
+                    fazendas_f2_label = st.multiselect("Fazendas da F2", restantes_f2, key="fazendas_f2_select")
+                    restantes_f3 = [op for op in restantes_f2 if op not in fazendas_f2_label]
+                    fazendas_f3_label = st.multiselect("Fazendas da F3", restantes_f3, key="fazendas_f3_select")
+
+                    FRENTE_FAZENDAS = {
+                        "F1": [label_para_codigo[x] for x in fazendas_f1_label],
+                        "F2": [label_para_codigo[x] for x in fazendas_f2_label],
+                        "F3": [label_para_codigo[x] for x in fazendas_f3_label],
+                    }
+
+                    if not any(FRENTE_FAZENDAS.values()):
+                        st.warning("⚠️ Selecione pelo menos uma fazenda em F1, F2 ou F3 antes de gerar o mapa.")
+                else:
+                    st.warning("⚠️ Não encontrei a coluna cd_fazenda no ZIP enviado.")
+    except Exception as e:
+        st.warning(f"⚠️ Não foi possível ler as fazendas do ZIP para configurar as frentes: {e}")
+
 GERAR = st.button("▶️ Gerar mapa")
 
 if GERAR:
@@ -1137,6 +1151,10 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
         with tempfile.TemporaryDirectory() as tmpdir:
             dfs = []
             for i, uploaded_zip in enumerate(uploaded_zips):
+                try:
+                    uploaded_zip.seek(0)
+                except Exception:
+                    pass
                 csv_files = ler_csvs_de_zip(uploaded_zip, tmpdir, i)
                 if not csv_files:
                     st.error(f"❌ Nenhum CSV encontrado no ZIP {uploaded_zip.name}")
@@ -1285,8 +1303,13 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                 coluna_linha = detectar_coluna_geometria(df, ["LINESTRING", "MULTILINESTRING"])
                 faltantes = validar_colunas(df, ["cd_equipamento", "cd_operador", "desc_operador", "dt_hr_local_inicial", "vl_largura_implemento"])
                 if coluna_linha is None or faltantes:
-                    st.warning("⚠️ O modo Área por Colhedora/Operador precisa de um CSV de linhas da Solinftec com colhedora, operador, horário e largura.")
+                    st.warning("⚠️ O modo Colhedora/operador precisa de um CSV de linhas da Solinftec com colhedora, operador, horário e largura.")
                     st.stop()
+
+                if not any(FRENTE_FAZENDAS.values()):
+                    st.warning("⚠️ Selecione pelo menos uma fazenda em F1, F2 ou F3 antes de gerar o mapa.")
+                    st.stop()
+
                 df_linhas = df[df[coluna_linha].notna()].copy()
                 df_linhas = df_linhas[df_linhas[coluna_linha].astype(str).str.upper().str.contains("LINESTRING", na=False)].copy()
                 df_linhas["turno"] = df_linhas["dt_hr_local_inicial"].apply(classificar_turno)
@@ -1295,30 +1318,14 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                     st.warning("⚠️ Nenhuma linha válida encontrada para separar por turno.")
                     st.stop()
 
-                # Monta frentes a partir das seleções fixas de colhedoras.
-                frentes_config = []
-                for nome_frente, colhedoras_frente in [
-                    (FRENTE_1_NOME, FRENTE_1_COLHEDORAS),
-                    (FRENTE_2_NOME, FRENTE_2_COLHEDORAS),
-                    (FRENTE_3_NOME, FRENTE_3_COLHEDORAS),
-                ]:
-                    nome_frente = str(nome_frente).strip() or "Frente"
-                    colhedoras_frente = [normalizar_codigo(c) for c in colhedoras_frente]
-                    if colhedoras_frente:
-                        frentes_config.append((nome_frente, colhedoras_frente))
-
-                colhedoras_selecionadas = set()
-                for _, colhedoras_frente in frentes_config:
-                    colhedoras_selecionadas.update(colhedoras_frente)
-
-                if not frentes_config:
-                    st.warning("⚠️ Nenhuma colhedora foi selecionada para as frentes.")
-                    st.stop()
-
                 ordem_turnos = ["Turno C", "Turno A", "Turno B"]
 
-                for nome_frente, colhedoras_frente in frentes_config:
-                    df_frente = df_linhas[df_linhas["cd_equipamento"].astype(str).map(normalizar_codigo).isin(colhedoras_frente)].copy()
+                for nome_frente in ["F1", "F2", "F3"]:
+                    fazendas_frente = FRENTE_FAZENDAS.get(nome_frente, [])
+                    if not fazendas_frente:
+                        continue
+
+                    df_frente = df_linhas[df_linhas["cd_fazenda"].astype(str).map(normalizar_codigo).isin(fazendas_frente)].copy()
                     if df_frente.empty:
                         continue
 
@@ -1332,8 +1339,6 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                                 fazendas_turno = sorted(df_turno["cd_fazenda"].dropna().unique(), key=chave_ordenacao_mista)
                                 registros_turno = []
 
-                                # Primeiro gera todos os mapas do turno em memória.
-                                # Assim o botão do PDF único aparece no topo do expander do turno.
                                 for FAZENDA_ID in fazendas_turno:
                                     base_fazenda = base[base["FAZENDA"] == FAZENDA_ID].copy()
                                     if base_fazenda.empty:
@@ -1385,7 +1390,6 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                                     mime="application/pdf",
                                     key=f"pdf_operador_turno_{chave_pdf_turno}",
                                 )
-
                                 st.caption(f"PDF único contém {len(registros_turno)} mapa(s), com uma fazenda por página.")
 
                                 for registro in registros_turno:
