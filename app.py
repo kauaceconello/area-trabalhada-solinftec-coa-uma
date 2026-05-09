@@ -772,8 +772,6 @@ def criar_figura_area_colhedora(base_fazenda, gdf_area_colhedora, df_legenda, co
     if df_legenda is None or df_legenda.empty:
         axl.text(0.50, 0.50, "Sem dados válidos.", fontsize=9, color="#64748B", ha="center")
     else:
-        # Monta linhas da legenda. A ideia é distribuir TODAS as linhas igualmente
-        # do topo até a base do resumo, ocupando o card inteiro sem deixar buraco grande.
         linhas_legenda = []
         for _, row in df_legenda.iterrows():
             colhedora = str(row["Colhedora"])
@@ -784,39 +782,32 @@ def criar_figura_area_colhedora(base_fazenda, gdf_area_colhedora, df_legenda, co
             if not operadores:
                 operadores = ["-"]
 
-            linhas_legenda.append({
-                "tipo": "colhedora",
-                "texto": f"{colhedora}: {area_txt}",
-                "cor": cor,
-            })
+            linhas_legenda.append({"tipo": "colhedora", "texto": f"{colhedora}: {area_txt}", "cor": cor})
             for operador in operadores:
-                linhas_legenda.append({
-                    "tipo": "operador",
-                    "texto": operador,
-                    "cor": cor,
-                })
+                linhas_legenda.append({"tipo": "operador", "texto": operador, "cor": cor})
 
         total_linhas = len(linhas_legenda)
         topo_texto = 0.850
         base_texto = 0.075
         altura_disponivel = topo_texto - base_texto
 
-        # Espaçamento equivalente entre todas as linhas.
-        # Com poucas linhas, ocupa o card inteiro. Com muitas, reduz espaçamento e fonte.
+        # Espaçamento adaptativo:
+        # - poucos operadores: não espalha demais;
+        # - muitos operadores: reduz o espaçamento para caber tudo;
+        # - mantém distância equivalente entre as linhas.
         if total_linhas <= 1:
-            ys = [0.50]
-            espacamento = altura_disponivel
+            espacamento = 0.050
         else:
-            ys = np.linspace(topo_texto, base_texto, total_linhas)
-            espacamento = altura_disponivel / (total_linhas - 1)
+            espacamento = min(0.052, altura_disponivel / max(total_linhas - 1, 1))
 
-        # Fonte dinâmica: quanto mais linhas, menor a fonte, mas sem omitir nenhum operador.
-        fonte_operador = max(4.2, min(9.2, espacamento * 255))
-        fonte_colhedora = max(4.8, min(10.4, fonte_operador + 1.1))
-        tamanho_quadrado = max(0.016, min(0.040, espacamento * 1.35))
+        altura_usada = espacamento * max(total_linhas - 1, 0)
+        # Centraliza verticalmente quando há poucas linhas, evitando ficar tudo no topo ou exageradamente espalhado.
+        y_inicio = min(topo_texto, base_texto + altura_disponivel / 2 + altura_usada / 2)
 
-        # Limite de caracteres também acompanha a fonte. Não remove operadores,
-        # só encurta textos longos para não sair do card lateral.
+        fonte_operador = max(4.4, min(9.2, espacamento * 210))
+        fonte_colhedora = max(5.0, min(10.4, fonte_operador + 1.1))
+        tamanho_quadrado = max(0.017, min(0.040, espacamento * 1.20))
+
         if fonte_operador >= 8:
             limite_operador = 44
         elif fonte_operador >= 6.5:
@@ -826,7 +817,8 @@ def criar_figura_area_colhedora(base_fazenda, gdf_area_colhedora, df_legenda, co
         else:
             limite_operador = 30
 
-        for item, y in zip(linhas_legenda, ys):
+        for i, item in enumerate(linhas_legenda):
+            y = y_inicio - i * espacamento
             if item["tipo"] == "colhedora":
                 axl.add_patch(mpatches.FancyBboxPatch(
                     (0.07, y - tamanho_quadrado / 2),
@@ -1011,6 +1003,19 @@ else:
     FATOR_RECUO_GAPS = 0.30
     AREA_MAX_BURACO_HA = 0.50
     MOSTRAR_TALHOES = False
+
+if MAPA_OPERADOR:
+    with sidebar_container():
+        st.markdown("### 🌾 Área por colhedora")
+        AREA_MIN_OPERADOR_HA = st.number_input(
+            "Área mínima para gerar mapa (ha)",
+            min_value=0.0,
+            value=0.50,
+            step=0.10,
+            key="area_min_operador_input",
+        )
+else:
+    AREA_MIN_OPERADOR_HA = 0.50
 
 RPM_MIN, RPM_MAX, RPM_PASSO = 1200, 2000, 100
 VEL_MIN, VEL_MAX, VEL_PASSO = 4.0, 8.0, 1.0
@@ -1244,8 +1249,13 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                     df_turno = df_linhas[df_linhas["turno"] == turno].copy()
                     if df_turno.empty:
                         continue
+
                     with st.expander(f"🕒 {turno} ({intervalo_turno(turno)})", expanded=False):
                         fazendas_turno = sorted(df_turno["cd_fazenda"].dropna().unique(), key=chave_ordenacao_mista)
+                        registros_turno = []
+
+                        # Primeiro gera todos os mapas do turno em memória.
+                        # Assim o botão do PDF único aparece no topo do expander do turno.
                         for FAZENDA_ID in fazendas_turno:
                             base_fazenda = base[base["FAZENDA"] == FAZENDA_ID].copy()
                             if base_fazenda.empty:
@@ -1259,10 +1269,52 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                             gdf_area_colhedora, df_legenda = criar_area_colhedora_por_linhas(df_faz_turno, coluna_linha, geom_fazenda)
                             if gdf_area_colhedora.empty or df_legenda.empty:
                                 continue
+
+                            area_total_mapa_ha = pd.to_numeric(df_legenda["Área trabalhada (ha)"], errors="coerce").fillna(0).sum()
+                            if area_total_mapa_ha < AREA_MIN_OPERADOR_HA:
+                                continue
+
                             colhedoras = df_legenda["Colhedora"].astype(str).tolist()
                             cores = criar_cores_distintas(colhedoras)
+                            fig_op = criar_figura_area_colhedora(
+                                base_fazenda,
+                                gdf_area_colhedora,
+                                df_legenda,
+                                cores,
+                                turno,
+                                periodo_txt,
+                                FAZENDA_ID,
+                                nome_fazenda,
+                            )
+                            registros_turno.append({
+                                "fazenda_id": FAZENDA_ID,
+                                "nome_fazenda": nome_fazenda,
+                                "fig": fig_op,
+                            })
+
+                        if not registros_turno:
+                            st.info(f"Nenhum mapa acima de {AREA_MIN_OPERADOR_HA:.2f} ha foi gerado para este turno.".replace(".", ","))
+                            continue
+
+                        # Botão do PDF único fica antes dos mapas individuais para não ficar escondido no final.
+                        figuras_turno = [r["fig"] for r in registros_turno]
+                        pdf_turno = figuras_para_pdf_multipaginas(figuras_turno)
+                        st.download_button(
+                            f"⬇️ Baixar PDF único – Todas as fazendas do {turno}",
+                            data=pdf_turno,
+                            file_name=f"mapas_area_colhedora_operador_{turno.replace(' ', '_')}.pdf",
+                            mime="application/pdf",
+                            key=f"pdf_operador_turno_{turno}",
+                        )
+
+                        st.caption(f"PDF único contém {len(registros_turno)} mapa(s), com uma fazenda por página.")
+
+                        # Depois exibe os mapas individuais e seus downloads separados.
+                        for registro in registros_turno:
+                            FAZENDA_ID = registro["fazenda_id"]
+                            nome_fazenda = registro["nome_fazenda"]
+                            fig_op = registro["fig"]
                             with st.expander(f"🗺️ {nome_fazenda}", expanded=False):
-                                fig_op = criar_figura_area_colhedora(base_fazenda, gdf_area_colhedora, df_legenda, cores, turno, periodo_txt, FAZENDA_ID, nome_fazenda)
                                 st.pyplot(fig_op)
                                 pdf_op = figura_para_pdf_bytes(fig_op)
                                 st.download_button(
@@ -1272,8 +1324,10 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                                     mime="application/pdf",
                                     key=f"pdf_operador_{turno}_{FAZENDA_ID}",
                                 )
-                                plt.close(fig_op)
                                 mapas_gerados_total += 1
+
+                        for registro in registros_turno:
+                            plt.close(registro["fig"])
 
             # =====================================================
             # MODO 3: VELOCIDADE E RPM - CSV LINHAS OU PONTOS
