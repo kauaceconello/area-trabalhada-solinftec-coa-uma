@@ -638,9 +638,14 @@ def adicionar_header(fig, titulo, fazenda_id, nome_fazenda, periodo_ini, periodo
     axh.axis("off")
     card = mpatches.FancyBboxPatch((0, 0), 1, 1, boxstyle="round,pad=0.012,rounding_size=0.02", facecolor="#FFFFFF", edgecolor="#D8E1EB", linewidth=1.0)
     axh.add_patch(card)
-    axh.text(0.03, 0.62, titulo, fontsize=16, weight="bold", color="#0F172A", ha="left", va="center")
+
+    # Evita que o período passe por cima de títulos longos.
+    fonte_titulo = 14.8 if len(str(titulo)) > 48 else 16
+    axh.text(0.03, 0.64, titulo, fontsize=fonte_titulo, weight="bold", color="#0F172A", ha="left", va="center")
     axh.text(0.03, 0.26, f"Fazenda {fazenda_id} • {nome_fazenda}", fontsize=10.2, color="#475569", ha="left", va="center")
-    axh.text(0.97, 0.50, f"Período: {periodo_ini} até {periodo_fim}", fontsize=9.6, color="#64748B", ha="right", va="center")
+
+    # Período na linha inferior direita, separado do título.
+    axh.text(0.97, 0.26, f"Período: {periodo_ini} até {periodo_fim}", fontsize=9.2, color="#64748B", ha="right", va="center")
 
 
 def ajustar_extensao(ax, base_fazenda):
@@ -769,9 +774,9 @@ def criar_figura_area_colhedora(base_fazenda, gdf_area_colhedora, df_legenda, co
     else:
         n = len(df_legenda)
         # Altura dinâmica para caber tudo no resumo lateral; se houver muitas colhedoras, reduz fonte.
-        row_h = min(0.17, 0.78 / max(n, 1))
-        fonte_titulo = 8.5 if n <= 8 else 7.6
-        fonte_operador = 7.3 if n <= 8 else 6.5
+        row_h = min(0.19, 0.78 / max(n, 1))
+        fonte_titulo = 10.2 if n <= 8 else 8.8
+        fonte_operador = 9.0 if n <= 8 else 7.8
         y = 0.84
 
         for _, row in df_legenda.iterrows():
@@ -785,13 +790,13 @@ def criar_figura_area_colhedora(base_fazenda, gdf_area_colhedora, df_legenda, co
 
             # Cabeçalho da colhedora: código-colhedora + área.
             axl.add_patch(mpatches.FancyBboxPatch(
-                (0.07, y - 0.020), 0.032, 0.032,
+                (0.07, y - 0.024), 0.040, 0.040,
                 boxstyle="round,pad=0.002,rounding_size=0.004",
                 facecolor=cor,
                 edgecolor="none",
             ))
             axl.text(
-                0.115, y,
+                0.125, y,
                 f"{colhedora}: {area_txt}",
                 fontsize=fonte_titulo,
                 color="#0F172A",
@@ -801,13 +806,13 @@ def criar_figura_area_colhedora(base_fazenda, gdf_area_colhedora, df_legenda, co
             )
 
             # Operadores como lista com marcador, tudo dentro do resumo lateral.
-            y_ops = y - 0.033
-            max_ops_visiveis = max(1, int((row_h - 0.050) / 0.024))
+            y_ops = y - 0.040
+            max_ops_visiveis = max(1, int((row_h - 0.055) / 0.030))
             for i_op, operador in enumerate(operadores[:max_ops_visiveis]):
-                operador_txt = operador if len(operador) <= 42 else operador[:39] + "..."
+                operador_txt = operador if len(operador) <= 34 else operador[:31] + "..."
                 axl.text(
-                    0.115,
-                    y_ops - i_op * 0.024,
+                    0.125,
+                    y_ops - i_op * 0.030,
                     f"• {operador_txt}",
                     fontsize=fonte_operador,
                     color="#475569",
@@ -816,8 +821,8 @@ def criar_figura_area_colhedora(base_fazenda, gdf_area_colhedora, df_legenda, co
                 )
             if len(operadores) > max_ops_visiveis:
                 axl.text(
-                    0.115,
-                    y_ops - max_ops_visiveis * 0.024,
+                    0.125,
+                    y_ops - max_ops_visiveis * 0.030,
                     f"• +{len(operadores) - max_ops_visiveis} operador(es)",
                     fontsize=fonte_operador,
                     color="#64748B",
