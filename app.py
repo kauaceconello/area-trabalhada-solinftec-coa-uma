@@ -645,7 +645,6 @@ def adicionar_header(fig, titulo, fazenda_id, nome_fazenda, periodo_ini, periodo
     axh.axis("off")
     card = mpatches.FancyBboxPatch((0, 0), 1, 1, boxstyle="round,pad=0.012,rounding_size=0.02", facecolor="#FFFFFF", edgecolor="#D8E1EB", linewidth=1.0)
     axh.add_patch(card)
-
     fonte_titulo = 14.2 if len(str(titulo)) > 58 else 14.8 if len(str(titulo)) > 48 else 16
     axh.text(0.03, 0.64, titulo, fontsize=fonte_titulo, weight="bold", color="#0F172A", ha="left", va="center")
     axh.text(0.03, 0.26, f"Fazenda {fazenda_id} • {nome_fazenda}", fontsize=10.2, color="#475569", ha="left", va="center")
@@ -776,22 +775,17 @@ def criar_figura_area_colhedora(base_fazenda, gdf_area_colhedora, df_legenda, co
             colhedora = str(row["Colhedora"])
             area_txt = formatar_area_ha(row["Área trabalhada (ha)"])
             cor = cores.get(colhedora, "#CCCCCC")
-            operadores_raw = str(row["Operadores"])
-            operadores = [op.strip() for op in operadores_raw.split(";") if op.strip()]
-            if not operadores:
-                operadores = ["-"]
+            operadores = [op.strip() for op in str(row["Operadores"]).split(";") if op.strip()] or ["-"]
             linhas_legenda.append({"tipo": "colhedora", "texto": f"{colhedora}: {area_txt}", "cor": cor})
             for operador in operadores:
                 linhas_legenda.append({"tipo": "operador", "texto": operador, "cor": cor})
 
         total_linhas = len(linhas_legenda)
-        topo_texto = 0.850
-        base_texto = 0.075
+        topo_texto, base_texto = 0.850, 0.075
         altura_disponivel = topo_texto - base_texto
         espacamento = 0.050 if total_linhas <= 1 else min(0.052, altura_disponivel / max(total_linhas - 1, 1))
         altura_usada = espacamento * max(total_linhas - 1, 0)
         y_inicio = min(topo_texto, base_texto + altura_disponivel / 2 + altura_usada / 2)
-
         fonte_operador = max(4.4, min(9.2, espacamento * 210))
         fonte_colhedora = max(5.0, min(10.4, fonte_operador + 1.1))
         tamanho_quadrado = max(0.017, min(0.040, espacamento * 1.20))
@@ -863,39 +857,19 @@ def criar_figura_separador_turno_pdf(nome_frente, turno):
     """Página separadora para o PDF por frente, evitando confusão entre turnos."""
     fig = plt.figure(figsize=(15.5, 8.8))
     fig.patch.set_facecolor("#F4F7FB")
-
-    # Moldura geral no mesmo padrão dos mapas.
-    moldura = mpatches.FancyBboxPatch(
-        (0.01, 0.01), 0.98, 0.98,
-        boxstyle="round,pad=0.0,rounding_size=0.012",
-        transform=fig.transFigure,
-        facecolor="none",
-        edgecolor="#D8E1EB",
-        linewidth=1.0,
-        zorder=0,
-    )
+    moldura = mpatches.FancyBboxPatch((0.01, 0.01), 0.98, 0.98, boxstyle="round,pad=0.0,rounding_size=0.012", transform=fig.transFigure, facecolor="none", edgecolor="#D8E1EB", linewidth=1.0, zorder=0)
     fig.add_artist(moldura)
-
     ax = fig.add_axes([0.10, 0.18, 0.80, 0.64])
     ax.axis("off")
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
-
-    card = mpatches.FancyBboxPatch(
-        (0, 0), 1, 1,
-        boxstyle="round,pad=0.025,rounding_size=0.04",
-        facecolor="#FFFFFF",
-        edgecolor="#D8E1EB",
-        linewidth=1.2,
-    )
+    card = mpatches.FancyBboxPatch((0, 0), 1, 1, boxstyle="round,pad=0.025,rounding_size=0.04", facecolor="#FFFFFF", edgecolor="#D8E1EB", linewidth=1.2)
     ax.add_patch(card)
-
     ax.text(0.50, 0.68, nome_frente, fontsize=30, weight="bold", color="#0F172A", ha="center", va="center")
     ax.text(0.50, 0.50, turno, fontsize=42, weight="bold", color="#2563EB", ha="center", va="center")
     ax.text(0.50, 0.35, intervalo_turno(turno), fontsize=17, color="#64748B", ha="center", va="center")
     ax.plot([0.18, 0.82], [0.26, 0.26], color="#E2E8F0", linewidth=1.2)
     ax.text(0.50, 0.18, "As próximas páginas correspondem às fazendas trabalhadas neste turno.", fontsize=11, color="#475569", ha="center", va="center")
-
     adicionar_footer(fig)
     return fig
 
@@ -1063,9 +1037,6 @@ uploaded_zips = st.file_uploader(
 FRENTE_FAZENDAS = {"F1": [], "F2": [], "F3": []}
 TODAS_FAZENDAS_COM_FRENTE = False
 
-# No modo Colhedora/operador, o app primeiro lê o ZIP para descobrir as fazendas
-# e então pergunta qual fazenda pertence a cada frente. O botão só aparece depois
-# que todas as fazendas forem classificadas em F1, F2 ou F3.
 if uploaded_zips and MAPA_OPERADOR and os.path.exists(BASE_PADRAO_PATH):
     try:
         with tempfile.TemporaryDirectory() as tmpdir_preview:
@@ -1091,7 +1062,6 @@ if uploaded_zips and MAPA_OPERADOR and os.path.exists(BASE_PADRAO_PATH):
                 if "cd_fazenda" in df_preview.columns:
                     df_preview["cd_fazenda"] = df_preview["cd_fazenda"].apply(normalizar_codigo)
                     fazendas_csv = sorted(df_preview["cd_fazenda"].dropna().astype(str).unique(), key=chave_ordenacao_mista)
-
                     base_preview = gpd.read_file(BASE_PADRAO_PATH)
                     base_preview["FAZENDA"] = base_preview["FAZENDA"].apply(normalizar_codigo)
                     mapa_nome_fazenda = {}
@@ -1109,61 +1079,24 @@ if uploaded_zips and MAPA_OPERADOR and os.path.exists(BASE_PADRAO_PATH):
                     st.markdown(
                         """
                         <style>
-                        .frentes-card {
-                            background: linear-gradient(135deg, rgba(37,99,235,.16), rgba(14,165,233,.07));
-                            border: 1px solid rgba(96,165,250,.28);
-                            border-radius: 18px;
-                            padding: 18px 20px;
-                            margin: 12px 0 18px 0;
-                            box-shadow: 0 12px 28px rgba(0,0,0,.22);
-                        }
-                        .frentes-title {
-                            font-size: 1.35rem;
-                            font-weight: 800;
-                            color: #F8FAFC;
-                            margin-bottom: 6px;
-                            display: flex;
-                            align-items: center;
-                            gap: 8px;
-                        }
-                        .frentes-text {
-                            font-size: .94rem;
-                            color: #CBD5E1;
-                            line-height: 1.45;
-                        }
-                        .frentes-badge-row {
-                            display: flex;
-                            gap: 10px;
-                            flex-wrap: wrap;
-                            margin-top: 12px;
-                        }
-                        .frentes-badge {
-                            background: rgba(15,23,42,.65);
-                            border: 1px solid rgba(148,163,184,.20);
-                            border-radius: 999px;
-                            color: #E5E7EB;
-                            padding: 6px 11px;
-                            font-size: .82rem;
-                        }
-                        div[data-baseweb="tag"] {
-                            background-color: #2563EB !important;
-                            border-radius: 10px !important;
-                        }
-                        div[data-baseweb="tag"] span {
-                            color: white !important;
-                        }
+                        .frentes-card {background: linear-gradient(135deg, rgba(37,99,235,.16), rgba(14,165,233,.07)); border: 1px solid rgba(96,165,250,.28); border-radius: 18px; padding: 18px 20px; margin: 12px 0 18px 0; box-shadow: 0 12px 28px rgba(0,0,0,.22);}
+                        .frentes-title {font-size: 1.35rem; font-weight: 800; color: #F8FAFC; margin-bottom: 6px; display: flex; align-items: center; gap: 8px;}
+                        .frentes-text {font-size: .94rem; color: #CBD5E1; line-height: 1.45;}
+                        .frentes-badge-row {display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px;}
+                        .frentes-badge {background: rgba(15,23,42,.65); border: 1px solid rgba(148,163,184,.20); border-radius: 999px; color: #E5E7EB; padding: 6px 11px; font-size: .82rem;}
+                        div[data-baseweb="tag"] {background-color: #2563EB !important; border-radius: 10px !important;}
+                        div[data-baseweb="tag"] span {color: white !important;}
                         </style>
                         <div class="frentes-card">
                             <div class="frentes-title">🚜 Definição das frentes</div>
                             <div class="frentes-text">
                                 O ZIP foi lido automaticamente. Classifique <b>todas</b> as fazendas em F1, F2 ou F3.
-                                As fazendas selecionadas em uma frente somem das próximas listas, evitando duplicidade.
+                                As fazendas selecionadas em uma frente somem das outras listas, evitando duplicidade.
                             </div>
                             <div class="frentes-badge-row">
-                                <div class="frentes-badge">1. Selecione F1</div>
-                                <div class="frentes-badge">2. Selecione F2</div>
-                                <div class="frentes-badge">3. O restante pode ir para F3</div>
-                                <div class="frentes-badge">4. Gere o mapa</div>
+                                <div class="frentes-badge">Seleção excludente</div>
+                                <div class="frentes-badge">PDF único por frente</div>
+                                <div class="frentes-badge">Separação por turno no PDF</div>
                             </div>
                         </div>
                         """,
@@ -1171,61 +1104,53 @@ if uploaded_zips and MAPA_OPERADOR and os.path.exists(BASE_PADRAO_PATH):
                     )
 
                     total_fazendas = len(opcoes_fazendas)
-
-                    # Limpa seleções antigas que não existem mais nas opções atuais.
-                    if "fazendas_f1_select" in st.session_state:
-                        st.session_state["fazendas_f1_select"] = [x for x in st.session_state["fazendas_f1_select"] if x in opcoes_fazendas]
+                    prev_f1 = [x for x in st.session_state.get("fazendas_f1_select", []) if x in opcoes_fazendas]
+                    prev_f2 = [x for x in st.session_state.get("fazendas_f2_select", []) if x in opcoes_fazendas]
+                    prev_f3 = [x for x in st.session_state.get("fazendas_f3_select", []) if x in opcoes_fazendas]
+                    prev_f2 = [x for x in prev_f2 if x not in set(prev_f1)]
+                    prev_f3 = [x for x in prev_f3 if x not in set(prev_f1) and x not in set(prev_f2)]
+                    st.session_state["fazendas_f1_select"] = prev_f1
+                    st.session_state["fazendas_f2_select"] = prev_f2
+                    st.session_state["fazendas_f3_select"] = prev_f3
 
                     col_f1, col_f2, col_f3 = st.columns(3)
+                    opcoes_f1 = prev_f1 + [op for op in opcoes_fazendas if op not in set(prev_f1) and op not in set(prev_f2) and op not in set(prev_f3)]
                     with col_f1:
                         st.markdown("#### F1")
-                        fazendas_f1_raw = st.multiselect("Fazendas da F1", opcoes_fazendas, key="fazendas_f1_select")
-                        fazendas_f1_label = [x for x in fazendas_f1_raw if x in opcoes_fazendas]
+                        fazendas_f1_raw = st.multiselect("Fazendas da F1", opcoes_f1, key="fazendas_f1_select")
+                        fazendas_f1_label = [x for x in fazendas_f1_raw if x in opcoes_f1]
 
-                    restantes_f2 = [op for op in opcoes_fazendas if op not in set(fazendas_f1_label)]
-                    if "fazendas_f2_select" in st.session_state:
-                        st.session_state["fazendas_f2_select"] = [x for x in st.session_state["fazendas_f2_select"] if x in restantes_f2]
-
+                    opcoes_f2 = prev_f2 + [op for op in opcoes_fazendas if op not in set(fazendas_f1_label) and op not in set(prev_f2) and op not in set(prev_f3)]
+                    st.session_state["fazendas_f2_select"] = [x for x in st.session_state.get("fazendas_f2_select", []) if x in opcoes_f2]
                     with col_f2:
                         st.markdown("#### F2")
-                        fazendas_f2_raw = st.multiselect("Fazendas da F2", restantes_f2, key="fazendas_f2_select")
-                        fazendas_f2_label = [x for x in fazendas_f2_raw if x in restantes_f2]
+                        fazendas_f2_raw = st.multiselect("Fazendas da F2", opcoes_f2, key="fazendas_f2_select")
+                        fazendas_f2_label = [x for x in fazendas_f2_raw if x in opcoes_f2]
 
-                    restantes_f3 = [op for op in restantes_f2 if op not in set(fazendas_f2_label)]
-                    if "fazendas_f3_select" in st.session_state:
-                        st.session_state["fazendas_f3_select"] = [x for x in st.session_state["fazendas_f3_select"] if x in restantes_f3]
-
+                    opcoes_f3 = prev_f3 + [op for op in opcoes_fazendas if op not in set(fazendas_f1_label) and op not in set(fazendas_f2_label) and op not in set(prev_f3)]
+                    st.session_state["fazendas_f3_select"] = [x for x in st.session_state.get("fazendas_f3_select", []) if x in opcoes_f3]
                     with col_f3:
                         st.markdown("#### F3")
-                        fazendas_f3_raw = st.multiselect("Fazendas da F3", restantes_f3, key="fazendas_f3_select")
-                        fazendas_f3_label = [x for x in fazendas_f3_raw if x in restantes_f3]
+                        fazendas_f3_raw = st.multiselect("Fazendas da F3", opcoes_f3, key="fazendas_f3_select")
+                        fazendas_f3_label = [x for x in fazendas_f3_raw if x in opcoes_f3]
 
                     selecionadas = set(fazendas_f1_label) | set(fazendas_f2_label) | set(fazendas_f3_label)
                     faltantes = [op for op in opcoes_fazendas if op not in selecionadas]
-
                     FRENTE_FAZENDAS = {
                         "F1": [label_para_codigo[x] for x in fazendas_f1_label],
                         "F2": [label_para_codigo[x] for x in fazendas_f2_label],
                         "F3": [label_para_codigo[x] for x in fazendas_f3_label],
                     }
                     TODAS_FAZENDAS_COM_FRENTE = total_fazendas > 0 and len(faltantes) == 0
-
                     progresso = len(selecionadas) / total_fazendas if total_fazendas else 0
                     st.progress(progresso, text=f"{len(selecionadas)} de {total_fazendas} fazenda(s) classificadas")
-
                     m1, m2, m3, m4 = st.columns(4)
                     m1.metric("Fazendas no ZIP", total_fazendas)
                     m2.metric("F1", len(fazendas_f1_label))
                     m3.metric("F2", len(fazendas_f2_label))
                     m4.metric("F3", len(fazendas_f3_label))
-
-                    if faltantes:
-                        st.warning(f"⚠️ Ainda falta classificar {len(faltantes)} fazenda(s). O botão de gerar mapa será liberado quando todas forem selecionadas.")
-                        with st.expander("Ver fazendas ainda sem frente", expanded=False):
-                            st.write("\n".join(f"- {x}" for x in faltantes))
-                    else:
+                    if TODAS_FAZENDAS_COM_FRENTE:
                         st.success("✅ Todas as fazendas foram classificadas. Você já pode gerar os mapas.")
-
                 else:
                     st.warning("⚠️ Não encontrei a coluna cd_fazenda no ZIP enviado.")
     except Exception as e:
@@ -1242,8 +1167,6 @@ else:
 if GERAR:
     st.session_state["mapas_gerados"] = True
 
-# No modo Colhedora/operador, não processa enquanto todas as fazendas não forem classificadas.
-# Isso evita aparecer "Processando..." e mensagens duplicadas antes da seleção completa das frentes.
 if MAPA_OPERADOR and (not uploaded_zips or not TODAS_FAZENDAS_COM_FRENTE):
     st.session_state["mapas_gerados"] = False
 elif not uploaded_zips or not os.path.exists(BASE_PADRAO_PATH):
@@ -1439,21 +1362,16 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                     fazendas_frente = FRENTE_FAZENDAS.get(nome_frente, [])
                     if not fazendas_frente:
                         continue
-
                     df_frente = df_linhas[df_linhas["cd_fazenda"].astype(str).map(normalizar_codigo).isin(fazendas_frente)].copy()
                     if df_frente.empty:
                         continue
 
                     with st.expander(f"🚜 {nome_frente}", expanded=False):
                         registros_por_turno = {turno: [] for turno in ordem_turnos}
-
-                        # Primeiro gera todos os mapas da frente, separados por turno.
-                        # Uma fazenda só aparece no turno onde houver dado válido.
                         for turno in ordem_turnos:
                             df_turno = df_frente[df_frente["turno"] == turno].copy()
                             if df_turno.empty:
                                 continue
-
                             fazendas_turno = sorted(df_turno["cd_fazenda"].dropna().unique(), key=chave_ordenacao_mista)
                             for FAZENDA_ID in fazendas_turno:
                                 base_fazenda = base[base["FAZENDA"] == FAZENDA_ID].copy()
@@ -1468,36 +1386,19 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                                 gdf_area_colhedora, df_legenda = criar_area_colhedora_por_linhas(df_faz_turno, coluna_linha, geom_fazenda)
                                 if gdf_area_colhedora.empty or df_legenda.empty:
                                     continue
-
                                 area_total_mapa_ha = pd.to_numeric(df_legenda["Área trabalhada (ha)"], errors="coerce").fillna(0).sum()
                                 if area_total_mapa_ha < AREA_MIN_OPERADOR_HA:
                                     continue
-
                                 colhedoras = df_legenda["Colhedora"].astype(str).tolist()
                                 cores = criar_cores_distintas(colhedoras)
-                                fig_op = criar_figura_area_colhedora(
-                                    base_fazenda,
-                                    gdf_area_colhedora,
-                                    df_legenda,
-                                    cores,
-                                    turno,
-                                    periodo_txt,
-                                    FAZENDA_ID,
-                                    nome_fazenda,
-                                    frente_nome=nome_frente,
-                                )
-                                registros_por_turno[turno].append({
-                                    "fazenda_id": FAZENDA_ID,
-                                    "nome_fazenda": nome_fazenda,
-                                    "fig": fig_op,
-                                })
+                                fig_op = criar_figura_area_colhedora(base_fazenda, gdf_area_colhedora, df_legenda, cores, turno, periodo_txt, FAZENDA_ID, nome_fazenda, frente_nome=nome_frente)
+                                registros_por_turno[turno].append({"fazenda_id": FAZENDA_ID, "nome_fazenda": nome_fazenda, "fig": fig_op})
 
                         total_mapas_frente = sum(len(v) for v in registros_por_turno.values())
                         if total_mapas_frente == 0:
                             st.info(f"Nenhum mapa acima de {AREA_MIN_OPERADOR_HA:.2f} ha foi gerado para {nome_frente}.".replace(".", ","))
                             continue
 
-                        # PDF único por frente, com página separadora antes de cada turno que possui mapas.
                         figuras_pdf_frente = []
                         separadores_pdf = []
                         for turno in ordem_turnos:
@@ -1520,7 +1421,6 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                         )
                         st.caption(f"PDF da {nome_frente}: {total_mapas_frente} mapa(s), separado por turno.")
 
-                        # Exibição em tela: Frente > Turno > Fazenda.
                         for turno in ordem_turnos:
                             registros_turno = registros_por_turno[turno]
                             if not registros_turno:
