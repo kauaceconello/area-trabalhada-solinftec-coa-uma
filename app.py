@@ -392,6 +392,27 @@ def calcular_largura_media_buffer(df_faz_area, df_faz_pontos):
     return float(pd.concat(series).mean())
 
 
+def obter_periodo(df_faz_area, df_faz_oper):
+    """Retorna período inicial e final considerando os dados disponíveis da fazenda."""
+    candidatos = []
+
+    for df_tmp in [df_faz_area, df_faz_oper]:
+        if df_tmp is None or df_tmp.empty:
+            continue
+
+        for col_data in ["dt_hr_local_inicial", "dt_hr_local_final"]:
+            if col_data in df_tmp.columns:
+                vals = pd.to_datetime(df_tmp[col_data], errors="coerce").dropna()
+                if not vals.empty:
+                    candidatos.append(vals)
+
+    if not candidatos:
+        return "-", "-"
+
+    datas = pd.concat(candidatos)
+    return datas.min().strftime("%d/%m/%Y %H:%M"), datas.max().strftime("%d/%m/%Y %H:%M")
+
+
 def adicionar_segmento_clipado(linhas_saida, pontos, rpms, vels, larguras, t_inicio, t_fim, geom_fazenda):
     if len(pontos) < 2:
         return
