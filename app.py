@@ -761,13 +761,7 @@ def criar_figura_area_colhedora(base_fazenda, gdf_area_colhedora, df_legenda, co
     axl.axis("off")
     axl.set_xlim(0, 1)
     axl.set_ylim(0, 1)
-    box = mpatches.FancyBboxPatch(
-        (0, 0), 1, 1,
-        boxstyle="round,pad=0.018,rounding_size=0.03",
-        facecolor="#FFFFFF",
-        edgecolor="#D8E1EB",
-        linewidth=1.0,
-    )
+    box = mpatches.FancyBboxPatch((0, 0), 1, 1, boxstyle="round,pad=0.018,rounding_size=0.03", facecolor="#FFFFFF", edgecolor="#D8E1EB", linewidth=1.0)
     axl.add_patch(box)
     axl.text(0.07, 0.955, "Resumo por Colhedora", fontsize=12, weight="bold", color="#0F172A", va="center")
     subtitulo = f"{frente_nome} • {turno} • {intervalo_turno(turno)}" if frente_nome else f"{turno} • {intervalo_turno(turno)}"
@@ -786,7 +780,6 @@ def criar_figura_area_colhedora(base_fazenda, gdf_area_colhedora, df_legenda, co
             operadores = [op.strip() for op in operadores_raw.split(";") if op.strip()]
             if not operadores:
                 operadores = ["-"]
-
             linhas_legenda.append({"tipo": "colhedora", "texto": f"{colhedora}: {area_txt}", "cor": cor})
             for operador in operadores:
                 linhas_legenda.append({"tipo": "operador", "texto": operador, "cor": cor})
@@ -795,61 +788,26 @@ def criar_figura_area_colhedora(base_fazenda, gdf_area_colhedora, df_legenda, co
         topo_texto = 0.850
         base_texto = 0.075
         altura_disponivel = topo_texto - base_texto
-        if total_linhas <= 1:
-            espacamento = 0.050
-        else:
-            espacamento = min(0.052, altura_disponivel / max(total_linhas - 1, 1))
+        espacamento = 0.050 if total_linhas <= 1 else min(0.052, altura_disponivel / max(total_linhas - 1, 1))
         altura_usada = espacamento * max(total_linhas - 1, 0)
         y_inicio = min(topo_texto, base_texto + altura_disponivel / 2 + altura_usada / 2)
 
         fonte_operador = max(4.4, min(9.2, espacamento * 210))
         fonte_colhedora = max(5.0, min(10.4, fonte_operador + 1.1))
         tamanho_quadrado = max(0.017, min(0.040, espacamento * 1.20))
-
-        if fonte_operador >= 8:
-            limite_operador = 44
-        elif fonte_operador >= 6.5:
-            limite_operador = 39
-        elif fonte_operador >= 5.2:
-            limite_operador = 34
-        else:
-            limite_operador = 30
+        limite_operador = 44 if fonte_operador >= 8 else 39 if fonte_operador >= 6.5 else 34 if fonte_operador >= 5.2 else 30
 
         for i, item in enumerate(linhas_legenda):
             y = y_inicio - i * espacamento
             if item["tipo"] == "colhedora":
-                axl.add_patch(mpatches.FancyBboxPatch(
-                    (0.07, y - tamanho_quadrado / 2),
-                    tamanho_quadrado,
-                    tamanho_quadrado,
-                    boxstyle="round,pad=0.002,rounding_size=0.004",
-                    facecolor=item["cor"],
-                    edgecolor="none",
-                ))
+                axl.add_patch(mpatches.FancyBboxPatch((0.07, y - tamanho_quadrado / 2), tamanho_quadrado, tamanho_quadrado, boxstyle="round,pad=0.002,rounding_size=0.004", facecolor=item["cor"], edgecolor="none"))
                 txt = item["texto"]
                 if len(txt) > 32 and fonte_colhedora < 6:
                     txt = txt[:29] + "..."
-                axl.text(
-                    0.125,
-                    y,
-                    txt,
-                    fontsize=fonte_colhedora,
-                    color="#0F172A",
-                    weight="bold",
-                    ha="left",
-                    va="center",
-                )
+                axl.text(0.125, y, txt, fontsize=fonte_colhedora, color="#0F172A", weight="bold", ha="left", va="center")
             else:
                 operador_txt = item["texto"] if len(item["texto"]) <= limite_operador else item["texto"][:limite_operador - 3] + "..."
-                axl.text(
-                    0.125,
-                    y,
-                    f"• {operador_txt}",
-                    fontsize=fonte_operador,
-                    color="#475569",
-                    ha="left",
-                    va="center",
-                )
+                axl.text(0.125, y, f"• {operador_txt}", fontsize=fonte_operador, color="#475569", ha="left", va="center")
 
     adicionar_footer(fig)
     return fig
@@ -1062,9 +1020,11 @@ uploaded_zips = st.file_uploader(
 )
 
 FRENTE_FAZENDAS = {"F1": [], "F2": [], "F3": []}
+TODAS_FAZENDAS_COM_FRENTE = False
 
 # No modo Colhedora/operador, o app primeiro lê o ZIP para descobrir as fazendas
-# e então pergunta qual fazenda pertence a cada frente.
+# e então pergunta qual fazenda pertence a cada frente. O botão só aparece depois
+# que todas as fazendas forem classificadas em F1, F2 ou F3.
 if uploaded_zips and MAPA_OPERADOR and os.path.exists(BASE_PADRAO_PATH):
     try:
         with tempfile.TemporaryDirectory() as tmpdir_preview:
@@ -1105,29 +1065,69 @@ if uploaded_zips and MAPA_OPERADOR and os.path.exists(BASE_PADRAO_PATH):
                         opcoes_fazendas.append(label)
                         label_para_codigo[label] = cod_fazenda
 
-                    st.markdown("### 🚜 Definição das frentes")
-                    st.caption("Selecione em qual frente cada fazenda será considerada. O que não for selecionado não será gerado.")
+                    st.markdown(
+                        """
+                        <div style="background: linear-gradient(135deg, rgba(37,99,235,.14), rgba(14,165,233,.08));
+                                    border: 1px solid rgba(96,165,250,.25); border-radius: 18px;
+                                    padding: 18px 20px; margin: 12px 0 16px 0;">
+                            <div style="font-size: 1.35rem; font-weight: 800; color: #F8FAFC; margin-bottom: 6px;">
+                                🚜 Definição das frentes
+                            </div>
+                            <div style="font-size: .94rem; color: #CBD5E1; line-height: 1.45;">
+                                O ZIP foi lido automaticamente. Classifique <b>todas</b> as fazendas em F1, F2 ou F3 para liberar o botão de gerar mapa.
+                                As fazendas selecionadas em uma frente somem das próximas listas.
+                            </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
 
-                    fazendas_f1_label = st.multiselect("Fazendas da F1", opcoes_fazendas, key="fazendas_f1_select")
-                    restantes_f2 = [op for op in opcoes_fazendas if op not in fazendas_f1_label]
-                    fazendas_f2_label = st.multiselect("Fazendas da F2", restantes_f2, key="fazendas_f2_select")
-                    restantes_f3 = [op for op in restantes_f2 if op not in fazendas_f2_label]
-                    fazendas_f3_label = st.multiselect("Fazendas da F3", restantes_f3, key="fazendas_f3_select")
+                    total_fazendas = len(opcoes_fazendas)
+                    fazendas_f1_raw = st.multiselect("Fazendas da F1", opcoes_fazendas, key="fazendas_f1_select")
+                    fazendas_f1_label = [x for x in fazendas_f1_raw if x in opcoes_fazendas]
+
+                    restantes_f2 = [op for op in opcoes_fazendas if op not in set(fazendas_f1_label)]
+                    fazendas_f2_raw = st.multiselect("Fazendas da F2", restantes_f2, key="fazendas_f2_select")
+                    fazendas_f2_label = [x for x in fazendas_f2_raw if x in restantes_f2]
+
+                    restantes_f3 = [op for op in restantes_f2 if op not in set(fazendas_f2_label)]
+                    fazendas_f3_raw = st.multiselect("Fazendas da F3", restantes_f3, key="fazendas_f3_select")
+                    fazendas_f3_label = [x for x in fazendas_f3_raw if x in restantes_f3]
+
+                    selecionadas = set(fazendas_f1_label) | set(fazendas_f2_label) | set(fazendas_f3_label)
+                    faltantes = [op for op in opcoes_fazendas if op not in selecionadas]
 
                     FRENTE_FAZENDAS = {
                         "F1": [label_para_codigo[x] for x in fazendas_f1_label],
                         "F2": [label_para_codigo[x] for x in fazendas_f2_label],
                         "F3": [label_para_codigo[x] for x in fazendas_f3_label],
                     }
+                    TODAS_FAZENDAS_COM_FRENTE = total_fazendas > 0 and len(faltantes) == 0
 
-                    if not any(FRENTE_FAZENDAS.values()):
-                        st.warning("⚠️ Selecione pelo menos uma fazenda em F1, F2 ou F3 antes de gerar o mapa.")
+                    c1, c2, c3, c4 = st.columns(4)
+                    c1.metric("Fazendas no ZIP", total_fazendas)
+                    c2.metric("F1", len(fazendas_f1_label))
+                    c3.metric("F2", len(fazendas_f2_label))
+                    c4.metric("F3", len(fazendas_f3_label))
+
+                    if faltantes:
+                        st.warning(f"⚠️ Ainda falta classificar {len(faltantes)} fazenda(s). O botão de gerar mapa será liberado quando todas forem selecionadas.")
+                        with st.expander("Ver fazendas ainda sem frente", expanded=False):
+                            st.write("\n".join(f"- {x}" for x in faltantes))
+                    else:
+                        st.success("✅ Todas as fazendas foram classificadas. Você já pode gerar os mapas.")
                 else:
                     st.warning("⚠️ Não encontrei a coluna cd_fazenda no ZIP enviado.")
     except Exception as e:
         st.warning(f"⚠️ Não foi possível ler as fazendas do ZIP para configurar as frentes: {e}")
 
-GERAR = st.button("▶️ Gerar mapa")
+if MAPA_OPERADOR:
+    if uploaded_zips and TODAS_FAZENDAS_COM_FRENTE:
+        GERAR = st.button("▶️ Gerar mapa")
+    else:
+        GERAR = False
+else:
+    GERAR = st.button("▶️ Gerar mapa")
 
 if GERAR:
     st.session_state["mapas_gerados"] = True
@@ -1307,7 +1307,7 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                     st.stop()
 
                 if not any(FRENTE_FAZENDAS.values()):
-                    st.warning("⚠️ Selecione pelo menos uma fazenda em F1, F2 ou F3 antes de gerar o mapa.")
+                    st.warning("⚠️ Classifique todas as fazendas em F1, F2 ou F3 antes de gerar o mapa.")
                     st.stop()
 
                 df_linhas = df[df[coluna_linha].notna()].copy()
@@ -1370,11 +1370,7 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                                         nome_fazenda,
                                         frente_nome=nome_frente,
                                     )
-                                    registros_turno.append({
-                                        "fazenda_id": FAZENDA_ID,
-                                        "nome_fazenda": nome_fazenda,
-                                        "fig": fig_op,
-                                    })
+                                    registros_turno.append({"fazenda_id": FAZENDA_ID, "nome_fazenda": nome_fazenda, "fig": fig_op})
 
                                 if not registros_turno:
                                     st.info(f"Nenhum mapa acima de {AREA_MIN_OPERADOR_HA:.2f} ha foi gerado para {nome_frente} / {turno}.".replace(".", ","))
