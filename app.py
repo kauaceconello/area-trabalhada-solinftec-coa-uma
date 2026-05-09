@@ -1353,8 +1353,6 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
 
             if mapas_gerados_total == 0:
                 st.warning("⚠️ Não foi possível gerar nenhum mapa com os dados enviados.")
-            else:
-                st.success(f"✅ Processamento concluído. Mapas/relatórios gerados: {mapas_gerados_total}")
 
 else:
     st.info("⬆️ Envie os ZIPs com CSVs e clique em **Gerar mapa**.")
