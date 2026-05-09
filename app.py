@@ -28,7 +28,6 @@ st.set_page_config(page_title="Área Trabalhada – Solinftec", layout="wide")
 BASE_PADRAO_PATH = "base_cartografica/BaseCartografica_10_29_2025_SOLINFTEC.gpkg"
 CRS_METRICO = 31983
 TEMPO_MAX_SEG = 60
-LARGURA_PADRAO_M = 3.0
 
 if "mapas_gerados" not in st.session_state:
     st.session_state["mapas_gerados"] = False
@@ -95,7 +94,7 @@ st.markdown(
         border: 1px solid rgba(255,255,255,0.08) !important;
     }
     [data-testid="stExpander"] summary, [data-testid="stExpander"] summary * { color: #F8FAFC !important; }
-    [data-testid="stInfo"], [data-testid="stWarning"], [data-testid="stError"], [data-testid="stSuccess"] {
+    [data-testid="stInfo"], [data-testid="stWarning"], [data-testid="stError"] {
         background: rgba(255,255,255,0.06) !important;
         color: #E5E7EB !important;
         border-radius: 12px !important;
@@ -133,15 +132,20 @@ def chave_ordenacao_mista(valor):
     return re.sub(r"\d+", lambda m: f"{int(m.group()):010d}", texto)
 
 
-def validar_colunas(df, colunas):
-    return [c for c in colunas if c not in df.columns]
+def normalizar_codigo(valor):
+    if pd.isna(valor):
+        return ""
+    texto = str(valor).strip()
+    if texto.endswith(".0"):
+        texto = texto[:-2]
+    return texto
 
 
 def formatar_numero(valor, casas=0):
     if pd.isna(valor):
         return "-"
     if casas == 0:
-        return f"{int(round(valor))}"
+        return f"{int(round(float(valor)))}"
     return f"{float(valor):.{casas}f}".replace(".", ",")
 
 
@@ -159,6 +163,10 @@ def arredondar_para_cima(valor, base):
     return np.ceil(valor / base) * base
 
 
+def validar_colunas(df, colunas):
+    return [c for c in colunas if c not in df.columns]
+
+
 def ler_csv_robusto(csv_path):
     tentativas = [
         {"sep": ";", "encoding": "latin1"},
@@ -169,7 +177,11 @@ def ler_csv_robusto(csv_path):
     ultimo_erro = None
     for cfg in tentativas:
         try:
-            return pd.read_csv(csv_path, engine="python", **cfg)
+            df = pd.read_csv(csv_path, engine="python", **cfg)
+            # Se veio tudo em uma coluna só, tenta separador alternativo automaticamente.
+            if len(df.columns) <= 1:
+                continue
+            return df
         except Exception as e:
             ultimo_erro = e
     raise ultimo_erro
@@ -194,30 +206,6 @@ def ler_csvs_de_zip(uploaded_zip, tmpdir, idx_zip):
     return csv_files
 
 
-def detectar_coluna_geometria(df, tipos):
-    tipos_upper = [t.upper() for t in tipos]
-    nomes_prioritarios = [
-        "wkt", "WKT", "geometry", "GEOMETRY", "geom", "GEOM",
-        "the_geom", "THE_GEOM", "linha", "LINHA", "line", "LINE",
-        "multipolygon", "MULTIPOLYGON", "polygon", "POLYGON"
-    ]
-
-    for col in nomes_prioritarios:
-        if col in df.columns:
-            serie = df[col].dropna().astype(str).head(50).str.upper()
-            if any(serie.str.contains(t, regex=False).any() for t in tipos_upper):
-                return col
-
-    for col in df.columns:
-        serie = df[col].dropna().astype(str).head(50).str.upper()
-        if serie.empty:
-            continue
-        if any(serie.str.contains(t, regex=False).any() for t in tipos_upper):
-            return col
-
-    return None
-
-
 def carregar_wkt_seguro(valor):
     if pd.isna(valor):
         return None
@@ -228,6 +216,28 @@ def carregar_wkt_seguro(valor):
         return wkt.loads(texto)
     except Exception:
         return None
+
+
+def detectar_coluna_geometria(df, tipos):
+    tipos_upper = [t.upper() for t in tipos]
+    candidatos = [
+        "wkt", "WKT", "geometry", "GEOMETRY", "geom", "GEOM", "the_geom", "THE_GEOM",
+        "linha", "LINHA", "line", "LINE", "multipolygon", "MULTIPOLYGON", "polygon", "POLYGON"
+    ]
+
+    for col in candidatos:
+        if col in df.columns:
+            serie = df[col].dropna().astype(str).head(80).str.upper()
+            if any(serie.str.contains(t, regex=False).any() for t in tipos_upper):
+                return col
+
+    for col in df.columns:
+        serie = df[col].dropna().astype(str).head(80).str.upper()
+        if serie.empty:
+            continue
+        if any(serie.str.contains(t, regex=False).any() for t in tipos_upper):
+            return col
+    return None
 
 
 def criar_gdf_wkt(df, coluna_wkt, crs="EPSG:4326"):
@@ -243,16 +253,12 @@ def criar_gdf_wkt(df, coluna_wkt, crs="EPSG:4326"):
 
     gdf = gpd.GeoDataFrame(df_tmp, geometry="geometry", crs=crs)
     gdf = gdf[gdf.geometry.notna() & ~gdf.geometry.is_empty].copy()
-    if not gdf.empty:
-        gdf["geometry"] = gdf.geometry.buffer(0) if not gdf.geometry.geom_type.isin(["LineString", "MultiLineString"]).all() else gdf.geometry
-        gdf = gdf[gdf.geometry.notna() & ~gdf.geometry.is_empty].copy()
     return gdf
 
 
 def preencher_buracos_pequenos(geom, area_max_buraco_m2=5000):
     if geom is None or geom.is_empty:
         return geom
-
     if geom.geom_type == "Polygon":
         interiores_mantidos = []
         for interior in geom.interiors:
@@ -263,13 +269,35 @@ def preencher_buracos_pequenos(geom, area_max_buraco_m2=5000):
             except Exception:
                 interiores_mantidos.append(interior)
         return Polygon(geom.exterior, interiores_mantidos).buffer(0)
-
     if geom.geom_type == "MultiPolygon":
         partes = [preencher_buracos_pequenos(g, area_max_buraco_m2) for g in geom.geoms if not g.is_empty]
         partes = [g for g in partes if g is not None and not g.is_empty]
         return unary_union(partes).buffer(0) if partes else geom
-
     return geom
+
+
+def obter_periodo(df1, df2):
+    candidatos = []
+    for df_tmp in [df1, df2]:
+        if df_tmp is None or df_tmp.empty:
+            continue
+        for col in ["dt_hr_local_inicial", "dt_hr_local_final"]:
+            if col in df_tmp.columns:
+                vals = pd.to_datetime(df_tmp[col], errors="coerce").dropna()
+                if not vals.empty:
+                    candidatos.append(vals)
+    if not candidatos:
+        return "-", "-"
+    datas = pd.concat(candidatos)
+    return datas.min().strftime("%d/%m/%Y %H:%M"), datas.max().strftime("%d/%m/%Y %H:%M")
+
+
+def calcular_largura_media(df):
+    if df is None or df.empty or "vl_largura_implemento" not in df.columns:
+        return np.nan
+    s = pd.to_numeric(df["vl_largura_implemento"], errors="coerce").dropna()
+    s = s[s > 0]
+    return float(s.mean()) if not s.empty else np.nan
 
 
 def ordenar_tabela_talhoes(df_talhoes):
@@ -311,7 +339,7 @@ def criar_zip_csv_talhoes(df_talhoes_exibicao, nome_csv):
     return buffer_zip.getvalue()
 
 # =========================================================
-# CLASSIFICAÇÃO E MAPAS TEMÁTICOS
+# CLASSIFICAÇÃO
 # =========================================================
 def gerar_faixas(vmin, vmax, passo, casas=0):
     inicio = arredondar_para_baixo(vmin, passo)
@@ -342,7 +370,7 @@ def classificar_valor(valor, faixas):
     return None
 
 
-def criar_cmap_suave(tipo="rpm"):
+def criar_cmap_suave(tipo="vel"):
     if tipo == "rpm":
         cores = ["#0B4F8A", "#1F78B4", "#2D9CDB", "#1FBBA6", "#20B15A", "#8FD14F", "#F2C94C", "#F2994A", "#E05A47"]
     else:
@@ -357,63 +385,28 @@ def amostrar_cores_classes(cmap, n_classes):
     return [to_hex(cmap(x)) for x in pontos]
 
 
-def calcular_legenda_percentual(gdf_display, coluna_classe, faixas, mapa_cores):
-    if gdf_display is None or gdf_display.empty or coluna_classe not in gdf_display.columns:
+def calcular_legenda_percentual(gdf_linhas, coluna_classe, faixas, mapa_cores):
+    if gdf_linhas is None or gdf_linhas.empty or coluna_classe not in gdf_linhas.columns:
         return pd.DataFrame(columns=["cor", "faixa", "percentual"])
-    dados = gdf_display.dropna(subset=[coluna_classe]).copy()
+    dados = gdf_linhas.dropna(subset=[coluna_classe]).copy()
     if dados.empty:
         return pd.DataFrame(columns=["cor", "faixa", "percentual"])
-
     total_tempo = dados["duracao_seg"].fillna(0).sum() if "duracao_seg" in dados.columns else 0
     usar_contagem = total_tempo <= 0
     linhas = []
     for _, _, label in faixas:
-        subset = dados[dados[coluna_classe] == label]
+        sub = dados[dados[coluna_classe] == label]
         if usar_contagem:
-            percentual = (len(subset) / len(dados) * 100) if len(dados) else 0
+            pct = len(sub) / len(dados) * 100 if len(dados) else 0
         else:
-            percentual = subset["duracao_seg"].fillna(0).sum() / total_tempo * 100 if total_tempo > 0 else 0
-        linhas.append({"cor": mapa_cores.get(label, "#cccccc"), "faixa": label, "percentual": percentual})
+            pct = sub["duracao_seg"].fillna(0).sum() / total_tempo * 100 if total_tempo else 0
+        linhas.append({"cor": mapa_cores.get(label, "#cccccc"), "faixa": label, "percentual": pct})
     return pd.DataFrame(linhas)
 
 # =========================================================
-# PROCESSAMENTO DE LINHAS/PONTOS
+# LINHAS E PONTOS PARA VELOCIDADE/RPM
 # =========================================================
-def calcular_largura_media_buffer(df_faz_area, df_faz_pontos):
-    series = []
-    for df_tmp in [df_faz_area, df_faz_pontos]:
-        if df_tmp is not None and not df_tmp.empty and "vl_largura_implemento" in df_tmp.columns:
-            s = pd.to_numeric(df_tmp["vl_largura_implemento"], errors="coerce").dropna()
-            s = s[s > 0]
-            if not s.empty:
-                series.append(s)
-    if not series:
-        return np.nan
-    return float(pd.concat(series).mean())
-
-
-def obter_periodo(df_faz_area, df_faz_oper):
-    """Retorna período inicial e final considerando os dados disponíveis da fazenda."""
-    candidatos = []
-
-    for df_tmp in [df_faz_area, df_faz_oper]:
-        if df_tmp is None or df_tmp.empty:
-            continue
-
-        for col_data in ["dt_hr_local_inicial", "dt_hr_local_final"]:
-            if col_data in df_tmp.columns:
-                vals = pd.to_datetime(df_tmp[col_data], errors="coerce").dropna()
-                if not vals.empty:
-                    candidatos.append(vals)
-
-    if not candidatos:
-        return "-", "-"
-
-    datas = pd.concat(candidatos)
-    return datas.min().strftime("%d/%m/%Y %H:%M"), datas.max().strftime("%d/%m/%Y %H:%M")
-
-
-def adicionar_segmento_clipado(linhas_saida, pontos, rpms, vels, larguras, t_inicio, t_fim, geom_fazenda):
+def adicionar_segmento_clipado(linhas_saida, pontos, rpms, vels, t_inicio, t_fim, geom_fazenda):
     if len(pontos) < 2:
         return
     try:
@@ -426,10 +419,9 @@ def adicionar_segmento_clipado(linhas_saida, pontos, rpms, vels, larguras, t_ini
     if linha_clip.is_empty:
         return
 
-    rpm_medio = float(np.nanmean(rpms)) if len(rpms) else np.nan
-    vel_media = float(np.nanmean(vels)) if len(vels) else np.nan
-    largura_media = float(np.nanmean(larguras)) if len(larguras) else LARGURA_PADRAO_M
-    duracao_seg = (t_fim - t_inicio).total_seconds() if t_inicio is not None and t_fim is not None else np.nan
+    rpm = float(np.nanmean(rpms)) if len(rpms) else np.nan
+    vel = float(np.nanmean(vels)) if len(vels) else np.nan
+    duracao = (t_fim - t_inicio).total_seconds() if t_inicio is not None and t_fim is not None else np.nan
 
     if linha_clip.geom_type == "LineString":
         geoms = [linha_clip]
@@ -438,31 +430,21 @@ def adicionar_segmento_clipado(linhas_saida, pontos, rpms, vels, larguras, t_ini
     else:
         geoms = []
 
-    comprimento_total_clipado = sum(g.length for g in geoms) if geoms else 0
-    for geom in geoms:
-        if geom.is_empty or geom.length == 0:
-            continue
-        duracao_rateada = duracao_seg * (geom.length / comprimento_total_clipado) if pd.notna(duracao_seg) and comprimento_total_clipado > 0 else np.nan
-        linhas_saida.append({
-            "geometry": geom,
-            "rpm_medio": rpm_medio,
-            "vel_media": vel_media,
-            "largura_media": largura_media,
-            "duracao_seg": duracao_rateada,
-        })
+    for g in geoms:
+        linhas_saida.append({"geometry": g, "rpm_medio": rpm, "vel_media": vel, "duracao_seg": duracao})
 
 
-def criar_linhas_por_pontos(df_faz_pontos, geom_fazenda):
+def criar_linhas_por_pontos(df_faz, geom_fazenda):
     gdf_pts = gpd.GeoDataFrame(
-        df_faz_pontos,
-        geometry=gpd.points_from_xy(df_faz_pontos["vl_longitude_inicial"], df_faz_pontos["vl_latitude_inicial"]),
+        df_faz,
+        geometry=gpd.points_from_xy(df_faz["vl_longitude_inicial"], df_faz["vl_latitude_inicial"]),
         crs="EPSG:4326",
     ).to_crs(epsg=CRS_METRICO)
 
     linhas = []
     for _, grupo in gdf_pts.groupby("cd_equipamento"):
         grupo = grupo.sort_values("dt_hr_local_inicial")
-        linha_atual, rpm_atual, vel_atual, larguras_atuais = [], [], [], []
+        linha_atual, rpm_atual, vel_atual = [], [], []
         tempo_inicio, ultimo_tempo = None, None
         for _, row in grupo.iterrows():
             tempo = row["dt_hr_local_inicial"]
@@ -470,7 +452,6 @@ def criar_linhas_por_pontos(df_faz_pontos, geom_fazenda):
                 linha_atual = [row.geometry]
                 rpm_atual = [row.get("vl_rpm", np.nan)]
                 vel_atual = [row.get("vl_velocidade", np.nan)]
-                larguras_atuais = [row.get("vl_largura_implemento", LARGURA_PADRAO_M)]
                 tempo_inicio = tempo
             else:
                 delta = (tempo - ultimo_tempo).total_seconds()
@@ -478,22 +459,20 @@ def criar_linhas_por_pontos(df_faz_pontos, geom_fazenda):
                     linha_atual.append(row.geometry)
                     rpm_atual.append(row.get("vl_rpm", np.nan))
                     vel_atual.append(row.get("vl_velocidade", np.nan))
-                    larguras_atuais.append(row.get("vl_largura_implemento", LARGURA_PADRAO_M))
                 else:
-                    adicionar_segmento_clipado(linhas, linha_atual, rpm_atual, vel_atual, larguras_atuais, tempo_inicio, ultimo_tempo, geom_fazenda)
+                    adicionar_segmento_clipado(linhas, linha_atual, rpm_atual, vel_atual, tempo_inicio, ultimo_tempo, geom_fazenda)
                     linha_atual = [row.geometry]
                     rpm_atual = [row.get("vl_rpm", np.nan)]
                     vel_atual = [row.get("vl_velocidade", np.nan)]
-                    larguras_atuais = [row.get("vl_largura_implemento", LARGURA_PADRAO_M)]
                     tempo_inicio = tempo
             ultimo_tempo = tempo
-        adicionar_segmento_clipado(linhas, linha_atual, rpm_atual, vel_atual, larguras_atuais, tempo_inicio, ultimo_tempo, geom_fazenda)
+        adicionar_segmento_clipado(linhas, linha_atual, rpm_atual, vel_atual, tempo_inicio, ultimo_tempo, geom_fazenda)
 
     return gpd.GeoDataFrame(linhas, geometry="geometry", crs=f"EPSG:{CRS_METRICO}") if linhas else gpd.GeoDataFrame(columns=["geometry"], geometry="geometry", crs=f"EPSG:{CRS_METRICO}")
 
 
-def criar_linhas_por_linestring(df_faz_linhas, coluna_linestring, geom_fazenda):
-    gdf = criar_gdf_wkt(df_faz_linhas, coluna_linestring, crs="EPSG:4326")
+def criar_linhas_por_linestring(df_faz, coluna_linha, geom_fazenda):
+    gdf = criar_gdf_wkt(df_faz, coluna_linha, crs="EPSG:4326")
     if gdf.empty:
         return gpd.GeoDataFrame(columns=["geometry"], geometry="geometry", crs=f"EPSG:{CRS_METRICO}")
     gdf = gdf.to_crs(epsg=CRS_METRICO)
@@ -505,10 +484,6 @@ def criar_linhas_por_linestring(df_faz_linhas, coluna_linestring, geom_fazenda):
             continue
         rpm = pd.to_numeric(row.get("vl_rpm", np.nan), errors="coerce")
         vel = pd.to_numeric(row.get("vl_velocidade", np.nan), errors="coerce")
-        largura = pd.to_numeric(row.get("vl_largura_implemento", LARGURA_PADRAO_M), errors="coerce")
-        if pd.isna(largura) or largura <= 0:
-            largura = LARGURA_PADRAO_M
-
         duracao = np.nan
         if "dt_hr_local_inicial" in gdf.columns and "dt_hr_local_final" in gdf.columns:
             t1 = pd.to_datetime(row.get("dt_hr_local_inicial"), errors="coerce")
@@ -522,44 +497,13 @@ def criar_linhas_por_linestring(df_faz_linhas, coluna_linestring, geom_fazenda):
             geoms = [g for g in geom.geoms if not g.is_empty and g.length > 0]
         else:
             geoms = []
-
         for g in geoms:
-            registros.append({
-                "geometry": g,
-                "rpm_medio": rpm,
-                "vel_media": vel,
-                "largura_media": largura,
-                "duracao_seg": duracao,
-            })
+            registros.append({"geometry": g, "rpm_medio": rpm, "vel_media": vel, "duracao_seg": duracao})
 
     return gpd.GeoDataFrame(registros, geometry="geometry", crs=f"EPSG:{CRS_METRICO}") if registros else gpd.GeoDataFrame(columns=["geometry"], geometry="geometry", crs=f"EPSG:{CRS_METRICO}")
 
-
-def criar_poligonos_display(gdf_linhas, geom_fazenda):
-    registros = []
-    if gdf_linhas is None or gdf_linhas.empty:
-        return gpd.GeoDataFrame(columns=["geometry"], geometry="geometry", crs=f"EPSG:{CRS_METRICO}")
-    for _, row in gdf_linhas.iterrows():
-        largura = row.get("largura_media", LARGURA_PADRAO_M)
-        if pd.isna(largura) or largura <= 0:
-            largura = LARGURA_PADRAO_M
-        try:
-            geom_disp = row.geometry.buffer(largura / 2.0, cap_style=2, join_style=2, quad_segs=1).intersection(geom_fazenda)
-        except Exception:
-            continue
-        if geom_disp.is_empty:
-            continue
-        registros.append({
-            "geometry": geom_disp,
-            "rpm_medio": row.get("rpm_medio", np.nan),
-            "vel_media": row.get("vel_media", np.nan),
-            "largura_media": largura,
-            "duracao_seg": row.get("duracao_seg", np.nan),
-        })
-    return gpd.GeoDataFrame(registros, geometry="geometry", crs=gdf_linhas.crs) if registros else gpd.GeoDataFrame(columns=["geometry"], geometry="geometry", crs=gdf_linhas.crs)
-
 # =========================================================
-# PDF E PLOTS
+# FIGURAS E PDF
 # =========================================================
 def figura_para_pdf_bytes(fig):
     buffer = io.BytesIO()
@@ -577,28 +521,28 @@ def figuras_para_pdf_multipaginas(figuras):
     return buffer.getvalue()
 
 
-def adicionar_footer(fig, cor_rodape="#64748B"):
+def adicionar_footer(fig, cor="#64748B"):
     brasilia = pytz.timezone("America/Sao_Paulo")
     hora = datetime.now(brasilia).strftime("%d/%m/%Y %H:%M")
-    fig.text(0.50, 0.030, "Relatório elaborado com base em dados da Solinftec • Resultados dependem da qualidade dos dados operacionais e geoespaciais.", ha="center", fontsize=8.8, color=cor_rodape)
-    fig.text(0.50, 0.012, f"Desenvolvido por Kauã Ceconello • Gerado em {hora}", ha="center", fontsize=8.6, color=cor_rodape)
+    fig.text(0.50, 0.030, "Relatório elaborado com base em dados da Solinftec • Resultados dependem da qualidade dos dados operacionais e geoespaciais.", ha="center", fontsize=8.8, color=cor)
+    fig.text(0.50, 0.012, f"Desenvolvido por Kauã Ceconello • Gerado em {hora}", ha="center", fontsize=8.6, color=cor)
 
 
-def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_ini, periodo_fim):
-    ax_header = fig.add_axes([0.025, 0.905, 0.95, 0.08])
-    ax_header.axis("off")
+def adicionar_header(fig, titulo, fazenda_id, nome_fazenda, periodo_ini, periodo_fim):
+    axh = fig.add_axes([0.025, 0.905, 0.95, 0.08])
+    axh.axis("off")
     card = mpatches.FancyBboxPatch((0, 0), 1, 1, boxstyle="round,pad=0.012,rounding_size=0.02", facecolor="#FFFFFF", edgecolor="#D8E1EB", linewidth=1.0)
-    ax_header.add_patch(card)
-    ax_header.text(0.03, 0.62, titulo_mapa, fontsize=16, weight="bold", color="#0F172A", ha="left", va="center")
-    ax_header.text(0.03, 0.26, f"Fazenda {fazenda_id} • {nome_fazenda}", fontsize=10.2, color="#475569", ha="left", va="center")
-    ax_header.text(0.97, 0.50, f"Período: {periodo_ini} até {periodo_fim}", fontsize=9.6, color="#64748B", ha="right", va="center")
+    axh.add_patch(card)
+    axh.text(0.03, 0.62, titulo, fontsize=16, weight="bold", color="#0F172A", ha="left", va="center")
+    axh.text(0.03, 0.26, f"Fazenda {fazenda_id} • {nome_fazenda}", fontsize=10.2, color="#475569", ha="left", va="center")
+    axh.text(0.97, 0.50, f"Período: {periodo_ini} até {periodo_fim}", fontsize=9.6, color="#64748B", ha="right", va="center")
 
 
 def ajustar_extensao(ax, base_fazenda):
     minx, miny, maxx, maxy = base_fazenda.total_bounds
     dx, dy = maxx - minx, maxy - miny
-    ax.set_xlim(minx - max(dx * 0.020, 0.35), maxx + max(dx * 0.020, 0.35))
-    ax.set_ylim(miny - max(dy * 0.030, 0.70), maxy + max(dy * 0.030, 0.70))
+    ax.set_xlim(minx - max(dx * 0.02, 0.35), maxx + max(dx * 0.02, 0.35))
+    ax.set_ylim(miny - max(dy * 0.03, 0.70), maxy + max(dy * 0.03, 0.70))
     ax.set_aspect("equal")
     ax.axis("off")
 
@@ -616,7 +560,7 @@ def plotar_rotulos_talhao(ax, base_fazenda):
 def criar_figura_area(base_fazenda, area_trabalhada, area_total_ha, area_trab_ha, area_nao_ha, pct_trab, pct_nao, periodo_ini, periodo_fim, fazenda_id, nome_fazenda):
     fig = plt.figure(figsize=(15.5, 8.8))
     fig.patch.set_facecolor("#F4F7FB")
-    adicionar_header_topo(fig, "Mapa de Área Trabalhada", fazenda_id, nome_fazenda, periodo_ini, periodo_fim)
+    adicionar_header(fig, "Mapa de Área Trabalhada", fazenda_id, nome_fazenda, periodo_ini, periodo_fim)
     ax = fig.add_axes([0.06, 0.16, 0.58, 0.66])
     base_fazenda.plot(ax=ax, facecolor="#E5E7EB", edgecolor="#334155", linewidth=1.0, zorder=1)
     if area_trabalhada is not None and not area_trabalhada.is_empty:
@@ -625,53 +569,54 @@ def criar_figura_area(base_fazenda, area_trabalhada, area_total_ha, area_trab_ha
     plotar_rotulos_talhao(ax, base_fazenda)
     ajustar_extensao(ax, base_fazenda)
 
-    resumo_ax = fig.add_axes([0.71, 0.23, 0.25, 0.48])
-    resumo_ax.set_xlim(0, 1)
-    resumo_ax.set_ylim(0, 1)
-    resumo_ax.axis("off")
-    resumo_box = mpatches.FancyBboxPatch((0, 0), 1, 1, boxstyle="round,pad=0.018,rounding_size=0.03", facecolor="#FFFFFF", edgecolor="#D8E1EB", linewidth=1.0)
-    resumo_ax.add_patch(resumo_box)
-    resumo_ax.text(0.08, 0.92, "Resumo da Operação", ha="left", va="center", fontsize=12, fontweight="bold", color="#0F172A")
-    resumo_ax.text(0.08, 0.77, "Área total", fontsize=8.7, color="#64748B", ha="left")
-    resumo_ax.text(0.92, 0.77, f"{area_total_ha} ha", fontsize=10.2, color="#0F172A", ha="right", weight="bold")
-    resumo_ax.text(0.08, 0.62, "Trabalhada", fontsize=8.7, color="#64748B", ha="left")
-    resumo_ax.text(0.92, 0.62, f"{area_trab_ha} ha ({pct_trab}%)", fontsize=10.0, color="#16A34A", ha="right", weight="bold")
-    resumo_ax.text(0.08, 0.47, "Não trabalhada", fontsize=8.7, color="#64748B", ha="left")
-    resumo_ax.text(0.92, 0.47, f"{area_nao_ha} ha ({pct_nao}%)", fontsize=10.0, color="#475569", ha="right", weight="bold")
-    resumo_ax.add_patch(mpatches.FancyBboxPatch((0.08, 0.28), 0.84, 0.06, boxstyle="round,pad=0.004,rounding_size=0.015", facecolor="#E5E7EB", edgecolor="none"))
-    resumo_ax.add_patch(mpatches.FancyBboxPatch((0.08, 0.28), 0.84 * min(max(pct_trab / 100, 0), 1), 0.06, boxstyle="round,pad=0.004,rounding_size=0.015", facecolor="#22C55E", edgecolor="none"))
-    resumo_ax.text(0.50, 0.20, f"Cobertura operacional: {pct_trab}%", fontsize=9.6, color="#0F172A", ha="center", weight="bold")
+    axr = fig.add_axes([0.71, 0.23, 0.25, 0.48])
+    axr.set_xlim(0, 1)
+    axr.set_ylim(0, 1)
+    axr.axis("off")
+    box = mpatches.FancyBboxPatch((0, 0), 1, 1, boxstyle="round,pad=0.018,rounding_size=0.03", facecolor="#FFFFFF", edgecolor="#D8E1EB", linewidth=1.0)
+    axr.add_patch(box)
+    axr.text(0.08, 0.92, "Resumo da Operação", fontsize=12, weight="bold", color="#0F172A")
+    axr.text(0.08, 0.77, "Área total", fontsize=8.7, color="#64748B")
+    axr.text(0.92, 0.77, f"{area_total_ha} ha", fontsize=10.2, color="#0F172A", ha="right", weight="bold")
+    axr.text(0.08, 0.62, "Trabalhada", fontsize=8.7, color="#64748B")
+    axr.text(0.92, 0.62, f"{area_trab_ha} ha ({pct_trab}%)", fontsize=10.0, color="#16A34A", ha="right", weight="bold")
+    axr.text(0.08, 0.47, "Não trabalhada", fontsize=8.7, color="#64748B")
+    axr.text(0.92, 0.47, f"{area_nao_ha} ha ({pct_nao}%)", fontsize=10.0, color="#475569", ha="right", weight="bold")
+    axr.add_patch(mpatches.FancyBboxPatch((0.08, 0.28), 0.84, 0.06, boxstyle="round,pad=0.004,rounding_size=0.015", facecolor="#E5E7EB", edgecolor="none"))
+    axr.add_patch(mpatches.FancyBboxPatch((0.08, 0.28), 0.84 * min(max(pct_trab / 100, 0), 1), 0.06, boxstyle="round,pad=0.004,rounding_size=0.015", facecolor="#22C55E", edgecolor="none"))
+    axr.text(0.50, 0.20, f"Cobertura operacional: {pct_trab}%", fontsize=9.6, color="#0F172A", ha="center", weight="bold")
     adicionar_footer(fig)
     return fig
 
 
-def criar_figura_tematica(base_fazenda, gdf_display, coluna_classe, mapa_cores, df_legenda, titulo_mapa, titulo_box, faixa_exibida_txt, media_txt, periodo_ini, periodo_fim, fazenda_id, nome_fazenda):
+def criar_figura_tematica(base_fazenda, gdf_linhas, coluna_classe, mapa_cores, df_legenda, titulo, titulo_legenda, faixa_txt, media_txt, periodo_ini, periodo_fim, fazenda_id, nome_fazenda):
     fig = plt.figure(figsize=(15.5, 8.8))
     fig.patch.set_facecolor("#F4F7FB")
-    adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_ini, periodo_fim)
+    adicionar_header(fig, titulo, fazenda_id, nome_fazenda, periodo_ini, periodo_fim)
+
     ax = fig.add_axes([0.06, 0.16, 0.58, 0.66])
     base_fazenda.plot(ax=ax, facecolor="#FFFFFF", edgecolor="#334155", linewidth=1.0, zorder=1)
-    if gdf_display is not None and not gdf_display.empty and coluna_classe in gdf_display.columns:
+    if gdf_linhas is not None and not gdf_linhas.empty and coluna_classe in gdf_linhas.columns:
         for classe, cor in mapa_cores.items():
-            sub = gdf_display[gdf_display[coluna_classe] == classe]
+            sub = gdf_linhas[gdf_linhas[coluna_classe] == classe]
             if not sub.empty:
-                sub.plot(ax=ax, color=cor, edgecolor="none", alpha=1.0, zorder=2)
+                sub.plot(ax=ax, color=cor, linewidth=2.2, alpha=1.0, zorder=2)
     base_fazenda.boundary.plot(ax=ax, color="#0F172A", linewidth=1.1, zorder=3)
     plotar_rotulos_talhao(ax, base_fazenda)
     ajustar_extensao(ax, base_fazenda)
 
-    ax_box = fig.add_axes([0.71, 0.16, 0.25, 0.68])
-    ax_box.set_xlim(0, 1)
-    ax_box.set_ylim(0, 1)
-    ax_box.axis("off")
-    card = mpatches.FancyBboxPatch((0, 0), 1, 1, boxstyle="round,pad=0.018,rounding_size=0.03", facecolor="#FFFFFF", edgecolor="#D8E1EB", linewidth=1.0)
-    ax_box.add_patch(card)
-    ax_box.text(0.07, 0.945, titulo_box, fontsize=12, weight="bold", color="#0F172A", ha="left", va="center")
-    ax_box.text(0.07, 0.895, f"Faixa exibida: {faixa_exibida_txt}", fontsize=8.8, color="#64748B", ha="left", va="center")
+    axb = fig.add_axes([0.71, 0.16, 0.25, 0.68])
+    axb.set_xlim(0, 1)
+    axb.set_ylim(0, 1)
+    axb.axis("off")
+    box = mpatches.FancyBboxPatch((0, 0), 1, 1, boxstyle="round,pad=0.018,rounding_size=0.03", facecolor="#FFFFFF", edgecolor="#D8E1EB", linewidth=1.0)
+    axb.add_patch(box)
+    axb.text(0.07, 0.945, titulo_legenda, fontsize=12, weight="bold", color="#0F172A", ha="left", va="center")
+    axb.text(0.07, 0.895, f"Faixa exibida: {faixa_txt}", fontsize=8.8, color="#64748B", ha="left", va="center")
     chip = mpatches.FancyBboxPatch((0.07, 0.805), 0.86, 0.072, boxstyle="round,pad=0.01,rounding_size=0.02", facecolor="#EFF6FF", edgecolor="#BFDBFE", linewidth=0.8)
-    ax_box.add_patch(chip)
-    ax_box.text(0.50, 0.841, media_txt, fontsize=10.0, color="#1D4ED8", weight="bold", ha="center", va="center")
-    ax_box.plot([0.07, 0.93], [0.755, 0.755], color="#E2E8F0", linewidth=1)
+    axb.add_patch(chip)
+    axb.text(0.50, 0.841, media_txt, fontsize=10.0, color="#1D4ED8", weight="bold", ha="center", va="center")
+    axb.plot([0.07, 0.93], [0.755, 0.755], color="#E2E8F0", linewidth=1)
 
     if not df_legenda.empty:
         topo, base_y = 0.695, 0.08
@@ -679,14 +624,11 @@ def criar_figura_tematica(base_fazenda, gdf_display, coluna_classe, mapa_cores, 
         for i, row in df_legenda.reset_index(drop=True).iterrows():
             y = topo - i * row_h
             pct_txt = f"{row['percentual']:.1f}%".replace(".", ",")
-            ax_box.add_patch(mpatches.FancyBboxPatch((0.07, y - 0.020), 0.025, 0.025, boxstyle="round,pad=0.002,rounding_size=0.004", facecolor=row["cor"], edgecolor="none"))
-            ax_box.text(0.11, y - 0.007, row["faixa"], fontsize=8.9, color="#0F172A", ha="left", va="center")
-            ax_box.add_patch(mpatches.FancyBboxPatch((0.57, y - 0.020), 0.25, 0.025, boxstyle="round,pad=0.002,rounding_size=0.008", facecolor="#E2E8F0", edgecolor="none"))
-            largura_barra = 0.25 * max(0, min(row["percentual"], 100)) / 100
-            ax_box.add_patch(mpatches.FancyBboxPatch((0.57, y - 0.020), largura_barra, 0.025, boxstyle="round,pad=0.002,rounding_size=0.008", facecolor=row["cor"], edgecolor="none"))
-            ax_box.text(0.86, y - 0.007, pct_txt, fontsize=8.9, color="#334155", ha="center", va="center", weight="bold")
+            axb.add_patch(mpatches.FancyBboxPatch((0.07, y - 0.020), 0.025, 0.025, boxstyle="round,pad=0.002,rounding_size=0.004", facecolor=row["cor"], edgecolor="none"))
+            axb.text(0.11, y - 0.007, row["faixa"], fontsize=8.9, color="#0F172A", ha="left", va="center")
+            axb.text(0.88, y - 0.007, pct_txt, fontsize=8.9, color="#334155", ha="center", va="center", weight="bold")
     else:
-        ax_box.text(0.50, 0.55, "Sem dados válidos para exibir.", fontsize=9.2, color="#64748B", ha="center")
+        axb.text(0.50, 0.55, "Sem dados válidos para exibir.", fontsize=9.2, color="#64748B", ha="center")
 
     adicionar_footer(fig)
     return fig
@@ -694,8 +636,6 @@ def criar_figura_tematica(base_fazenda, gdf_display, coluna_classe, mapa_cores, 
 
 def criar_figura_tabela_talhoes_pdf(df_talhoes, fazenda_id, nome_fazenda, pagina_atual=1, total_paginas=1, area_total_trabalhada=None, area_total_fazenda=None):
     df_base = ordenar_tabela_talhoes(df_talhoes)
-    if df_base is None or df_base.empty:
-        df_base = pd.DataFrame(columns=["Gleba", "Talhão", "Área total (ha)", "Área trabalhada (ha)"])
     df_dados = df_base[df_base["Gleba"].astype(str).str.upper() != "TOTAL"].copy()
     for col in ["Área total (ha)", "Área trabalhada (ha)"]:
         if col in df_dados.columns:
@@ -704,37 +644,19 @@ def criar_figura_tabela_talhoes_pdf(df_talhoes, fazenda_id, nome_fazenda, pagina
         area_total_trabalhada = pd.to_numeric(df_dados.get("Área trabalhada (ha)", pd.Series(dtype=float)), errors="coerce").fillna(0).sum()
     if area_total_fazenda is None:
         area_total_fazenda = pd.to_numeric(df_dados.get("Área total (ha)", pd.Series(dtype=float)), errors="coerce").fillna(0).sum()
-    pct_trabalhado = round((area_total_trabalhada / area_total_fazenda) * 100, 1) if area_total_fazenda and area_total_fazenda > 0 else 0
 
     fig = plt.figure(figsize=(11.69, 8.27))
     fig.patch.set_facecolor("#F4F7FB")
-    ax_header = fig.add_axes([0.035, 0.895, 0.93, 0.08])
-    ax_header.axis("off")
-    header_box = mpatches.FancyBboxPatch((0, 0), 1, 1, boxstyle="round,pad=0.012,rounding_size=0.018", facecolor="#FFFFFF", edgecolor="#E2E8F0", linewidth=1.0)
-    ax_header.add_patch(header_box)
-    ax_header.text(0.025, 0.62, "Área Trabalhada por Gleba / Talhão", fontsize=15.5, weight="bold", color="#0F172A", ha="left", va="center")
-    ax_header.text(0.025, 0.28, f"Fazenda {fazenda_id} • {nome_fazenda}", fontsize=9.8, color="#64748B", ha="left", va="center")
-    ax_header.text(0.975, 0.50, f"Página {pagina_atual} de {total_paginas}", fontsize=9.2, color="#64748B", ha="right", va="center")
+    axh = fig.add_axes([0.035, 0.895, 0.93, 0.08])
+    axh.axis("off")
+    axh.text(0.025, 0.62, "Área Trabalhada por Gleba / Talhão", fontsize=15.5, weight="bold", color="#0F172A")
+    axh.text(0.025, 0.28, f"Fazenda {fazenda_id} • {nome_fazenda}", fontsize=9.8, color="#64748B")
+    axh.text(0.975, 0.50, f"Página {pagina_atual} de {total_paginas}", fontsize=9.2, color="#64748B", ha="right")
 
-    ax_cards = fig.add_axes([0.055, 0.765, 0.89, 0.095])
-    ax_cards.set_xlim(0, 1)
-    ax_cards.set_ylim(0, 1)
-    ax_cards.axis("off")
-    cards = [
-        {"x": 0.00, "titulo": "Área total", "valor": formatar_area_ha(area_total_fazenda), "cor": "#0F172A", "bg": "#FFFFFF"},
-        {"x": 0.255, "titulo": "Área trabalhada", "valor": formatar_area_ha(area_total_trabalhada), "cor": "#16A34A", "bg": "#F0FDF4"},
-        {"x": 0.510, "titulo": "Cobertura", "valor": f"{str(pct_trabalhado).replace('.', ',')}%", "cor": "#2563EB", "bg": "#EFF6FF"},
-    ]
-    for card in cards:
-        box = mpatches.FancyBboxPatch((card["x"], 0.04), 0.225, 0.88, boxstyle="round,pad=0.012,rounding_size=0.025", facecolor=card["bg"], edgecolor="#E2E8F0", linewidth=1.0)
-        ax_cards.add_patch(box)
-        ax_cards.text(card["x"] + 0.025, 0.68, card["titulo"], fontsize=8.5, color="#64748B", ha="left", va="center")
-        ax_cards.text(card["x"] + 0.025, 0.42, card["valor"], fontsize=12.2, weight="bold", color=card["cor"], ha="left", va="center")
-
-    ax_table = fig.add_axes([0.065, 0.11, 0.87, 0.61])
-    ax_table.axis("off")
+    ax = fig.add_axes([0.065, 0.12, 0.87, 0.70])
+    ax.axis("off")
     if df_dados.empty:
-        ax_table.text(0.5, 0.5, "Sem dados de área por talhão.", ha="center", va="center", fontsize=11, color="#64748B")
+        ax.text(0.5, 0.5, "Sem dados de área por talhão.", ha="center", va="center", fontsize=11, color="#64748B")
         adicionar_footer(fig)
         return fig
 
@@ -743,8 +665,7 @@ def criar_figura_tabela_talhoes_pdf(df_talhoes, fazenda_id, nome_fazenda, pagina
     df_tab["Área total (ha)"] = df_tab["Área total (ha)"].apply(formatar_area_ha)
     df_tab["Área trabalhada (ha)"] = df_tab["Área trabalhada (ha)"].apply(formatar_area_ha)
     df_tab["% Trabalhado"] = df_tab["% Trabalhado"].apply(lambda x: f"{x:.1f}%".replace(".", ","))
-
-    tabela = ax_table.table(cellText=df_tab.values, colLabels=df_tab.columns, loc="center", cellLoc="center", colLoc="center")
+    tabela = ax.table(cellText=df_tab.values, colLabels=df_tab.columns, loc="center", cellLoc="center", colLoc="center")
     tabela.auto_set_font_size(False)
     tabela.set_fontsize(8.5)
     tabela.scale(1, 1.35)
@@ -764,31 +685,32 @@ def criar_figuras_tabela_talhoes_pdf(df_talhoes, fazenda_id, nome_fazenda, linha
     else:
         area_total_trabalhada = pd.to_numeric(df_dados["Área trabalhada (ha)"], errors="coerce").fillna(0).sum()
         area_total_fazenda = pd.to_numeric(df_dados["Área total (ha)"], errors="coerce").fillna(0).sum()
-
     paginas_df = [df_dados.iloc[i:i + linhas_por_pagina].copy() for i in range(0, len(df_dados), linhas_por_pagina)] or [df_dados.copy()]
-    figuras = []
-    for idx, df_pag in enumerate(paginas_df, start=1):
-        figuras.append(criar_figura_tabela_talhoes_pdf(df_pag, fazenda_id, nome_fazenda, idx, len(paginas_df), area_total_trabalhada, area_total_fazenda))
-    return figuras
+    return [criar_figura_tabela_talhoes_pdf(df_pag, fazenda_id, nome_fazenda, idx, len(paginas_df), area_total_trabalhada, area_total_fazenda) for idx, df_pag in enumerate(paginas_df, start=1)]
 
 # =========================================================
-# SIDEBAR
+# SIDEBAR - ALTERNATIVAS
 # =========================================================
 st.sidebar.header("⚙️ Parâmetros")
 
 with sidebar_container():
-    st.markdown("### 🗺️ Tipos de mapa")
-    MAPA_AREA = st.checkbox("Área trabalhada", value=True, key="mapa_area_chk")
-    MAPA_VEL = st.checkbox("Mapa de Velocidade", value=True, key="mapa_vel_chk")
-    MAPA_RPM = st.checkbox("Mapa de RPM", value=True, key="mapa_rpm_chk")
+    st.markdown("### 🗺️ Tipo de processamento")
+    MODO_MAPA = st.radio(
+        "Escolha o tipo de mapa",
+        ["Área trabalhada", "Velocidade e RPM"],
+        index=0,
+        key="modo_mapa_radio"
+    )
+
+MAPA_AREA = MODO_MAPA == "Área trabalhada"
+MAPA_VEL = False
+MAPA_RPM = False
 
 with sidebar_container():
     st.markdown("### 🧭 Base cartográfica")
     st.caption(os.path.basename(BASE_PADRAO_PATH))
 
-# Velocidade e RPM não utilizam parâmetros de buffer.
-# Por isso, os parâmetros de Área Trabalhada só aparecem quando Área Trabalhada está selecionada sozinha.
-if MAPA_AREA and not (MAPA_VEL or MAPA_RPM):
+if MAPA_AREA:
     with sidebar_container():
         st.markdown("### 📐 Área Trabalhada")
         MULTIPLICADOR_BUFFER_AREA = st.number_input("Tamanho do Buffer", min_value=0.0, max_value=20.0, value=2.5, step=0.1, key="buffer_area_mult_input")
@@ -803,14 +725,18 @@ if MAPA_AREA and not (MAPA_VEL or MAPA_RPM):
             AREA_MAX_BURACO_HA = st.number_input("Preencher buracos até (ha)", min_value=0.0, max_value=10.0, value=0.50, step=0.10, key="area_max_buraco_ha_input")
         MOSTRAR_TALHOES = st.checkbox("📄 Incluir tabela por Gleba / Talhão no PDF e CSV", value=False, key="mostrar_talhoes_chk")
 else:
-    # Padrões internos usados quando os controles ficam ocultos.
-    # Caso o arquivo enviado seja MULTIPOLYGON/POLYGON, a Área Trabalhada ainda usa estes valores.
     MULTIPLICADOR_BUFFER_AREA = 2.5
     AREA_MIN_HA = 0.50
     BUFFER_MINIMO_M = 8.0
     FATOR_RECUO_GAPS = 0.30
     AREA_MAX_BURACO_HA = 0.50
     MOSTRAR_TALHOES = False
+
+if MODO_MAPA == "Velocidade e RPM":
+    with sidebar_container():
+        st.markdown("### 🧪 Mapas operacionais")
+        MAPA_VEL = st.checkbox("Mapa de Velocidade", value=True, key="mapa_vel_chk")
+        MAPA_RPM = st.checkbox("Mapa de RPM", value=True, key="mapa_rpm_chk")
 
 RPM_MIN, RPM_MAX, RPM_PASSO = 1200, 2000, 100
 if MAPA_RPM:
@@ -859,14 +785,17 @@ if GERAR:
 if not uploaded_zips or not os.path.exists(BASE_PADRAO_PATH):
     st.session_state["mapas_gerados"] = False
 
-mapas_selecionados = []
 if MAPA_AREA:
-    mapas_selecionados.append("Área trabalhada")
-if MAPA_VEL:
-    mapas_selecionados.append("Velocidade")
-if MAPA_RPM:
-    mapas_selecionados.append("RPM")
-st.caption("✅ Mapas selecionados: " + ", ".join(mapas_selecionados) if mapas_selecionados else "⚠️ Nenhum mapa selecionado.")
+    st.caption("✅ Tipo selecionado: Área trabalhada")
+elif MAPA_VEL or MAPA_RPM:
+    mapas_op = []
+    if MAPA_VEL:
+        mapas_op.append("Velocidade")
+    if MAPA_RPM:
+        mapas_op.append("RPM")
+    st.caption("✅ Tipo selecionado: " + ", ".join(mapas_op))
+else:
+    st.caption("⚠️ Nenhum mapa operacional selecionado.")
 
 # =========================================================
 # PROCESSAMENTO
@@ -877,6 +806,9 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
         st.stop()
     if MAPA_VEL and VEL_MAX <= VEL_MIN:
         st.error("❌ Ajuste os parâmetros de velocidade.")
+        st.stop()
+    if MODO_MAPA == "Velocidade e RPM" and not (MAPA_VEL or MAPA_RPM):
+        st.error("❌ Selecione Velocidade, RPM ou ambos.")
         st.stop()
 
     with st.spinner("Processando arquivos e gerando mapas..."):
@@ -901,253 +833,226 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
             del dfs
             gc.collect()
 
+            colunas_lower = {c.lower(): c for c in df.columns}
             COLUNA_POLIGONO = detectar_coluna_geometria(df, ["MULTIPOLYGON", "POLYGON"])
             COLUNA_LINHA = detectar_coluna_geometria(df, ["LINESTRING", "MULTILINESTRING"])
             TEM_PONTOS = all(c in df.columns for c in ["vl_latitude_inicial", "vl_longitude_inicial"])
 
-            # Regra solicitada:
-            # - Se vier MULTIPOLYGON/POLYGON, gera somente Área Trabalhada.
-            # - Se vier LINESTRING ou POINTS, não gera Área Trabalhada.
-            MAPA_AREA_EFETIVO = MAPA_AREA and COLUNA_POLIGONO is not None
-            MAPA_VEL_EFETIVO = MAPA_VEL and COLUNA_POLIGONO is None and (COLUNA_LINHA is not None or TEM_PONTOS)
-            MAPA_RPM_EFETIVO = MAPA_RPM and COLUNA_POLIGONO is None and (COLUNA_LINHA is not None or TEM_PONTOS)
-            USAR_LINHAS_SOLINFTEC = (MAPA_VEL_EFETIVO or MAPA_RPM_EFETIVO) and COLUNA_LINHA is not None
+            mascara_poligono = pd.Series(False, index=df.index)
+            if COLUNA_POLIGONO is not None:
+                mascara_poligono = df[COLUNA_POLIGONO].notna() & df[COLUNA_POLIGONO].astype(str).str.upper().str.contains("POLYGON", na=False)
 
-            if not (MAPA_AREA_EFETIVO or MAPA_VEL_EFETIVO or MAPA_RPM_EFETIVO):
-                st.warning("⚠️ Nenhum mapa compatível com o tipo de arquivo enviado foi selecionado.")
+            mascara_linha = pd.Series(False, index=df.index)
+            if COLUNA_LINHA is not None:
+                mascara_linha = df[COLUNA_LINHA].notna() & df[COLUNA_LINHA].astype(str).str.upper().str.contains("LINESTRING", na=False)
+
+            if "cd_fazenda" not in df.columns:
+                st.error("❌ Coluna obrigatória faltante: cd_fazenda")
                 st.stop()
-
-            colunas_obrigatorias = ["cd_fazenda"]
-            if MAPA_AREA_EFETIVO:
-                pass
-            if (MAPA_VEL_EFETIVO or MAPA_RPM_EFETIVO) and not USAR_LINHAS_SOLINFTEC:
-                colunas_obrigatorias.extend(["dt_hr_local_inicial", "vl_latitude_inicial", "vl_longitude_inicial", "cd_estado", "cd_operacao_parada", "cd_equipamento"])
-            if MAPA_VEL_EFETIVO:
-                colunas_obrigatorias.append("vl_velocidade")
-            if MAPA_RPM_EFETIVO:
-                colunas_obrigatorias.append("vl_rpm")
-
-            faltantes_csv = validar_colunas(df, colunas_obrigatorias)
-            if faltantes_csv:
-                st.error("❌ Colunas obrigatórias faltantes: " + ", ".join(faltantes_csv))
-                st.stop()
-
-            df["cd_fazenda"] = df["cd_fazenda"].astype(str)
+            df["cd_fazenda"] = df["cd_fazenda"].apply(normalizar_codigo)
             if "cd_equipamento" in df.columns:
-                df["cd_equipamento"] = df["cd_equipamento"].astype(str)
+                df["cd_equipamento"] = df["cd_equipamento"].apply(normalizar_codigo)
             if "dt_hr_local_inicial" in df.columns:
                 df["dt_hr_local_inicial"] = pd.to_datetime(df["dt_hr_local_inicial"], errors="coerce")
             for col in ["vl_latitude_inicial", "vl_longitude_inicial", "vl_largura_implemento", "vl_rpm", "vl_velocidade"]:
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors="coerce")
-            if "vl_rpm" not in df.columns:
-                df["vl_rpm"] = np.nan
-            if "vl_velocidade" not in df.columns:
-                df["vl_velocidade"] = np.nan
-            if "vl_largura_implemento" not in df.columns:
-                df["vl_largura_implemento"] = LARGURA_PADRAO_M
-
-            df_area = df[df[COLUNA_POLIGONO].notna()].copy() if MAPA_AREA_EFETIVO else pd.DataFrame()
-            if MAPA_AREA_EFETIVO and df_area.empty:
-                st.error("❌ Nenhuma geometria WKT válida encontrada para Área Trabalhada.")
-                st.stop()
-
-            df_oper = df.copy()
-            if MAPA_VEL_EFETIVO or MAPA_RPM_EFETIVO:
-                if not USAR_LINHAS_SOLINFTEC:
-                    df_oper = df_oper[(df_oper["cd_estado"] == "E") & (df_oper["cd_operacao_parada"] == -1)].copy()
-                    df_oper = df_oper.dropna(subset=["dt_hr_local_inicial", "vl_latitude_inicial", "vl_longitude_inicial"])
-                    if df_oper.empty:
-                        st.error("❌ Nenhum ponto válido encontrado para Velocidade/RPM.")
-                        st.stop()
-                else:
-                    df_oper = df_oper[df_oper[COLUNA_LINHA].notna()].copy()
-                    if df_oper.empty:
-                        st.error("❌ Nenhuma linha WKT válida encontrada para Velocidade/RPM.")
-                        st.stop()
 
             base = gpd.read_file(BASE_PADRAO_PATH)
             faltantes_gpkg = validar_colunas(base, ["FAZENDA", "PROPRIEDADE", "geometry"])
             if faltantes_gpkg:
                 st.error("❌ O GPKG não possui as colunas obrigatórias: " + ", ".join(faltantes_gpkg))
                 st.stop()
-            base["FAZENDA"] = base["FAZENDA"].astype(str)
+            base["FAZENDA"] = base["FAZENDA"].apply(normalizar_codigo)
             if "TALHAO" in base.columns:
-                base["TALHAO"] = base["TALHAO"].astype(str)
+                base["TALHAO"] = base["TALHAO"].apply(normalizar_codigo)
             if "GLEBA" in base.columns:
-                base["GLEBA"] = base["GLEBA"].astype(str)
-
-            vel_faixas = gerar_faixas(VEL_MIN, VEL_MAX, VEL_PASSO, casas=1) if MAPA_VEL_EFETIVO else []
-            rpm_faixas = gerar_faixas(RPM_MIN, RPM_MAX, RPM_PASSO, casas=0) if MAPA_RPM_EFETIVO else []
-            vel_labels = [f[2] for f in vel_faixas]
-            rpm_labels = [f[2] for f in rpm_faixas]
-            vel_cores = dict(zip(vel_labels, amostrar_cores_classes(criar_cmap_suave("vel"), len(vel_labels)))) if MAPA_VEL_EFETIVO else {}
-            rpm_cores = dict(zip(rpm_labels, amostrar_cores_classes(criar_cmap_suave("rpm"), len(rpm_labels)))) if MAPA_RPM_EFETIVO else {}
-
-            fazendas_area = set(df_area["cd_fazenda"].dropna().astype(str).unique()) if MAPA_AREA_EFETIVO else set()
-            fazendas_oper = set(df_oper["cd_fazenda"].dropna().astype(str).unique()) if (MAPA_VEL_EFETIVO or MAPA_RPM_EFETIVO) else set()
-            fazendas_processar = sorted(fazendas_area.union(fazendas_oper), key=chave_ordenacao_mista)
+                base["GLEBA"] = base["GLEBA"].apply(normalizar_codigo)
 
             mapas_gerados_total = 0
 
+            if MAPA_AREA:
+                if COLUNA_POLIGONO is None or not mascara_poligono.any():
+                    st.warning("⚠️ O modo Área Trabalhada precisa de CSV com POLYGON ou MULTIPOLYGON.")
+                    st.stop()
+                df_area = df[mascara_poligono].copy()
+                fazendas_processar = sorted(df_area["cd_fazenda"].dropna().astype(str).unique(), key=chave_ordenacao_mista)
+            else:
+                if not (mascara_linha.any() or TEM_PONTOS):
+                    st.warning("⚠️ O modo Velocidade/RPM precisa de CSV com LINESTRING ou pontos de latitude/longitude.")
+                    st.stop()
+                if MAPA_VEL and "vl_velocidade" not in df.columns:
+                    st.error("❌ Coluna obrigatória faltante: vl_velocidade")
+                    st.stop()
+                if MAPA_RPM and "vl_rpm" not in df.columns:
+                    st.error("❌ Coluna obrigatória faltante: vl_rpm")
+                    st.stop()
+                usar_linhas = mascara_linha.any()
+                if usar_linhas:
+                    df_oper = df[mascara_linha].copy()
+                else:
+                    faltantes_pontos = validar_colunas(df, ["dt_hr_local_inicial", "vl_latitude_inicial", "vl_longitude_inicial", "cd_estado", "cd_operacao_parada", "cd_equipamento"])
+                    if faltantes_pontos:
+                        st.error("❌ Colunas obrigatórias faltantes para pontos: " + ", ".join(faltantes_pontos))
+                        st.stop()
+                    df_oper = df[~mascara_poligono].copy()
+                    df_oper = df_oper[(df_oper["cd_estado"] == "E") & (df_oper["cd_operacao_parada"] == -1)].copy()
+                    df_oper = df_oper.dropna(subset=["dt_hr_local_inicial", "vl_latitude_inicial", "vl_longitude_inicial"])
+                if df_oper.empty:
+                    st.warning("⚠️ Nenhum dado operacional válido encontrado para Velocidade/RPM.")
+                    st.stop()
+                fazendas_processar = sorted(df_oper["cd_fazenda"].dropna().astype(str).unique(), key=chave_ordenacao_mista)
+
             for FAZENDA_ID in fazendas_processar:
-                df_faz_area = df_area[df_area["cd_fazenda"] == FAZENDA_ID].copy() if MAPA_AREA_EFETIVO else pd.DataFrame()
-                df_faz_oper = df_oper[df_oper["cd_fazenda"] == FAZENDA_ID].copy() if (MAPA_VEL_EFETIVO or MAPA_RPM_EFETIVO) else pd.DataFrame()
                 base_fazenda = base[base["FAZENDA"] == FAZENDA_ID].copy()
                 if base_fazenda.empty:
                     continue
-
                 nome_fazenda = base_fazenda["PROPRIEDADE"].iloc[0]
                 base_fazenda = base_fazenda.to_crs(epsg=CRS_METRICO)
                 geom_fazenda = unary_union(base_fazenda.geometry)
-                periodo_ini, periodo_fim = obter_periodo(df_faz_area, df_faz_oper)
 
-                area_trabalhada = None
-                area_total_ha = round(geom_fazenda.area / 10000, 2)
-                area_trab_ha = 0
-                area_nao_ha = area_total_ha
-                pct_trab = 0
-                pct_nao = 100 if area_total_ha > 0 else 0
-                df_talhoes = None
-
-                if MAPA_AREA_EFETIVO and not df_faz_area.empty:
+                if MAPA_AREA:
+                    df_faz_area = df_area[df_area["cd_fazenda"] == FAZENDA_ID].copy()
+                    periodo_ini, periodo_fim = obter_periodo(df_faz_area, pd.DataFrame())
                     gdf_area = criar_gdf_wkt(df_faz_area, COLUNA_POLIGONO, crs="EPSG:4326")
-                    if not gdf_area.empty:
-                        gdf_area = gdf_area.to_crs(epsg=CRS_METRICO)
-                        area_bruta_wkt = unary_union(gdf_area.geometry)
-                        largura_media = calcular_largura_media_buffer(df_faz_area, pd.DataFrame())
-                        if pd.notna(largura_media) and largura_media > 0 and MULTIPLICADOR_BUFFER_AREA > 0:
-                            distancia_buffer = max(largura_media * MULTIPLICADOR_BUFFER_AREA, BUFFER_MINIMO_M)
-                        else:
-                            distancia_buffer = BUFFER_MINIMO_M
-                        if distancia_buffer > 0:
-                            area_trabalhada = area_bruta_wkt.buffer(distancia_buffer, join_style=2).buffer(-distancia_buffer * FATOR_RECUO_GAPS, join_style=2).buffer(0)
-                        else:
-                            area_trabalhada = area_bruta_wkt.buffer(0)
-                        if AREA_MAX_BURACO_HA > 0:
-                            area_trabalhada = preencher_buracos_pequenos(area_trabalhada, AREA_MAX_BURACO_HA * 10000)
-                        area_trabalhada = area_trabalhada.intersection(geom_fazenda).buffer(0)
-                        if not area_trabalhada.is_empty:
-                            area_nao = geom_fazenda.difference(area_trabalhada)
-                            area_trab_ha = round(area_trabalhada.area / 10000, 2)
-                            area_nao_ha = round(area_nao.area / 10000, 2)
-                            if area_trab_ha >= AREA_MIN_HA:
-                                pct_trab = round(area_trab_ha / area_total_ha * 100, 1) if area_total_ha > 0 else 0
-                                pct_nao = round(area_nao_ha / area_total_ha * 100, 1) if area_total_ha > 0 else 0
-                            else:
-                                area_trabalhada = None
-
-                            if area_trabalhada is not None and MOSTRAR_TALHOES and "TALHAO" in base_fazenda.columns and "GLEBA" in base_fazenda.columns:
-                                base_tmp = base_fazenda.copy()
-                                base_tmp["Área total (ha)"] = base_tmp.geometry.area / 10000
-                                total = base_tmp[["GLEBA", "TALHAO", "Área total (ha)"]]
-                                intersec = gpd.overlay(base_tmp, gpd.GeoDataFrame(geometry=[area_trabalhada], crs=base_tmp.crs), how="intersection")
-                                if not intersec.empty:
-                                    intersec["Área trabalhada (ha)"] = intersec.geometry.area / 10000
-                                    trab = intersec.groupby(["GLEBA", "TALHAO"])["Área trabalhada (ha)"].sum().reset_index()
-                                else:
-                                    trab = pd.DataFrame(columns=["GLEBA", "TALHAO", "Área trabalhada (ha)"])
-                                df_talhoes = total.merge(trab, on=["GLEBA", "TALHAO"], how="left")
-                                df_talhoes["Área trabalhada (ha)"] = df_talhoes["Área trabalhada (ha)"].fillna(0)
-                                df_talhoes = df_talhoes.rename(columns={"GLEBA": "Gleba", "TALHAO": "Talhão"})
-                                df_talhoes = df_talhoes[["Gleba", "Talhão", "Área total (ha)", "Área trabalhada (ha)"]]
-                                df_talhoes["Área total (ha)"] = pd.to_numeric(df_talhoes["Área total (ha)"], errors="coerce").fillna(0).round(2)
-                                df_talhoes["Área trabalhada (ha)"] = pd.to_numeric(df_talhoes["Área trabalhada (ha)"], errors="coerce").fillna(0).round(2)
-                                total_row = pd.DataFrame({
-                                    "Gleba": ["TOTAL"],
-                                    "Talhão": [""],
-                                    "Área total (ha)": [round(df_talhoes["Área total (ha)"].sum(), 2)],
-                                    "Área trabalhada (ha)": [round(df_talhoes["Área trabalhada (ha)"].sum(), 2)],
-                                })
-                                df_talhoes = ordenar_tabela_talhoes(pd.concat([df_talhoes, total_row], ignore_index=True))
-
-                gdf_display = None
-                if MAPA_VEL_EFETIVO or MAPA_RPM_EFETIVO:
-                    if USAR_LINHAS_SOLINFTEC:
-                        gdf_linhas = criar_linhas_por_linestring(df_faz_oper, COLUNA_LINHA, geom_fazenda)
+                    if gdf_area.empty:
+                        continue
+                    gdf_area = gdf_area.to_crs(epsg=CRS_METRICO)
+                    area_bruta = unary_union(gdf_area.geometry)
+                    largura_media = calcular_largura_media(df_faz_area)
+                    if pd.notna(largura_media) and largura_media > 0 and MULTIPLICADOR_BUFFER_AREA > 0:
+                        dist = max(largura_media * MULTIPLICADOR_BUFFER_AREA, BUFFER_MINIMO_M)
                     else:
-                        gdf_linhas = criar_linhas_por_pontos(df_faz_oper, geom_fazenda)
-                    gdf_display = criar_poligonos_display(gdf_linhas, geom_fazenda)
+                        dist = BUFFER_MINIMO_M
+                    if dist > 0:
+                        area_trabalhada = area_bruta.buffer(dist, join_style=2).buffer(-dist * FATOR_RECUO_GAPS, join_style=2).buffer(0)
+                    else:
+                        area_trabalhada = area_bruta.buffer(0)
+                    if AREA_MAX_BURACO_HA > 0:
+                        area_trabalhada = preencher_buracos_pequenos(area_trabalhada, AREA_MAX_BURACO_HA * 10000)
+                    area_trabalhada = area_trabalhada.intersection(geom_fazenda).buffer(0)
+                    if area_trabalhada.is_empty:
+                        continue
+                    area_total_ha = round(geom_fazenda.area / 10000, 2)
+                    area_trab_ha = round(area_trabalhada.area / 10000, 2)
+                    if area_trab_ha < AREA_MIN_HA:
+                        continue
+                    area_nao_ha = round(max(area_total_ha - area_trab_ha, 0), 2)
+                    pct_trab = round(area_trab_ha / area_total_ha * 100, 1) if area_total_ha > 0 else 0
+                    pct_nao = round(100 - pct_trab, 1)
 
-                vel_validos = df_faz_oper["vl_velocidade"].dropna() if MAPA_VEL_EFETIVO and not df_faz_oper.empty else pd.Series(dtype=float)
-                rpm_validos = df_faz_oper["vl_rpm"].dropna() if MAPA_RPM_EFETIVO and not df_faz_oper.empty else pd.Series(dtype=float)
-                vel_med_real = round(vel_validos.mean(), 1) if not vel_validos.empty else np.nan
-                rpm_med_real = round(rpm_validos.mean(), 0) if not rpm_validos.empty else np.nan
+                    df_talhoes = None
+                    if MOSTRAR_TALHOES and "TALHAO" in base_fazenda.columns and "GLEBA" in base_fazenda.columns:
+                        base_tmp = base_fazenda.copy()
+                        base_tmp["Área total (ha)"] = base_tmp.geometry.area / 10000
+                        total = base_tmp[["GLEBA", "TALHAO", "Área total (ha)"]]
+                        intersec = gpd.overlay(base_tmp, gpd.GeoDataFrame(geometry=[area_trabalhada], crs=base_tmp.crs), how="intersection")
+                        if not intersec.empty:
+                            intersec["Área trabalhada (ha)"] = intersec.geometry.area / 10000
+                            trab = intersec.groupby(["GLEBA", "TALHAO"])["Área trabalhada (ha)"].sum().reset_index()
+                        else:
+                            trab = pd.DataFrame(columns=["GLEBA", "TALHAO", "Área trabalhada (ha)"])
+                        df_talhoes = total.merge(trab, on=["GLEBA", "TALHAO"], how="left")
+                        df_talhoes["Área trabalhada (ha)"] = df_talhoes["Área trabalhada (ha)"].fillna(0)
+                        df_talhoes = df_talhoes.rename(columns={"GLEBA": "Gleba", "TALHAO": "Talhão"})
+                        df_talhoes = df_talhoes[["Gleba", "Talhão", "Área total (ha)", "Área trabalhada (ha)"]]
+                        df_talhoes["Área total (ha)"] = pd.to_numeric(df_talhoes["Área total (ha)"], errors="coerce").fillna(0).round(2)
+                        df_talhoes["Área trabalhada (ha)"] = pd.to_numeric(df_talhoes["Área trabalhada (ha)"], errors="coerce").fillna(0).round(2)
+                        total_row = pd.DataFrame({
+                            "Gleba": ["TOTAL"],
+                            "Talhão": [""],
+                            "Área total (ha)": [round(df_talhoes["Área total (ha)"].sum(), 2)],
+                            "Área trabalhada (ha)": [round(df_talhoes["Área trabalhada (ha)"].sum(), 2)],
+                        })
+                        df_talhoes = ordenar_tabela_talhoes(pd.concat([df_talhoes, total_row], ignore_index=True))
 
-                if gdf_display is not None and not gdf_display.empty:
-                    if MAPA_VEL_EFETIVO:
-                        gdf_display["classe_vel"] = gdf_display["vel_media"].apply(lambda x: classificar_valor(x, vel_faixas))
-                    if MAPA_RPM_EFETIVO:
-                        gdf_display["classe_rpm"] = gdf_display["rpm_medio"].apply(lambda x: classificar_valor(x, rpm_faixas))
-
-                df_leg_vel = calcular_legenda_percentual(gdf_display, "classe_vel", vel_faixas, vel_cores) if MAPA_VEL_EFETIVO else pd.DataFrame()
-                df_leg_rpm = calcular_legenda_percentual(gdf_display, "classe_rpm", rpm_faixas, rpm_cores) if MAPA_RPM_EFETIVO else pd.DataFrame()
-
-                with st.expander(f"🗺️ Mapa – {nome_fazenda}", expanded=False):
-                    if MAPA_AREA_EFETIVO and area_trabalhada is not None and not area_trabalhada.is_empty:
+                    with st.expander(f"🗺️ Mapa – {nome_fazenda}", expanded=False):
                         fig_area = criar_figura_area(base_fazenda, area_trabalhada, area_total_ha, area_trab_ha, area_nao_ha, pct_trab, pct_nao, periodo_ini, periodo_fim, FAZENDA_ID, nome_fazenda)
                         st.pyplot(fig_area)
-                        figuras_pdf_area = [fig_area]
-                        figuras_tabela_pdf = []
+                        figuras = [fig_area]
+                        figs_tab = []
                         if MOSTRAR_TALHOES and df_talhoes is not None and not df_talhoes.empty:
-                            figuras_tabela_pdf = criar_figuras_tabela_talhoes_pdf(df_talhoes, FAZENDA_ID, nome_fazenda, linhas_por_pagina=12)
-                            figuras_pdf_area.extend(figuras_tabela_pdf)
-                        pdf_area = figuras_para_pdf_multipaginas(figuras_pdf_area)
+                            figs_tab = criar_figuras_tabela_talhoes_pdf(df_talhoes, FAZENDA_ID, nome_fazenda)
+                            figuras.extend(figs_tab)
+                        pdf_area = figuras_para_pdf_multipaginas(figuras)
                         st.download_button("⬇️ Baixar PDF vetorial – Área Trabalhada", data=pdf_area, file_name=f"mapa_area_{FAZENDA_ID}.pdf", mime="application/pdf", key=f"pdf_area_{FAZENDA_ID}")
-                        mapas_gerados_total += 1
+                        if df_talhoes is not None:
+                            st.markdown("### 🌾 Área por Gleba / Talhão")
+                            df_exp = preparar_tabela_talhoes_exportacao(df_talhoes)
+                            st.dataframe(df_exp, use_container_width=True, hide_index=True)
+                            zip_csv = criar_zip_csv_talhoes(df_exp, f"area_por_talhao_{FAZENDA_ID}.csv")
+                            st.download_button("⬇️ Baixar ZIP com CSV – Área por Gleba / Talhão", data=zip_csv, file_name=f"area_por_talhao_{FAZENDA_ID}.zip", mime="application/zip", key=f"zip_csv_talhoes_{FAZENDA_ID}")
                         plt.close(fig_area)
-                        for fig_tab in figuras_tabela_pdf:
-                            plt.close(fig_tab)
-                        del pdf_area, figuras_pdf_area, figuras_tabela_pdf
+                        for fig in figs_tab:
+                            plt.close(fig)
+                    mapas_gerados_total += 1
 
-                    # Ordem solicitada: Velocidade antes de RPM
-                    if MAPA_VEL_EFETIVO:
-                        faixa_vel_ini = arredondar_para_baixo(VEL_MIN, VEL_PASSO)
-                        faixa_vel_fim = arredondar_para_cima(VEL_MAX, VEL_PASSO)
-                        fig_vel = criar_figura_tematica(
-                            base_fazenda, gdf_display, "classe_vel", vel_cores, df_leg_vel,
-                            "Mapa de Velocidade", "Legenda de Velocidade",
-                            f"< {formatar_numero(faixa_vel_ini, 1)} | {formatar_numero(faixa_vel_ini, 1)} até {formatar_numero(faixa_vel_fim, 1)}+ km/h",
-                            f"Vel. média: {formatar_numero(vel_med_real, 1)} km/h",
-                            periodo_ini, periodo_fim, FAZENDA_ID, nome_fazenda,
-                        )
-                        st.pyplot(fig_vel)
-                        pdf_vel = figura_para_pdf_bytes(fig_vel)
-                        st.download_button("⬇️ Baixar PDF vetorial – Velocidade", data=pdf_vel, file_name=f"mapa_velocidade_{FAZENDA_ID}.pdf", mime="application/pdf", key=f"pdf_vel_{FAZENDA_ID}")
-                        mapas_gerados_total += 1
-                        plt.close(fig_vel)
-                        del pdf_vel
+                else:
+                    df_faz = df_oper[df_oper["cd_fazenda"] == FAZENDA_ID].copy()
+                    periodo_ini, periodo_fim = obter_periodo(pd.DataFrame(), df_faz)
+                    if usar_linhas:
+                        gdf_linhas = criar_linhas_por_linestring(df_faz, COLUNA_LINHA, geom_fazenda)
+                    else:
+                        gdf_linhas = criar_linhas_por_pontos(df_faz, geom_fazenda)
+                    if gdf_linhas.empty:
+                        continue
 
-                    if MAPA_RPM_EFETIVO:
-                        faixa_rpm_ini = int(arredondar_para_baixo(RPM_MIN, RPM_PASSO))
-                        faixa_rpm_fim = int(arredondar_para_cima(RPM_MAX, RPM_PASSO))
-                        fig_rpm = criar_figura_tematica(
-                            base_fazenda, gdf_display, "classe_rpm", rpm_cores, df_leg_rpm,
-                            "Mapa de RPM", "Legenda de RPM",
-                            f"< {faixa_rpm_ini} | {faixa_rpm_ini} até {faixa_rpm_fim}+",
-                            f"RPM médio: {formatar_numero(rpm_med_real, 0)}",
-                            periodo_ini, periodo_fim, FAZENDA_ID, nome_fazenda,
-                        )
-                        st.pyplot(fig_rpm)
-                        pdf_rpm = figura_para_pdf_bytes(fig_rpm)
-                        st.download_button("⬇️ Baixar PDF vetorial – RPM", data=pdf_rpm, file_name=f"mapa_rpm_{FAZENDA_ID}.pdf", mime="application/pdf", key=f"pdf_rpm_{FAZENDA_ID}")
-                        mapas_gerados_total += 1
-                        plt.close(fig_rpm)
-                        del pdf_rpm
+                    if MAPA_VEL:
+                        vel_faixas = gerar_faixas(VEL_MIN, VEL_MAX, VEL_PASSO, casas=1)
+                        vel_labels = [f[2] for f in vel_faixas]
+                        vel_cores = dict(zip(vel_labels, amostrar_cores_classes(criar_cmap_suave("vel"), len(vel_labels))))
+                        gdf_linhas["classe_vel"] = gdf_linhas["vel_media"].apply(lambda x: classificar_valor(x, vel_faixas))
+                        df_leg_vel = calcular_legenda_percentual(gdf_linhas, "classe_vel", vel_faixas, vel_cores)
+                        vel_validos = pd.to_numeric(df_faz["vl_velocidade"], errors="coerce").dropna()
+                        vel_med = round(vel_validos.mean(), 1) if not vel_validos.empty else np.nan
+                    if MAPA_RPM:
+                        rpm_faixas = gerar_faixas(RPM_MIN, RPM_MAX, RPM_PASSO, casas=0)
+                        rpm_labels = [f[2] for f in rpm_faixas]
+                        rpm_cores = dict(zip(rpm_labels, amostrar_cores_classes(criar_cmap_suave("rpm"), len(rpm_labels))))
+                        gdf_linhas["classe_rpm"] = gdf_linhas["rpm_medio"].apply(lambda x: classificar_valor(x, rpm_faixas))
+                        df_leg_rpm = calcular_legenda_percentual(gdf_linhas, "classe_rpm", rpm_faixas, rpm_cores)
+                        rpm_validos = pd.to_numeric(df_faz["vl_rpm"], errors="coerce").dropna()
+                        rpm_med = round(rpm_validos.mean(), 0) if not rpm_validos.empty else np.nan
 
-                    if df_talhoes is not None:
-                        st.markdown("### 🌾 Área por Gleba / Talhão")
-                        df_talhoes_exibicao = preparar_tabela_talhoes_exportacao(df_talhoes)
-                        st.dataframe(df_talhoes_exibicao, use_container_width=True, hide_index=True)
-                        zip_csv_talhoes = criar_zip_csv_talhoes(df_talhoes_exibicao, nome_csv=f"area_por_talhao_{FAZENDA_ID}.csv")
-                        st.download_button("⬇️ Baixar ZIP com CSV – Área por Gleba / Talhão", data=zip_csv_talhoes, file_name=f"area_por_talhao_{FAZENDA_ID}.zip", mime="application/zip", key=f"zip_csv_talhoes_{FAZENDA_ID}")
-                        del df_talhoes_exibicao, zip_csv_talhoes
+                    with st.expander(f"🗺️ Mapa – {nome_fazenda}", expanded=False):
+                        # Ordem: Velocidade primeiro, depois RPM.
+                        if MAPA_VEL:
+                            faixa_ini = arredondar_para_baixo(VEL_MIN, VEL_PASSO)
+                            faixa_fim = arredondar_para_cima(VEL_MAX, VEL_PASSO)
+                            fig_vel = criar_figura_tematica(
+                                base_fazenda, gdf_linhas, "classe_vel", vel_cores, df_leg_vel,
+                                "Mapa de Velocidade", "Legenda de Velocidade",
+                                f"< {formatar_numero(faixa_ini, 1)} | {formatar_numero(faixa_ini, 1)} até {formatar_numero(faixa_fim, 1)}+ km/h",
+                                f"Vel. média: {formatar_numero(vel_med, 1)} km/h",
+                                periodo_ini, periodo_fim, FAZENDA_ID, nome_fazenda,
+                            )
+                            st.pyplot(fig_vel)
+                            pdf_vel = figura_para_pdf_bytes(fig_vel)
+                            st.download_button("⬇️ Baixar PDF vetorial – Velocidade", data=pdf_vel, file_name=f"mapa_velocidade_{FAZENDA_ID}.pdf", mime="application/pdf", key=f"pdf_vel_{FAZENDA_ID}")
+                            plt.close(fig_vel)
+                            mapas_gerados_total += 1
 
-                del df_faz_area, df_faz_oper, base_fazenda, geom_fazenda, gdf_display
+                        if MAPA_RPM:
+                            faixa_ini = int(arredondar_para_baixo(RPM_MIN, RPM_PASSO))
+                            faixa_fim = int(arredondar_para_cima(RPM_MAX, RPM_PASSO))
+                            fig_rpm = criar_figura_tematica(
+                                base_fazenda, gdf_linhas, "classe_rpm", rpm_cores, df_leg_rpm,
+                                "Mapa de RPM", "Legenda de RPM",
+                                f"< {faixa_ini} | {faixa_ini} até {faixa_fim}+",
+                                f"RPM médio: {formatar_numero(rpm_med, 0)}",
+                                periodo_ini, periodo_fim, FAZENDA_ID, nome_fazenda,
+                            )
+                            st.pyplot(fig_rpm)
+                            pdf_rpm = figura_para_pdf_bytes(fig_rpm)
+                            st.download_button("⬇️ Baixar PDF vetorial – RPM", data=pdf_rpm, file_name=f"mapa_rpm_{FAZENDA_ID}.pdf", mime="application/pdf", key=f"pdf_rpm_{FAZENDA_ID}")
+                            plt.close(fig_rpm)
+                            mapas_gerados_total += 1
+
+                del base_fazenda, geom_fazenda
                 gc.collect()
 
             if mapas_gerados_total == 0:
-                st.warning("⚠️ Não foi possível gerar nenhum mapa com os dados enviados.")
+                st.warning("⚠️ Não foi possível gerar nenhum mapa com os dados enviados. Confira se o modo escolhido combina com o tipo de CSV enviado.")
 
 else:
     st.info("⬆️ Envie os ZIPs com CSVs e clique em **Gerar mapa**.")
