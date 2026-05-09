@@ -772,25 +772,47 @@ def criar_figura_area_colhedora(base_fazenda, gdf_area_colhedora, df_legenda, co
     if df_legenda is None or df_legenda.empty:
         axl.text(0.50, 0.50, "Sem dados válidos.", fontsize=9, color="#64748B", ha="center")
     else:
-        n = len(df_legenda)
-        # Altura dinâmica para caber tudo no resumo lateral; se houver muitas colhedoras, reduz fonte.
-        row_h = min(0.19, 0.78 / max(n, 1))
-        fonte_titulo = 10.2 if n <= 8 else 8.8
-        fonte_operador = 9.0 if n <= 8 else 7.8
-        y = 0.84
-
+        # Monta uma estrutura com todos os operadores. Não usa "+N operadores".
+        itens_legenda = []
+        total_linhas_texto = 0
         for _, row in df_legenda.iterrows():
             colhedora = str(row["Colhedora"])
-            cor = cores.get(colhedora, "#CCCCCC")
             area_txt = formatar_area_ha(row["Área trabalhada (ha)"])
             operadores_raw = str(row["Operadores"])
             operadores = [op.strip() for op in operadores_raw.split(";") if op.strip()]
             if not operadores:
                 operadores = ["-"]
+            itens_legenda.append({
+                "colhedora": colhedora,
+                "area_txt": area_txt,
+                "operadores": operadores,
+                "cor": cores.get(colhedora, "#CCCCCC"),
+            })
+            # 1 linha para o cabeçalho da colhedora + 1 linha para cada operador.
+            total_linhas_texto += 1 + len(operadores)
 
-            # Cabeçalho da colhedora: código-colhedora + área.
+        # Cálculo dinâmico: reduz fonte/espaçamento para caber tudo no resumo lateral.
+        topo_texto = 0.850
+        base_texto = 0.070
+        altura_disponivel = topo_texto - base_texto
+        espacamento = min(0.034, altura_disponivel / max(total_linhas_texto, 1))
+
+        # Fonte ajustável conforme quantidade de linhas. Mantém legível quando há poucos operadores
+        # e reduz quando há muitos, sempre tentando manter tudo dentro do card lateral.
+        fonte_operador = max(4.6, min(9.0, espacamento * 270))
+        fonte_colhedora = max(5.2, min(10.2, fonte_operador + 1.2))
+        tamanho_quadrado = max(0.018, min(0.040, espacamento * 1.25))
+
+        y = topo_texto
+        for item in itens_legenda:
+            colhedora = item["colhedora"]
+            area_txt = item["area_txt"]
+            cor = item["cor"]
+            operadores = item["operadores"]
+
+            # Cabeçalho da colhedora.
             axl.add_patch(mpatches.FancyBboxPatch(
-                (0.07, y - 0.024), 0.040, 0.040,
+                (0.07, y - tamanho_quadrado / 2), tamanho_quadrado, tamanho_quadrado,
                 boxstyle="round,pad=0.002,rounding_size=0.004",
                 facecolor=cor,
                 edgecolor="none",
@@ -798,45 +820,38 @@ def criar_figura_area_colhedora(base_fazenda, gdf_area_colhedora, df_legenda, co
             axl.text(
                 0.125, y,
                 f"{colhedora}: {area_txt}",
-                fontsize=fonte_titulo,
+                fontsize=fonte_colhedora,
                 color="#0F172A",
                 weight="bold",
                 ha="left",
                 va="center",
             )
+            y -= espacamento
 
-            # Operadores como lista com marcador, tudo dentro do resumo lateral.
-            y_ops = y - 0.040
-            max_ops_visiveis = max(1, int((row_h - 0.055) / 0.030))
-            for i_op, operador in enumerate(operadores[:max_ops_visiveis]):
-                operador_txt = operador if len(operador) <= 34 else operador[:31] + "..."
+            # Lista todos os operadores da colhedora.
+            for operador in operadores:
+                # Ajuste horizontal: quando existem muitos operadores, encurta apenas nomes muito longos
+                # para não sair do card lateral, mas não omite nenhum operador.
+                limite_nome = 44 if fonte_operador >= 7.5 else 38 if fonte_operador >= 6 else 32
+                operador_txt = operador if len(operador) <= limite_nome else operador[:limite_nome - 3] + "..."
                 axl.text(
                     0.125,
-                    y_ops - i_op * 0.030,
+                    y,
                     f"• {operador_txt}",
                     fontsize=fonte_operador,
                     color="#475569",
                     ha="left",
                     va="center",
                 )
-            if len(operadores) > max_ops_visiveis:
-                axl.text(
-                    0.125,
-                    y_ops - max_ops_visiveis * 0.030,
-                    f"• +{len(operadores) - max_ops_visiveis} operador(es)",
-                    fontsize=fonte_operador,
-                    color="#64748B",
-                    ha="left",
-                    va="center",
-                )
+                y -= espacamento
 
-            y -= row_h
-            if y < 0.075:
-                break
+                # Segurança contra casos extremos: se por algum motivo passar do limite,
+                # continua desenhando com fonte mínima dentro da área útil.
+                if y < base_texto:
+                    y = base_texto
 
     adicionar_footer(fig)
     return fig
-
 
 def criar_figura_tematica(base_fazenda, gdf_linhas, coluna_classe, mapa_cores, df_legenda, titulo, titulo_legenda, faixa_txt, media_txt, periodo_ini, periodo_fim, fazenda_id, nome_fazenda):
     fig = plt.figure(figsize=(15.5, 8.8))
