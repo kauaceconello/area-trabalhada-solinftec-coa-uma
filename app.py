@@ -1,7 +1,7 @@
 
 # APP STREAMLIT – ÁREA TRABALHADA (SOLINFTEC)
 # Desenvolvido por Kauã Ceconello
-# Base fixa + upload somente ZIP CSV | Área via WKT + Buffer | RPM/Velocidade via pontos
+# Base fixa + upload somente ZIP CSV | Área via WKT + fechamento de gaps por buffer | RPM/Velocidade via pontos
 
 import io
 import os
@@ -1101,20 +1101,37 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                         gdf_area_wkt = gdf_area_wkt.to_crs(epsg=31983)
                         gdf_area_wkt = gdf_area_wkt[gdf_area_wkt.geometry.notna() & ~gdf_area_wkt.geometry.is_empty].copy()
 
-                        largura_media_buffer = calcular_largura_media_buffer(df_faz_area, df_faz_pontos)
-                        if pd.notna(largura_media_buffer) and largura_media_buffer > 0 and MULTIPLICADOR_BUFFER_AREA > 0:
-                            largura_final = largura_media_buffer * MULTIPLICADOR_BUFFER_AREA
-                            distancia_buffer = largura_final / 2.0
-                            gdf_area_wkt["geometry"] = gdf_area_wkt.geometry.buffer(distancia_buffer)
-                            gdf_area_wkt["geometry"] = gdf_area_wkt.geometry.buffer(0)
-                            gdf_area_wkt = gdf_area_wkt[gdf_area_wkt.geometry.notna() & ~gdf_area_wkt.geometry.is_empty].copy()
-                        elif MULTIPLICADOR_BUFFER_AREA > 0:
-                            motivos_sem_mapa.append(f"Fazenda {FAZENDA_ID}: sem largura de implemento válida para aplicar buffer na área WKT.")
+                        area_bruta_wkt = unary_union(gdf_area_wkt.geometry)
 
-                        if gdf_area_wkt.empty:
-                            motivos_sem_mapa.append(f"Fazenda {FAZENDA_ID}: WKT sem geometrias válidas após buffer.")
+                        if area_bruta_wkt is None or area_bruta_wkt.is_empty:
+                            motivos_sem_mapa.append(f"Fazenda {FAZENDA_ID}: WKT sem geometrias válidas para área trabalhada.")
+                            area_trabalhada = None
                         else:
-                            area_trabalhada = unary_union(gdf_area_wkt.geometry).intersection(geom_fazenda)
+                            largura_media_buffer = calcular_largura_media_buffer(df_faz_area, df_faz_pontos)
+
+                            if pd.notna(largura_media_buffer) and largura_media_buffer > 0 and MULTIPLICADOR_BUFFER_AREA > 0:
+                                distancia_buffer = largura_media_buffer * MULTIPLICADOR_BUFFER_AREA
+                                fator_recuo = 0.70
+
+                                # Fechamento geométrico para preencher gaps entre linhas:
+                                # 1) expande a área; 2) recua parcialmente; 3) limpa geometrias; 4) recorta na fazenda.
+                                area_trabalhada = (
+                                    area_bruta_wkt
+                                    .buffer(distancia_buffer, join_style=2)
+                                    .buffer(-distancia_buffer * fator_recuo, join_style=2)
+                                    .buffer(0)
+                                    .intersection(geom_fazenda)
+                                )
+                            elif MULTIPLICADOR_BUFFER_AREA > 0:
+                                motivos_sem_mapa.append(f"Fazenda {FAZENDA_ID}: sem largura de implemento válida para aplicar buffer na área WKT.")
+                                area_trabalhada = area_bruta_wkt.intersection(geom_fazenda)
+                            else:
+                                area_trabalhada = area_bruta_wkt.intersection(geom_fazenda)
+
+                        if area_trabalhada is None or area_trabalhada.is_empty:
+                            motivos_sem_mapa.append(f"Fazenda {FAZENDA_ID}: área trabalhada vazia após processamento do WKT/buffer.")
+                            area_trabalhada = None
+                        else:
                             area_nao_trabalhada = geom_fazenda.difference(area_trabalhada)
                             area_trab_ha = round(area_trabalhada.area / 10000, 2)
                             area_nao_ha = round(area_nao_trabalhada.area / 10000, 2)
