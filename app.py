@@ -2,10 +2,10 @@
 # APP STREAMLIT – ÁREA TRABALHADA (SOLINFTEC)
 # Desenvolvido por Kauã Ceconello
 # Atualização:
-# - Área Trabalhada via WKT/MULTIPOLYGON + buffer por multiplicador da largura do implemento
-# - RPM e Velocidade continuam por pontos normais
-# - Processamento sempre em modo leve, com exibição dos mapas na tela e ZIP único de saída
-# - Base cartográfica pode ficar fixa no projeto em base_cartografica/base.gpkg
+# - Upload somente dos ZIPs com CSV da Solinftec
+# - Base cartográfica fixa no projeto: base_cartografica/BaseCartografica_10_29_2025_SOLINFTEC.gpkg
+# - Área Trabalhada via WKT/MULTIPOLYGON + buffer por multiplicador da largura média do implemento
+# - RPM e Velocidade continuam usando pontos normais da Solinftec
 
 import io
 import os
@@ -37,7 +37,7 @@ from shapely import wkt
 # =========================================================
 st.set_page_config(page_title="Área Trabalhada – Solinftec", layout="wide")
 
-BASE_PADRAO_PATH = "base_cartografica/base.gpkg"
+BASE_PADRAO_PATH = "base_cartografica/BaseCartografica_10_29_2025_SOLINFTEC.gpkg"
 TEMPO_MAX_SEG = 60  # padrão Solinftec
 
 if "mapas_gerados" not in st.session_state:
@@ -122,7 +122,8 @@ st.markdown(
     <div class="hero-card">
         <div class="hero-title">📍 Área Trabalhada – Solinftec</div>
         <div class="hero-subtitle">
-            Mapas de Área Trabalhada, RPM e Velocidade com base nos dados da Solinftec e na base cartográfica da usina.
+            Mapas de Área Trabalhada, RPM e Velocidade com upload somente dos ZIPs da Solinftec.
+            A base cartográfica é carregada automaticamente do projeto.
         </div>
     </div>
     """,
@@ -330,15 +331,6 @@ def figura_para_pdf_bytes(fig):
     return buffer.getvalue()
 
 
-def figuras_para_pdf_multipaginas(figuras):
-    buffer = io.BytesIO()
-    with PdfPages(buffer) as pdf:
-        for fig in figuras:
-            pdf.savefig(fig, bbox_inches="tight", facecolor=fig.get_facecolor())
-    buffer.seek(0)
-    return buffer.getvalue()
-
-
 def preparar_tabela_talhoes_exportacao(df_talhoes, incluir_area_total=True):
     if df_talhoes is None or df_talhoes.empty:
         return pd.DataFrame()
@@ -412,12 +404,7 @@ def criar_poligonos_display(gdf_linhas, geom_fazenda):
         if pd.isna(largura) or largura <= 0:
             continue
         try:
-            geom_disp = row.geometry.buffer(
-                largura / 2.0,
-                cap_style=2,
-                join_style=2,
-                quad_segs=1,
-            ).intersection(geom_fazenda)
+            geom_disp = row.geometry.buffer(largura / 2.0, cap_style=2, join_style=2, quad_segs=1).intersection(geom_fazenda)
         except Exception:
             continue
         if geom_disp.is_empty:
@@ -529,15 +516,7 @@ def desenhar_base_mapa(ax, base_fazenda, facecolor="#FFFFFF", mostrar_talhoes=Tr
 def adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_ini, periodo_fim):
     ax_header = fig.add_axes([0.025, 0.905, 0.95, 0.08])
     ax_header.axis("off")
-    card = FancyBboxPatch(
-        (0, 0),
-        1,
-        1,
-        boxstyle="round,pad=0.012,rounding_size=0.02",
-        facecolor="#FFFFFF",
-        edgecolor="#D8E1EB",
-        linewidth=1.0,
-    )
+    card = FancyBboxPatch((0, 0), 1, 1, boxstyle="round,pad=0.012,rounding_size=0.02", facecolor="#FFFFFF", edgecolor="#D8E1EB", linewidth=1.0)
     ax_header.add_patch(card)
     ax_header.text(0.03, 0.62, titulo_mapa, fontsize=16, weight="bold", color="#0F172A", ha="left", va="center")
     ax_header.text(0.03, 0.26, f"Fazenda {fazenda_id} • {nome_fazenda}", fontsize=10.2, color="#475569", ha="left", va="center")
@@ -564,7 +543,6 @@ def criar_figura_area(base_fazenda, area_trabalhada, area_total_ha, area_trab_ha
 
     moldura = FancyBboxPatch((0.01, 0.01), 0.98, 0.98, boxstyle="round,pad=0.0,rounding_size=0.012", transform=fig.transFigure, facecolor="none", edgecolor="#D8E1EB", linewidth=1.0, zorder=0)
     fig.add_artist(moldura)
-
     adicionar_header_topo(fig, "Mapa de Área Trabalhada", fazenda_id, nome_fazenda, periodo_ini, periodo_fim)
 
     painel_mapa = FancyBboxPatch((0.03, 0.10), 0.64, 0.78, boxstyle="round,pad=0.004,rounding_size=0.015", transform=fig.transFigure, facecolor="#FFFFFF", edgecolor="#D8E1EB", linewidth=1.0, zorder=0)
@@ -677,7 +655,6 @@ def criar_figura_tematica(base_fazenda, gdf_display, coluna_classe, mapa_cores, 
 
     moldura = FancyBboxPatch((0.01, 0.01), 0.98, 0.98, boxstyle="round,pad=0.0,rounding_size=0.012", transform=fig.transFigure, facecolor="none", edgecolor="#D8E1EB", linewidth=1.0, zorder=0)
     fig.add_artist(moldura)
-
     adicionar_header_topo(fig, titulo_mapa, fazenda_id, nome_fazenda, periodo_ini, periodo_fim)
 
     painel_mapa = FancyBboxPatch((0.03, 0.10), 0.64, 0.78, boxstyle="round,pad=0.004,rounding_size=0.015", transform=fig.transFigure, facecolor="#FFFFFF", edgecolor="#D8E1EB", linewidth=1.0, zorder=0)
@@ -745,29 +722,26 @@ st.markdown(
     <div class="upload-hero">
         <div class="upload-hero-title">📂 Envio dos arquivos</div>
         <div class="upload-hero-text">
-            Envie os ZIPs com CSVs da Solinftec. A base cartográfica pode ser enviada ou mantida fixa no projeto.
+            Envie apenas os ZIPs contendo os CSVs da Solinftec. A base cartográfica será carregada automaticamente do projeto.
         </div>
     </div>
     """,
     unsafe_allow_html=True
 )
 
-uploaded_zips = st.file_uploader("📦 Upload dos ZIPs contendo CSVs da Solinftec", type=["zip"], accept_multiple_files=True)
-
-base_padrao_existe = os.path.exists(BASE_PADRAO_PATH)
-if base_padrao_existe:
-    uploaded_gpkg = st.file_uploader("🗺️ Upload da base cartográfica (GPKG) – opcional, substitui a base fixa", type=["gpkg"])
-    st.caption(f"✅ Base fixa detectada no projeto: `{BASE_PADRAO_PATH}`")
+if os.path.exists(BASE_PADRAO_PATH):
+    st.caption(f"✅ Base cartográfica fixa detectada: `{BASE_PADRAO_PATH}`")
 else:
-    uploaded_gpkg = st.file_uploader("🗺️ Upload da base cartográfica (GPKG)", type=["gpkg"])
-    st.caption(f"ℹ️ Para deixar a base fixa, salve o GPKG em: `{BASE_PADRAO_PATH}`")
+    st.error(f"❌ Base cartográfica fixa não encontrada em: `{BASE_PADRAO_PATH}`")
+    st.info("Confira se o arquivo está dentro da pasta `base_cartografica` no GitHub e com exatamente esse nome.")
 
+uploaded_zips = st.file_uploader("📦 Upload dos ZIPs contendo CSVs da Solinftec", type=["zip"], accept_multiple_files=True)
 GERAR = st.button("▶️ Gerar mapa")
 
 if GERAR:
     st.session_state["mapas_gerados"] = True
 
-if not uploaded_zips or (not uploaded_gpkg and not base_padrao_existe):
+if not uploaded_zips or not os.path.exists(BASE_PADRAO_PATH):
     st.session_state["mapas_gerados"] = False
 
 mapas_selecionados = []
@@ -783,7 +757,7 @@ st.caption("✅ Mapas selecionados para geração: " + ", ".join(mapas_seleciona
 # =========================================================
 # PROCESSAMENTO
 # =========================================================
-if uploaded_zips and (uploaded_gpkg or base_padrao_existe) and st.session_state.get("mapas_gerados", False):
+if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("mapas_gerados", False):
 
     if MAPA_RPM and RPM_MAX <= RPM_MIN:
         st.error("❌ Ajuste os parâmetros de RPM.")
@@ -841,8 +815,6 @@ if uploaded_zips and (uploaded_gpkg or base_padrao_existe) and st.session_state.
                     "cd_operacao_parada",
                     "cd_equipamento",
                 ])
-            # Para aplicar o buffer por tamanho da linha/implemento na área via WKT
-            # tentamos usar a largura do implemento se existir em qualquer CSV.
             if MAPA_RPM:
                 colunas_csv_obrigatorias.append("vl_rpm")
             if MAPA_VEL:
@@ -882,14 +854,7 @@ if uploaded_zips and (uploaded_gpkg or base_padrao_existe) and st.session_state.
                     st.error("❌ Nenhum ponto válido encontrado para RPM/Velocidade.")
                     st.stop()
 
-            if uploaded_gpkg:
-                gpkg_path = os.path.join(tmpdir, "base.gpkg")
-                with open(gpkg_path, "wb") as f:
-                    f.write(uploaded_gpkg.read())
-            else:
-                gpkg_path = BASE_PADRAO_PATH
-
-            base = gpd.read_file(gpkg_path)
+            base = gpd.read_file(BASE_PADRAO_PATH)
             faltantes_gpkg = validar_colunas(base, ["FAZENDA", "PROPRIEDADE", "geometry"])
             if faltantes_gpkg:
                 st.error("❌ O GPKG não possui as colunas obrigatórias: " + ", ".join(faltantes_gpkg))
@@ -1186,4 +1151,4 @@ if uploaded_zips and (uploaded_gpkg or base_padrao_existe) and st.session_state.
                         st.write(f"- {motivo}")
 
 else:
-    st.info("⬆️ Envie os arquivos e clique em **Gerar mapa**.")
+    st.info("⬆️ Envie os ZIPs com CSVs e clique em **Gerar mapa**.")
