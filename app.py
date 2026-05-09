@@ -1,7 +1,7 @@
 
 # APP STREAMLIT – ÁREA TRABALHADA (SOLINFTEC)
 # Desenvolvido por Kauã Ceconello
-# Base fixa + upload somente ZIP CSV | Área via WKT + fechamento de gaps por buffer | RPM/Velocidade via pontos
+# Base fixa + upload somente ZIP CSV | Área via WKT + fechamento agressivo de gaps | RPM/Velocidade via pontos
 
 import io
 import os
@@ -22,7 +22,8 @@ import matplotlib.patches as mpatches
 from matplotlib.colors import LinearSegmentedColormap, to_hex
 from matplotlib.patches import FancyBboxPatch
 from matplotlib.backends.backend_pdf import PdfPages
-from shapely.geometry import LineString
+
+from shapely.geometry import LineString, Polygon, MultiPolygon
 from shapely.ops import unary_union
 from shapely import wkt
 
@@ -33,6 +34,7 @@ st.set_page_config(page_title="Área Trabalhada – Solinftec", layout="wide")
 
 BASE_PADRAO_PATH = "base_cartografica/BaseCartografica_10_29_2025_SOLINFTEC.gpkg"
 TEMPO_MAX_SEG = 60
+CRS_METRICO = 31983
 
 if "mapas_gerados" not in st.session_state:
     st.session_state["mapas_gerados"] = False
@@ -169,13 +171,11 @@ def ordenar_tabela_talhoes(df_talhoes):
     df = df_talhoes.copy()
     if "Gleba" not in df.columns or "Talhão" not in df.columns:
         return df
-
     df_total = df[df["Gleba"].astype(str).str.upper() == "TOTAL"].copy()
     df_dados = df[df["Gleba"].astype(str).str.upper() != "TOTAL"].copy()
     df_dados["_ord_gleba"] = df_dados["Gleba"].apply(chave_ordenacao_mista)
     df_dados["_ord_talhao"] = df_dados["Talhão"].apply(chave_ordenacao_mista)
     df_dados = df_dados.sort_values(["_ord_gleba", "_ord_talhao"]).drop(columns=["_ord_gleba", "_ord_talhao"])
-
     if not df_total.empty:
         return pd.concat([df_dados, df_total], ignore_index=True)
     return df_dados.reset_index(drop=True)
@@ -218,7 +218,6 @@ def criar_gdf_area_wkt(df, coluna_wkt):
 
     df_wkt["geometry"] = df_wkt[coluna_wkt].apply(carregar_wkt)
     df_wkt = df_wkt.dropna(subset=["geometry"]).copy()
-
     if df_wkt.empty:
         return gpd.GeoDataFrame(columns=list(df.columns) + ["geometry"], geometry="geometry", crs="EPSG:4326")
 
@@ -230,20 +229,47 @@ def criar_gdf_area_wkt(df, coluna_wkt):
     return gdf
 
 
+def preencher_buracos_pequenos(geom, area_max_buraco_m2=5000):
+    """
+    Remove buracos internos pequenos de Polygon/MultiPolygon.
+    Útil para fechar frestas e ilhas brancas pequenas dentro da área trabalhada.
+    """
+    if geom is None or geom.is_empty:
+        return geom
+
+    if geom.geom_type == "Polygon":
+        interiores_mantidos = []
+        for interior in geom.interiors:
+            try:
+                buraco = Polygon(interior)
+                if buraco.area > area_max_buraco_m2:
+                    interiores_mantidos.append(interior)
+            except Exception:
+                interiores_mantidos.append(interior)
+        try:
+            return Polygon(geom.exterior, interiores_mantidos).buffer(0)
+        except Exception:
+            return geom.buffer(0)
+
+    if geom.geom_type == "MultiPolygon":
+        partes = [preencher_buracos_pequenos(g, area_max_buraco_m2) for g in geom.geoms if not g.is_empty]
+        partes = [g for g in partes if g is not None and not g.is_empty]
+        return unary_union(partes).buffer(0) if partes else geom
+
+    return geom
+
+
 def gerar_faixas(vmin, vmax, passo, casas=0):
     inicio = arredondar_para_baixo(vmin, passo)
     fim = arredondar_para_cima(vmax, passo)
     edges = np.arange(inicio, fim + passo, passo)
     faixas = []
-
     label_under = f"< {int(inicio)}" if casas == 0 else f"< {inicio:.{casas}f}".replace(".", ",")
     faixas.append((-np.inf, inicio, label_under))
-
     for i in range(len(edges) - 1):
         a, b = edges[i], edges[i + 1]
         label = f"{int(a)} a {int(b)}" if casas == 0 else f"{a:.{casas}f} a {b:.{casas}f}".replace(".", ",")
         faixas.append((a, b, label))
-
     label_over = f"{int(fim)}+" if casas == 0 else f"{fim:.{casas}f}+".replace(".", ",")
     faixas.append((fim, np.inf, label_over))
     return faixas
@@ -300,13 +326,10 @@ def ler_csvs_de_zip(uploaded_zip, tmpdir, idx_zip):
     zip_path = os.path.join(tmpdir, uploaded_zip.name)
     with open(zip_path, "wb") as f:
         f.write(uploaded_zip.read())
-
     extract_dir = os.path.join(tmpdir, f"zip_extraido_{idx_zip}")
     os.makedirs(extract_dir, exist_ok=True)
-
     with zipfile.ZipFile(zip_path, "r") as z:
         z.extractall(extract_dir)
-
     csv_files = []
     for root, _, files in os.walk(extract_dir):
         for file in files:
@@ -333,11 +356,7 @@ def figuras_para_pdf_multipaginas(figuras):
 
 def criar_zip_csv_talhoes(df_talhoes_exibicao, nome_csv):
     buffer_zip = io.BytesIO()
-    csv_bytes = df_talhoes_exibicao.to_csv(
-        index=False,
-        sep=";",
-        encoding="utf-8-sig"
-    ).encode("utf-8-sig")
+    csv_bytes = df_talhoes_exibicao.to_csv(index=False, sep=";", encoding="utf-8-sig").encode("utf-8-sig")
     with zipfile.ZipFile(buffer_zip, "w", zipfile.ZIP_DEFLATED) as zipf:
         zipf.writestr(nome_csv, csv_bytes)
     buffer_zip.seek(0)
@@ -370,7 +389,6 @@ def adicionar_segmento_clipado(linhas_saida, pontos, rpms, vels, larguras, t_ini
         return
     if linha.is_empty or linha.length == 0:
         return
-
     linha_clip = linha.intersection(geom_fazenda)
     if linha_clip.is_empty:
         return
@@ -388,7 +406,6 @@ def adicionar_segmento_clipado(linhas_saida, pontos, rpms, vels, larguras, t_ini
         geoms = []
 
     comprimento_total_clipado = sum(g.length for g in geoms) if geoms else 0
-
     for geom in geoms:
         if geom.is_empty or geom.length == 0:
             continue
@@ -635,7 +652,6 @@ def criar_figura_tematica(base_fazenda, gdf_display, coluna_classe, mapa_cores, 
     return fig
 
 
-
 def criar_figura_tabela_talhoes_pdf(
     df_talhoes,
     fazenda_id,
@@ -650,22 +666,14 @@ def criar_figura_tabela_talhoes_pdf(
         df_base = pd.DataFrame(columns=["Gleba", "Talhão", "Área total (ha)", "Área trabalhada (ha)"])
 
     df_dados = df_base[df_base["Gleba"].astype(str).str.upper() != "TOTAL"].copy()
-
     for col in ["Área total (ha)", "Área trabalhada (ha)"]:
         if col in df_dados.columns:
             df_dados[col] = pd.to_numeric(df_dados[col], errors="coerce").fillna(0).round(2)
 
     if area_total_trabalhada is None:
-        area_total_trabalhada = pd.to_numeric(
-            df_dados.get("Área trabalhada (ha)", pd.Series(dtype=float)),
-            errors="coerce"
-        ).fillna(0).sum()
-
+        area_total_trabalhada = pd.to_numeric(df_dados.get("Área trabalhada (ha)", pd.Series(dtype=float)), errors="coerce").fillna(0).sum()
     if area_total_fazenda is None:
-        area_total_fazenda = pd.to_numeric(
-            df_dados.get("Área total (ha)", pd.Series(dtype=float)),
-            errors="coerce"
-        ).fillna(0).sum()
+        area_total_fazenda = pd.to_numeric(df_dados.get("Área total (ha)", pd.Series(dtype=float)), errors="coerce").fillna(0).sum()
 
     area_nao_trabalhada = max(area_total_fazenda - area_total_trabalhada, 0)
     pct_trabalhado = round((area_total_trabalhada / area_total_fazenda) * 100, 1) if area_total_fazenda and area_total_fazenda > 0 else 0
@@ -674,26 +682,12 @@ def criar_figura_tabela_talhoes_pdf(
     fig = plt.figure(figsize=(11.69, 8.27))
     fig.patch.set_facecolor("#F4F7FB")
 
-    moldura = FancyBboxPatch(
-        (0.012, 0.012), 0.976, 0.976,
-        boxstyle="round,pad=0.0,rounding_size=0.012",
-        transform=fig.transFigure,
-        facecolor="none",
-        edgecolor="#D8E1EB",
-        linewidth=1.0,
-        zorder=0
-    )
+    moldura = FancyBboxPatch((0.012, 0.012), 0.976, 0.976, boxstyle="round,pad=0.0,rounding_size=0.012", transform=fig.transFigure, facecolor="none", edgecolor="#D8E1EB", linewidth=1.0, zorder=0)
     fig.add_artist(moldura)
 
     ax_header = fig.add_axes([0.035, 0.895, 0.93, 0.08])
     ax_header.axis("off")
-    header_box = FancyBboxPatch(
-        (0, 0), 1, 1,
-        boxstyle="round,pad=0.012,rounding_size=0.018",
-        facecolor="#FFFFFF",
-        edgecolor="#E2E8F0",
-        linewidth=1.0
-    )
+    header_box = FancyBboxPatch((0, 0), 1, 1, boxstyle="round,pad=0.012,rounding_size=0.018", facecolor="#FFFFFF", edgecolor="#E2E8F0", linewidth=1.0)
     ax_header.add_patch(header_box)
     ax_header.text(0.025, 0.62, "Área Trabalhada por Gleba / Talhão", fontsize=15.5, weight="bold", color="#0F172A", ha="left", va="center")
     ax_header.text(0.025, 0.28, f"Fazenda {fazenda_id} • {nome_fazenda}", fontsize=9.8, color="#64748B", ha="left", va="center")
@@ -710,15 +704,8 @@ def criar_figura_tabela_talhoes_pdf(
         {"x": 0.510, "titulo": "Área não trabalhada", "valor": formatar_area_ha(area_nao_trabalhada), "sub": f"{str(pct_nao_trabalhado).replace('.', ',')}% da área", "cor": "#475569", "bg": "#F8FAFC"},
         {"x": 0.765, "titulo": "Cobertura", "valor": f"{str(pct_trabalhado).replace('.', ',')}%", "sub": "Operacional", "cor": "#2563EB", "bg": "#EFF6FF"},
     ]
-
     for card in cards:
-        box = FancyBboxPatch(
-            (card["x"], 0.04), 0.225, 0.88,
-            boxstyle="round,pad=0.012,rounding_size=0.025",
-            facecolor=card["bg"],
-            edgecolor="#E2E8F0",
-            linewidth=1.0
-        )
+        box = FancyBboxPatch((card["x"], 0.04), 0.225, 0.88, boxstyle="round,pad=0.012,rounding_size=0.025", facecolor=card["bg"], edgecolor="#E2E8F0", linewidth=1.0)
         ax_cards.add_patch(box)
         ax_cards.text(card["x"] + 0.025, 0.68, card["titulo"], fontsize=8.5, color="#64748B", ha="left", va="center")
         ax_cards.text(card["x"] + 0.025, 0.42, card["valor"], fontsize=12.2, weight="bold", color=card["cor"], ha="left", va="center")
@@ -728,13 +715,7 @@ def criar_figura_tabela_talhoes_pdf(
     ax_card.set_xlim(0, 1)
     ax_card.set_ylim(0, 1)
     ax_card.axis("off")
-    card_tabela = FancyBboxPatch(
-        (0, 0), 1, 1,
-        boxstyle="round,pad=0.018,rounding_size=0.025",
-        facecolor="#FFFFFF",
-        edgecolor="#D8E1EB",
-        linewidth=1.0
-    )
+    card_tabela = FancyBboxPatch((0, 0), 1, 1, boxstyle="round,pad=0.018,rounding_size=0.025", facecolor="#FFFFFF", edgecolor="#D8E1EB", linewidth=1.0)
     ax_card.add_patch(card_tabela)
     ax_card.text(0.035, 0.955, "Detalhamento por talhão", fontsize=12.8, weight="bold", color="#0F172A", ha="left", va="center")
     ax_card.text(0.035, 0.918, "Áreas calculadas por interseção entre a área trabalhada e a base cartográfica.", fontsize=8.4, color="#64748B", ha="left", va="center")
@@ -745,11 +726,7 @@ def criar_figura_tabela_talhoes_pdf(
         return fig
 
     df_tab = df_dados[["Gleba", "Talhão", "Área total (ha)", "Área trabalhada (ha)"]].copy()
-    df_tab["% Trabalhado"] = np.where(
-        df_tab["Área total (ha)"] > 0,
-        (df_tab["Área trabalhada (ha)"] / df_tab["Área total (ha)"] * 100).round(1),
-        0
-    )
+    df_tab["% Trabalhado"] = np.where(df_tab["Área total (ha)"] > 0, (df_tab["Área trabalhada (ha)"] / df_tab["Área total (ha)"] * 100).round(1), 0)
     df_tab["Área total formatada"] = df_tab["Área total (ha)"].apply(formatar_area_ha)
     df_tab["Área trabalhada formatada"] = df_tab["Área trabalhada (ha)"].apply(formatar_area_ha)
     df_tab["% Trabalhado formatado"] = df_tab["% Trabalhado"].apply(lambda x: f"{x:.1f}%".replace(".", ","))
@@ -758,7 +735,6 @@ def criar_figura_tabela_talhoes_pdf(
     ax_table.set_xlim(0, 1)
     ax_table.set_ylim(0, 1)
     ax_table.axis("off")
-
     colunas = [
         {"nome": "GLEBA", "x": 0.03, "w": 0.15, "align": "left"},
         {"nome": "TALHÃO", "x": 0.20, "w": 0.15, "align": "left"},
@@ -768,15 +744,8 @@ def criar_figura_tabela_talhoes_pdf(
     ]
 
     header_y, header_h = 0.945, 0.075
-    header_bg = FancyBboxPatch(
-        (0.0, header_y - header_h), 1.0, header_h,
-        boxstyle="round,pad=0.004,rounding_size=0.018",
-        facecolor="#F1F5F9",
-        edgecolor="#E2E8F0",
-        linewidth=0.8
-    )
+    header_bg = FancyBboxPatch((0.0, header_y - header_h), 1.0, header_h, boxstyle="round,pad=0.004,rounding_size=0.018", facecolor="#F1F5F9", edgecolor="#E2E8F0", linewidth=0.8)
     ax_table.add_patch(header_bg)
-
     for col in colunas:
         if col["align"] == "right":
             x_text, ha = col["x"] + col["w"], "right"
@@ -792,14 +761,7 @@ def criar_figura_tabela_talhoes_pdf(
         if y < 0.045:
             break
         bg = "#FFFFFF" if idx % 2 == 0 else "#F8FAFC"
-        ax_table.add_patch(FancyBboxPatch(
-            (0.0, y - row_h / 2), 1.0, row_h,
-            boxstyle="round,pad=0.004,rounding_size=0.012",
-            facecolor=bg,
-            edgecolor="#E2E8F0",
-            linewidth=0.55
-        ))
-
+        ax_table.add_patch(FancyBboxPatch((0.0, y - row_h / 2), 1.0, row_h, boxstyle="round,pad=0.004,rounding_size=0.012", facecolor=bg, edgecolor="#E2E8F0", linewidth=0.55))
         pct_valor = row["% Trabalhado"]
         if pct_valor >= 80:
             pct_bg, pct_cor = "#DCFCE7", "#166534"
@@ -809,19 +771,13 @@ def criar_figura_tabela_talhoes_pdf(
             pct_bg, pct_cor = "#FFEDD5", "#9A3412"
         else:
             pct_bg, pct_cor = "#F1F5F9", "#64748B"
-
         valores = [str(row["Gleba"]), str(row["Talhão"]), row["Área total formatada"], row["Área trabalhada formatada"], row["% Trabalhado formatado"]]
         for i_col, col in enumerate(colunas):
             valor = valores[i_col]
             if i_col == 4:
                 chip_w, chip_h = 0.085, 0.032
                 chip_x = col["x"] + (col["w"] - chip_w) / 2
-                ax_table.add_patch(FancyBboxPatch(
-                    (chip_x, y - chip_h / 2), chip_w, chip_h,
-                    boxstyle="round,pad=0.004,rounding_size=0.014",
-                    facecolor=pct_bg,
-                    edgecolor="none"
-                ))
+                ax_table.add_patch(FancyBboxPatch((chip_x, y - chip_h / 2), chip_w, chip_h, boxstyle="round,pad=0.004,rounding_size=0.014", facecolor=pct_bg, edgecolor="none"))
                 ax_table.text(col["x"] + col["w"] / 2, y, valor, fontsize=8.4, weight="bold", color=pct_cor, ha="center", va="center")
             else:
                 if col["align"] == "right":
@@ -842,11 +798,9 @@ def criar_figura_tabela_talhoes_pdf(
 def criar_figuras_tabela_talhoes_pdf(df_talhoes, fazenda_id, nome_fazenda, linhas_por_pagina=12):
     if df_talhoes is None or df_talhoes.empty:
         return []
-
     df_ordenado = ordenar_tabela_talhoes(df_talhoes)
     df_total = df_ordenado[df_ordenado["Gleba"].astype(str).str.upper() == "TOTAL"].copy()
     df_dados = df_ordenado[df_ordenado["Gleba"].astype(str).str.upper() != "TOTAL"].copy()
-
     if not df_total.empty:
         area_total_trabalhada = pd.to_numeric(df_total["Área trabalhada (ha)"].iloc[0], errors="coerce")
         area_total_fazenda = pd.to_numeric(df_total["Área total (ha)"].iloc[0], errors="coerce")
@@ -858,19 +812,17 @@ def criar_figuras_tabela_talhoes_pdf(df_talhoes, fazenda_id, nome_fazenda, linha
     if not paginas_df:
         paginas_df = [df_dados.copy()]
 
-    total_paginas = len(paginas_df)
     figuras = []
     for idx, df_pag in enumerate(paginas_df, start=1):
-        fig_pag = criar_figura_tabela_talhoes_pdf(
+        figuras.append(criar_figura_tabela_talhoes_pdf(
             df_talhoes=df_pag,
             fazenda_id=fazenda_id,
             nome_fazenda=nome_fazenda,
             pagina_atual=idx,
-            total_paginas=total_paginas,
+            total_paginas=len(paginas_df),
             area_total_trabalhada=area_total_trabalhada,
             area_total_fazenda=area_total_fazenda,
-        )
-        figuras.append(fig_pag)
+        ))
     return figuras
 
 # =========================================================
@@ -890,10 +842,13 @@ with sidebar_container():
 
 with sidebar_container():
     st.markdown("### 📐 Área Trabalhada")
-    MULTIPLICADOR_BUFFER_AREA = st.number_input("Tamanho do Buffer", min_value=0.0, max_value=10.0, value=2.5, step=0.1, key="buffer_area_mult_input")
+    MULTIPLICADOR_BUFFER_AREA = st.number_input("Tamanho do Buffer", min_value=0.0, max_value=20.0, value=2.5, step=0.1, key="buffer_area_mult_input")
+    BUFFER_MINIMO_M = st.number_input("Buffer mínimo (m)", min_value=0.0, max_value=50.0, value=8.0, step=0.5, key="buffer_minimo_m_input")
+    FATOR_RECUO_GAPS = st.number_input("Fechamento de gaps", min_value=0.0, max_value=1.0, value=0.30, step=0.05, key="fator_recuo_gaps_input")
+    AREA_MAX_BURACO_HA = st.number_input("Preencher buracos até (ha)", min_value=0.0, max_value=10.0, value=0.50, step=0.10, key="area_max_buraco_ha_input")
     AREA_MIN_HA = st.number_input("Área mínima trabalhada (ha)", min_value=0.0, value=0.50, step=0.1, key="area_min_input")
     if MAPA_AREA:
-        MOSTRAR_TALHOES = st.checkbox("📄 Incluir tabela por Gleba / Talhão no CSV", value=False, key="mostrar_talhoes_chk")
+        MOSTRAR_TALHOES = st.checkbox("📄 Incluir tabela por Gleba / Talhão no PDF e CSV", value=False, key="mostrar_talhoes_chk")
     else:
         MOSTRAR_TALHOES = False
 
@@ -1080,7 +1035,7 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                     continue
 
                 nome_fazenda = base_fazenda["PROPRIEDADE"].iloc[0]
-                base_fazenda = base_fazenda.to_crs(epsg=31983)
+                base_fazenda = base_fazenda.to_crs(epsg=CRS_METRICO)
                 geom_fazenda = unary_union(base_fazenda.geometry)
                 periodo_ini, periodo_fim = obter_periodo(df_faz_area, df_faz_pontos)
 
@@ -1098,9 +1053,8 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                     if gdf_area_wkt.empty:
                         motivos_sem_mapa.append(f"Fazenda {FAZENDA_ID}: WKT inválido para área trabalhada.")
                     else:
-                        gdf_area_wkt = gdf_area_wkt.to_crs(epsg=31983)
+                        gdf_area_wkt = gdf_area_wkt.to_crs(epsg=CRS_METRICO)
                         gdf_area_wkt = gdf_area_wkt[gdf_area_wkt.geometry.notna() & ~gdf_area_wkt.geometry.is_empty].copy()
-
                         area_bruta_wkt = unary_union(gdf_area_wkt.geometry)
 
                         if area_bruta_wkt is None or area_bruta_wkt.is_empty:
@@ -1110,23 +1064,31 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                             largura_media_buffer = calcular_largura_media_buffer(df_faz_area, df_faz_pontos)
 
                             if pd.notna(largura_media_buffer) and largura_media_buffer > 0 and MULTIPLICADOR_BUFFER_AREA > 0:
-                                distancia_buffer = largura_media_buffer * MULTIPLICADOR_BUFFER_AREA
-                                fator_recuo = 0.70
+                                distancia_calculada = largura_media_buffer * MULTIPLICADOR_BUFFER_AREA
+                                distancia_buffer = max(distancia_calculada, BUFFER_MINIMO_M)
+                            elif BUFFER_MINIMO_M > 0:
+                                distancia_buffer = BUFFER_MINIMO_M
+                                motivos_sem_mapa.append(f"Fazenda {FAZENDA_ID}: sem largura de implemento válida; usado buffer mínimo.")
+                            else:
+                                distancia_buffer = 0
 
-                                # Fechamento geométrico para preencher gaps entre linhas:
-                                # 1) expande a área; 2) recua parcialmente; 3) limpa geometrias; 4) recorta na fazenda.
+                            if distancia_buffer > 0:
                                 area_trabalhada = (
                                     area_bruta_wkt
                                     .buffer(distancia_buffer, join_style=2)
-                                    .buffer(-distancia_buffer * fator_recuo, join_style=2)
+                                    .buffer(-distancia_buffer * FATOR_RECUO_GAPS, join_style=2)
                                     .buffer(0)
-                                    .intersection(geom_fazenda)
                                 )
-                            elif MULTIPLICADOR_BUFFER_AREA > 0:
-                                motivos_sem_mapa.append(f"Fazenda {FAZENDA_ID}: sem largura de implemento válida para aplicar buffer na área WKT.")
-                                area_trabalhada = area_bruta_wkt.intersection(geom_fazenda)
                             else:
-                                area_trabalhada = area_bruta_wkt.intersection(geom_fazenda)
+                                area_trabalhada = area_bruta_wkt.buffer(0)
+
+                            if AREA_MAX_BURACO_HA > 0:
+                                area_trabalhada = preencher_buracos_pequenos(
+                                    area_trabalhada,
+                                    area_max_buraco_m2=AREA_MAX_BURACO_HA * 10000,
+                                )
+
+                            area_trabalhada = area_trabalhada.intersection(geom_fazenda).buffer(0)
 
                         if area_trabalhada is None or area_trabalhada.is_empty:
                             motivos_sem_mapa.append(f"Fazenda {FAZENDA_ID}: área trabalhada vazia após processamento do WKT/buffer.")
@@ -1147,13 +1109,11 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                                     base_tmp = base_fazenda.copy()
                                     base_tmp["Área total (ha)"] = base_tmp.geometry.area / 10000
                                     total = base_tmp[["GLEBA", "TALHAO", "Área total (ha)"]]
-
                                     intersec = gpd.overlay(
                                         base_tmp,
                                         gpd.GeoDataFrame(geometry=[area_trabalhada], crs=base_tmp.crs),
                                         how="intersection",
                                     )
-
                                     if not intersec.empty:
                                         intersec["Área trabalhada (ha)"] = intersec.geometry.area / 10000
                                         trab = intersec.groupby(["GLEBA", "TALHAO"])["Área trabalhada (ha)"].sum().reset_index()
@@ -1166,7 +1126,6 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                                     df_talhoes = df_talhoes[["Gleba", "Talhão", "Área total (ha)", "Área trabalhada (ha)"]]
                                     df_talhoes["Área total (ha)"] = pd.to_numeric(df_talhoes["Área total (ha)"], errors="coerce").fillna(0).round(2)
                                     df_talhoes["Área trabalhada (ha)"] = pd.to_numeric(df_talhoes["Área trabalhada (ha)"], errors="coerce").fillna(0).round(2)
-
                                     total_row = pd.DataFrame({
                                         "Gleba": ["TOTAL"],
                                         "Talhão": [""],
@@ -1184,14 +1143,13 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                             df_faz_pontos,
                             geometry=gpd.points_from_xy(df_faz_pontos["vl_longitude_inicial"], df_faz_pontos["vl_latitude_inicial"]),
                             crs="EPSG:4326",
-                        ).to_crs(epsg=31983)
+                        ).to_crs(epsg=CRS_METRICO)
 
                         linhas = []
                         for _, grupo in gdf_pts.groupby("cd_equipamento"):
                             grupo = grupo.sort_values("dt_hr_local_inicial")
                             linha_atual, rpm_atual, vel_atual, larguras_atuais = [], [], [], []
                             tempo_inicio, ultimo_tempo = None, None
-
                             for _, row in grupo.iterrows():
                                 tempo = row["dt_hr_local_inicial"]
                                 if ultimo_tempo is None:
@@ -1215,7 +1173,6 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                                         larguras_atuais = [row["vl_largura_implemento"]]
                                         tempo_inicio = tempo
                                 ultimo_tempo = tempo
-
                             adicionar_segmento_clipado(linhas, linha_atual, rpm_atual, vel_atual, larguras_atuais, tempo_inicio, ultimo_tempo, geom_fazenda)
 
                         if linhas:
@@ -1247,7 +1204,6 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                             True, COR_TRABALHADA, COR_NAO_TRAB,
                         )
                         st.pyplot(fig_area)
-
                         figuras_pdf_area = [fig_area]
                         figuras_tabela_pdf = []
                         if MOSTRAR_TALHOES and df_talhoes is not None and not df_talhoes.empty:
