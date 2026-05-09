@@ -971,24 +971,24 @@ st.sidebar.header("⚙️ Parâmetros")
 
 with sidebar_container():
     st.markdown("### 🗺️ Tipo de processamento")
-    MODO_MAPA = st.radio(
+    MODO_MAPA = st.selectbox(
         "Escolha o tipo de mapa",
         [
             "Área trabalhada (área)",
-            "Área por colhedora/operador (linhas)",
-            "Velocidade e RPM (linhas)",
+            "Colhedora/operador (linhas)",
+            "Velocidade/RPM (linhas)",
         ],
         index=0,
-        key="modo_mapa_radio",
+        key="modo_mapa_selectbox",
     )
 
 with sidebar_container():
     st.markdown("### 🧭 Base cartográfica")
-    st.caption(os.path.basename(BASE_PADRAO_PATH))
+    st.caption("Base padrão SOLINFTEC")
 
 MAPA_AREA = MODO_MAPA == "Área trabalhada (área)"
-MAPA_OPERADOR = MODO_MAPA == "Área por colhedora/operador (linhas)"
-MAPA_VEL_RPM = MODO_MAPA == "Velocidade e RPM (linhas)"
+MAPA_OPERADOR = MODO_MAPA == "Colhedora/operador (linhas)"
+MAPA_VEL_RPM = MODO_MAPA == "Velocidade/RPM (linhas)"
 
 if MAPA_AREA:
     with sidebar_container():
