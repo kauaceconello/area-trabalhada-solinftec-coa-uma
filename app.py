@@ -432,7 +432,7 @@ def adicionar_segmento_clipado(linhas_saida, pontos, rpms, vels, t_inicio, t_fim
     else:
         geoms = []
     for g in geoms:
-        linhas_saida.append({"geometry": g, "rpm_medio": rpm, "vel_media": vel, "duracao_seg": duracao})
+        linhas_saida.append({"geometry": g, "rpm_medio": rpm, "vel_media": vel, "duracao_seg": duracao, "largura_media": LARGURA_PADRAO_M})
 
 
 def criar_linhas_por_pontos(df_faz, geom_fazenda):
@@ -482,6 +482,9 @@ def criar_linhas_por_wkt(df_faz, coluna_linha, geom_fazenda):
             continue
         rpm = pd.to_numeric(row.get("vl_rpm", np.nan), errors="coerce")
         vel = pd.to_numeric(row.get("vl_velocidade", np.nan), errors="coerce")
+        largura = pd.to_numeric(row.get("vl_largura_implemento", LARGURA_PADRAO_M), errors="coerce")
+        if pd.isna(largura) or largura <= 0:
+            largura = LARGURA_PADRAO_M
         duracao = np.nan
         if "dt_hr_local_inicial" in gdf.columns and "dt_hr_local_final" in gdf.columns:
             t1 = pd.to_datetime(row.get("dt_hr_local_inicial"), errors="coerce")
@@ -496,7 +499,7 @@ def criar_linhas_por_wkt(df_faz, coluna_linha, geom_fazenda):
             geoms = []
         for g in geoms:
             item = row.to_dict()
-            item.update({"geometry": g, "rpm_medio": rpm, "vel_media": vel, "duracao_seg": duracao})
+            item.update({"geometry": g, "rpm_medio": rpm, "vel_media": vel, "duracao_seg": duracao, "largura_media": largura})
             registros.append(item)
     return gpd.GeoDataFrame(registros, geometry="geometry", crs=f"EPSG:{CRS_METRICO}") if registros else gpd.GeoDataFrame(columns=["geometry"], geometry="geometry", crs=f"EPSG:{CRS_METRICO}")
 
@@ -551,6 +554,58 @@ def criar_area_colhedora_por_linhas(df_faz_turno, coluna_linha, geom_fazenda):
     if not df_legenda.empty:
         df_legenda = df_legenda.sort_values("Colhedora", key=lambda s: s.map(chave_ordenacao_mista)).reset_index(drop=True)
     return gdf_saida, df_legenda
+
+
+# =========================================================
+# DISPLAY CARTOGRÁFICO
+# =========================================================
+def adicionar_moldura_layout(fig):
+    """Aplica a moldura e o painel do mapa no mesmo padrão visual dos mapas anteriores."""
+    moldura = mpatches.FancyBboxPatch(
+        (0.01, 0.01), 0.98, 0.98,
+        boxstyle="round,pad=0.0,rounding_size=0.012",
+        transform=fig.transFigure,
+        facecolor="none",
+        edgecolor="#D8E1EB",
+        linewidth=1.0,
+        zorder=0,
+    )
+    fig.add_artist(moldura)
+    painel_mapa = mpatches.FancyBboxPatch(
+        (0.03, 0.10), 0.64, 0.78,
+        boxstyle="round,pad=0.004,rounding_size=0.015",
+        transform=fig.transFigure,
+        facecolor="#FFFFFF",
+        edgecolor="#D8E1EB",
+        linewidth=1.0,
+        zorder=0,
+    )
+    fig.add_artist(painel_mapa)
+
+
+def criar_poligonos_display(gdf_linhas, geom_fazenda):
+    """Transforma linhas operacionais em faixas, mantendo o visual antigo de Velocidade/RPM."""
+    registros = []
+    if gdf_linhas is None or gdf_linhas.empty:
+        return gpd.GeoDataFrame(columns=["geometry"], geometry="geometry", crs=f"EPSG:{CRS_METRICO}")
+    for _, row in gdf_linhas.iterrows():
+        largura = row.get("largura_media", LARGURA_PADRAO_M)
+        if pd.isna(largura) or largura <= 0:
+            largura = LARGURA_PADRAO_M
+        try:
+            geom_disp = row.geometry.buffer(largura / 2.0, cap_style=2, join_style=2, quad_segs=1).intersection(geom_fazenda)
+        except Exception:
+            continue
+        if geom_disp.is_empty:
+            continue
+        registros.append({
+            "geometry": geom_disp,
+            "rpm_medio": row.get("rpm_medio", np.nan),
+            "vel_media": row.get("vel_media", np.nan),
+            "duracao_seg": row.get("duracao_seg", np.nan),
+            "largura_media": largura,
+        })
+    return gpd.GeoDataFrame(registros, geometry="geometry", crs=gdf_linhas.crs) if registros else gpd.GeoDataFrame(columns=["geometry"], geometry="geometry", crs=gdf_linhas.crs)
 
 # =========================================================
 # FIGURAS / PDF
@@ -608,20 +663,43 @@ def plotar_rotulos_talhao(ax, base_fazenda):
 
 
 def criar_cores_distintas(chaves):
+    """Cores vivas, alternadas e com alto contraste para diferenciar colhedoras."""
     chaves = list(chaves)
-    cmap = plt.get_cmap("tab20", max(len(chaves), 1))
+    paleta_viva = [
+        "#FF1744",  # vermelho vivo
+        "#00E676",  # verde vivo
+        "#2979FF",  # azul vivo
+        "#FFEA00",  # amarelo vivo
+        "#D500F9",  # roxo/magenta vivo
+        "#FF6D00",  # laranja vivo
+        "#00E5FF",  # ciano vivo
+        "#76FF03",  # lima vivo
+        "#F50057",  # rosa forte
+        "#651FFF",  # violeta forte
+        "#00C853",  # verde escuro vivo
+        "#FF9100",  # âmbar vivo
+        "#0091EA",  # azul forte
+        "#C6FF00",  # verde-limão
+        "#AA00FF",  # púrpura vivo
+        "#FF3D00",  # vermelho alaranjado
+        "#1DE9B6",  # turquesa vivo
+        "#FFD600",  # dourado vivo
+        "#304FFE",  # índigo vivo
+        "#64DD17",  # verde claro vivo
+    ]
     cores = {}
     for i, chave in enumerate(chaves):
-        if len(chaves) <= 20:
-            cores[chave] = to_hex(cmap(i))
+        if i < len(paleta_viva):
+            cores[chave] = paleta_viva[i]
         else:
-            cores[chave] = to_hex(plt.cm.hsv(i / len(chaves)))
+            cores[chave] = to_hex(plt.cm.hsv((i * 0.61803398875) % 1.0))
     return cores
 
 
 def criar_figura_area(base_fazenda, area_trabalhada, area_total_ha, area_trab_ha, area_nao_ha, pct_trab, pct_nao, periodo_ini, periodo_fim, fazenda_id, nome_fazenda):
     fig = plt.figure(figsize=(15.5, 8.8))
     fig.patch.set_facecolor("#F4F7FB")
+    adicionar_moldura_layout(fig)
     adicionar_header(fig, "Mapa de Área Trabalhada", fazenda_id, nome_fazenda, periodo_ini, periodo_fim)
     ax = fig.add_axes([0.06, 0.16, 0.58, 0.66])
     base_fazenda.plot(ax=ax, facecolor="#E5E7EB", edgecolor="#334155", linewidth=1.0, zorder=1)
@@ -654,44 +732,103 @@ def criar_figura_area(base_fazenda, area_trabalhada, area_total_ha, area_trab_ha
 def criar_figura_area_colhedora(base_fazenda, gdf_area_colhedora, df_legenda, cores, turno, periodo_txt, fazenda_id, nome_fazenda):
     fig = plt.figure(figsize=(15.5, 8.8))
     fig.patch.set_facecolor("#F4F7FB")
+    adicionar_moldura_layout(fig)
     titulo = f"Mapa de Área por Colhedora/Operador • {turno} ({intervalo_turno(turno)})"
     adicionar_header(fig, titulo, fazenda_id, nome_fazenda, periodo_txt, periodo_txt)
 
-    ax = fig.add_axes([0.055, 0.14, 0.60, 0.68])
-    base_fazenda.plot(ax=ax, facecolor="#F8FAFC", edgecolor="#334155", linewidth=1.0, zorder=1)
+    # Mesmo padrão visual dos demais mapas: mapa à esquerda e resumo/legenda à direita.
+    ax = fig.add_axes([0.06, 0.16, 0.58, 0.66])
+    base_fazenda.plot(ax=ax, facecolor="#FFFFFF", edgecolor="#334155", linewidth=1.0, zorder=1)
     if gdf_area_colhedora is not None and not gdf_area_colhedora.empty:
         for colhedora, cor in cores.items():
             sub = gdf_area_colhedora[gdf_area_colhedora["cd_equipamento"] == colhedora]
             if not sub.empty:
-                sub.plot(ax=ax, color=cor, edgecolor="none", alpha=0.88, zorder=2)
+                sub.plot(ax=ax, color=cor, edgecolor="none", alpha=0.92, zorder=2)
     base_fazenda.boundary.plot(ax=ax, color="#0F172A", linewidth=1.1, zorder=3)
     plotar_rotulos_talhao(ax, base_fazenda)
     ajustar_extensao(ax, base_fazenda)
 
-    axl = fig.add_axes([0.70, 0.13, 0.27, 0.70])
+    axl = fig.add_axes([0.71, 0.16, 0.25, 0.68])
     axl.axis("off")
     axl.set_xlim(0, 1)
     axl.set_ylim(0, 1)
-    box = mpatches.FancyBboxPatch((0, 0), 1, 1, boxstyle="round,pad=0.018,rounding_size=0.03", facecolor="#FFFFFF", edgecolor="#D8E1EB", linewidth=1.0)
+    box = mpatches.FancyBboxPatch(
+        (0, 0), 1, 1,
+        boxstyle="round,pad=0.018,rounding_size=0.03",
+        facecolor="#FFFFFF",
+        edgecolor="#D8E1EB",
+        linewidth=1.0,
+    )
     axl.add_patch(box)
-    axl.text(0.06, 0.95, "Legenda", fontsize=12, weight="bold", color="#0F172A", va="center")
+    axl.text(0.07, 0.955, "Resumo por Colhedora", fontsize=12, weight="bold", color="#0F172A", va="center")
+    axl.text(0.07, 0.915, f"{turno} • {intervalo_turno(turno)}", fontsize=8.6, color="#64748B", va="center")
+    axl.plot([0.07, 0.93], [0.885, 0.885], color="#E2E8F0", linewidth=1)
 
     if df_legenda is None or df_legenda.empty:
         axl.text(0.50, 0.50, "Sem dados válidos.", fontsize=9, color="#64748B", ha="center")
     else:
-        y = 0.88
-        row_h = min(0.075, 0.78 / max(len(df_legenda), 1))
+        n = len(df_legenda)
+        # Altura dinâmica para caber tudo no resumo lateral; se houver muitas colhedoras, reduz fonte.
+        row_h = min(0.17, 0.78 / max(n, 1))
+        fonte_titulo = 8.5 if n <= 8 else 7.6
+        fonte_operador = 7.3 if n <= 8 else 6.5
+        y = 0.84
+
         for _, row in df_legenda.iterrows():
             colhedora = str(row["Colhedora"])
-            cor = cores.get(colhedora, "#cccccc")
+            cor = cores.get(colhedora, "#CCCCCC")
             area_txt = formatar_area_ha(row["Área trabalhada (ha)"])
-            operadores = str(row["Operadores"])
-            axl.add_patch(mpatches.FancyBboxPatch((0.06, y - 0.025), 0.035, 0.035, boxstyle="round,pad=0.002,rounding_size=0.004", facecolor=cor, edgecolor="none"))
-            axl.text(0.11, y, f"Colhedora {colhedora} • {area_txt}", fontsize=8.4, color="#0F172A", weight="bold", ha="left", va="center")
-            axl.text(0.11, y - 0.030, operadores[:95] + ("..." if len(operadores) > 95 else ""), fontsize=7.4, color="#475569", ha="left", va="center")
+            operadores_raw = str(row["Operadores"])
+            operadores = [op.strip() for op in operadores_raw.split(";") if op.strip()]
+            if not operadores:
+                operadores = ["-"]
+
+            # Cabeçalho da colhedora: código-colhedora + área.
+            axl.add_patch(mpatches.FancyBboxPatch(
+                (0.07, y - 0.020), 0.032, 0.032,
+                boxstyle="round,pad=0.002,rounding_size=0.004",
+                facecolor=cor,
+                edgecolor="none",
+            ))
+            axl.text(
+                0.115, y,
+                f"{colhedora}: {area_txt}",
+                fontsize=fonte_titulo,
+                color="#0F172A",
+                weight="bold",
+                ha="left",
+                va="center",
+            )
+
+            # Operadores como lista com marcador, tudo dentro do resumo lateral.
+            y_ops = y - 0.033
+            max_ops_visiveis = max(1, int((row_h - 0.050) / 0.024))
+            for i_op, operador in enumerate(operadores[:max_ops_visiveis]):
+                operador_txt = operador if len(operador) <= 42 else operador[:39] + "..."
+                axl.text(
+                    0.115,
+                    y_ops - i_op * 0.024,
+                    f"• {operador_txt}",
+                    fontsize=fonte_operador,
+                    color="#475569",
+                    ha="left",
+                    va="center",
+                )
+            if len(operadores) > max_ops_visiveis:
+                axl.text(
+                    0.115,
+                    y_ops - max_ops_visiveis * 0.024,
+                    f"• +{len(operadores) - max_ops_visiveis} operador(es)",
+                    fontsize=fonte_operador,
+                    color="#64748B",
+                    ha="left",
+                    va="center",
+                )
+
             y -= row_h
-            if y < 0.08:
+            if y < 0.075:
                 break
+
     adicionar_footer(fig)
     return fig
 
@@ -699,6 +836,7 @@ def criar_figura_area_colhedora(base_fazenda, gdf_area_colhedora, df_legenda, co
 def criar_figura_tematica(base_fazenda, gdf_linhas, coluna_classe, mapa_cores, df_legenda, titulo, titulo_legenda, faixa_txt, media_txt, periodo_ini, periodo_fim, fazenda_id, nome_fazenda):
     fig = plt.figure(figsize=(15.5, 8.8))
     fig.patch.set_facecolor("#F4F7FB")
+    adicionar_moldura_layout(fig)
     adicionar_header(fig, titulo, fazenda_id, nome_fazenda, periodo_ini, periodo_fim)
 
     ax = fig.add_axes([0.06, 0.16, 0.58, 0.66])
@@ -707,7 +845,7 @@ def criar_figura_tematica(base_fazenda, gdf_linhas, coluna_classe, mapa_cores, d
         for classe, cor in mapa_cores.items():
             sub = gdf_linhas[gdf_linhas[coluna_classe] == classe]
             if not sub.empty:
-                sub.plot(ax=ax, color=cor, linewidth=2.2, alpha=1.0, zorder=2)
+                sub.plot(ax=ax, color=cor, edgecolor="none", alpha=0.95, zorder=2)
     base_fazenda.boundary.plot(ax=ax, color="#0F172A", linewidth=1.1, zorder=3)
     plotar_rotulos_talhao(ax, base_fazenda)
     ajustar_extensao(ax, base_fazenda)
@@ -1095,9 +1233,6 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                             with st.expander(f"🗺️ {nome_fazenda}", expanded=False):
                                 fig_op = criar_figura_area_colhedora(base_fazenda, gdf_area_colhedora, df_legenda, cores, turno, periodo_txt, FAZENDA_ID, nome_fazenda)
                                 st.pyplot(fig_op)
-                                df_exibir = df_legenda.copy()
-                                df_exibir["Área trabalhada (ha)"] = df_exibir["Área trabalhada (ha)"].round(2)
-                                st.dataframe(df_exibir[["Colhedora", "Operadores", "Área trabalhada (ha)"]], use_container_width=True, hide_index=True)
                                 pdf_op = figura_para_pdf_bytes(fig_op)
                                 st.download_button(
                                     "⬇️ Baixar PDF vetorial – Área por Colhedora/Operador",
@@ -1153,20 +1288,23 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                         gdf_linhas = criar_linhas_por_pontos(df_faz, geom_fazenda)
                     if gdf_linhas.empty:
                         continue
+                    gdf_plot = criar_poligonos_display(gdf_linhas, geom_fazenda)
+                    if gdf_plot.empty:
+                        continue
 
                     vel_faixas = gerar_faixas(VEL_MIN, VEL_MAX, VEL_PASSO, casas=1)
                     vel_labels = [f[2] for f in vel_faixas]
                     vel_cores = dict(zip(vel_labels, amostrar_cores_classes(criar_cmap_suave("vel"), len(vel_labels))))
-                    gdf_linhas["classe_vel"] = gdf_linhas["vel_media"].apply(lambda x: classificar_valor(x, vel_faixas))
-                    df_leg_vel = calcular_legenda_percentual(gdf_linhas, "classe_vel", vel_faixas, vel_cores)
+                    gdf_plot["classe_vel"] = gdf_plot["vel_media"].apply(lambda x: classificar_valor(x, vel_faixas))
+                    df_leg_vel = calcular_legenda_percentual(gdf_plot, "classe_vel", vel_faixas, vel_cores)
                     vel_validos = pd.to_numeric(df_faz["vl_velocidade"], errors="coerce").dropna()
                     vel_med = round(vel_validos.mean(), 1) if not vel_validos.empty else np.nan
 
                     rpm_faixas = gerar_faixas(RPM_MIN, RPM_MAX, RPM_PASSO, casas=0)
                     rpm_labels = [f[2] for f in rpm_faixas]
                     rpm_cores = dict(zip(rpm_labels, amostrar_cores_classes(criar_cmap_suave("rpm"), len(rpm_labels))))
-                    gdf_linhas["classe_rpm"] = gdf_linhas["rpm_medio"].apply(lambda x: classificar_valor(x, rpm_faixas))
-                    df_leg_rpm = calcular_legenda_percentual(gdf_linhas, "classe_rpm", rpm_faixas, rpm_cores)
+                    gdf_plot["classe_rpm"] = gdf_plot["rpm_medio"].apply(lambda x: classificar_valor(x, rpm_faixas))
+                    df_leg_rpm = calcular_legenda_percentual(gdf_plot, "classe_rpm", rpm_faixas, rpm_cores)
                     rpm_validos = pd.to_numeric(df_faz["vl_rpm"], errors="coerce").dropna()
                     rpm_med = round(rpm_validos.mean(), 0) if not rpm_validos.empty else np.nan
 
@@ -1174,7 +1312,7 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                         faixa_ini = arredondar_para_baixo(VEL_MIN, VEL_PASSO)
                         faixa_fim = arredondar_para_cima(VEL_MAX, VEL_PASSO)
                         fig_vel = criar_figura_tematica(
-                            base_fazenda, gdf_linhas, "classe_vel", vel_cores, df_leg_vel,
+                            base_fazenda, gdf_plot, "classe_vel", vel_cores, df_leg_vel,
                             "Mapa de Velocidade", "Legenda de Velocidade",
                             f"< {formatar_numero(faixa_ini, 1)} | {formatar_numero(faixa_ini, 1)} até {formatar_numero(faixa_fim, 1)}+ km/h",
                             f"Vel. média: {formatar_numero(vel_med, 1)} km/h",
@@ -1189,7 +1327,7 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                         faixa_ini_rpm = int(arredondar_para_baixo(RPM_MIN, RPM_PASSO))
                         faixa_fim_rpm = int(arredondar_para_cima(RPM_MAX, RPM_PASSO))
                         fig_rpm = criar_figura_tematica(
-                            base_fazenda, gdf_linhas, "classe_rpm", rpm_cores, df_leg_rpm,
+                            base_fazenda, gdf_plot, "classe_rpm", rpm_cores, df_leg_rpm,
                             "Mapa de RPM", "Legenda de RPM",
                             f"< {faixa_ini_rpm} | {faixa_ini_rpm} até {faixa_fim_rpm}+",
                             f"RPM médio: {formatar_numero(rpm_med, 0)}",
