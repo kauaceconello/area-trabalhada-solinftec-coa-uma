@@ -1,7 +1,7 @@
 
 # APP STREAMLIT – ÁREA TRABALHADA (SOLINFTEC)
 # Desenvolvido por Kauã Ceconello
-# Base fixa + upload somente ZIP CSV | Área via WKT + fechamento agressivo de gaps | RPM/Velocidade via pontos
+# Base fixa + upload somente ZIP CSV | Área via WKT + buffer simples com parâmetros avançados | RPM/Velocidade via pontos
 
 import io
 import os
@@ -842,13 +842,69 @@ with sidebar_container():
 
 with sidebar_container():
     st.markdown("### 📐 Área Trabalhada")
-    MULTIPLICADOR_BUFFER_AREA = st.number_input("Tamanho do Buffer", min_value=0.0, max_value=20.0, value=2.5, step=0.1, key="buffer_area_mult_input")
-    BUFFER_MINIMO_M = st.number_input("Buffer mínimo (m)", min_value=0.0, max_value=50.0, value=8.0, step=0.5, key="buffer_minimo_m_input")
-    FATOR_RECUO_GAPS = st.number_input("Fechamento de gaps", min_value=0.0, max_value=1.0, value=0.30, step=0.05, key="fator_recuo_gaps_input")
-    AREA_MAX_BURACO_HA = st.number_input("Preencher buracos até (ha)", min_value=0.0, max_value=10.0, value=0.50, step=0.10, key="area_max_buraco_ha_input")
-    AREA_MIN_HA = st.number_input("Área mínima trabalhada (ha)", min_value=0.0, value=0.50, step=0.1, key="area_min_input")
+
+    MULTIPLICADOR_BUFFER_AREA = st.number_input(
+        "Tamanho do Buffer",
+        min_value=0.0,
+        max_value=20.0,
+        value=2.5,
+        step=0.1,
+        key="buffer_area_mult_input"
+    )
+
+    AREA_MIN_HA = st.number_input(
+        "Área mínima trabalhada (ha)",
+        min_value=0.0,
+        value=0.50,
+        step=0.1,
+        key="area_min_input"
+    )
+
+    PARAMETROS_AVANCADOS_AREA = st.checkbox(
+        "⚙️ Parâmetros avançados",
+        value=False,
+        key="parametros_avancados_area_chk"
+    )
+
+    # Valores padrão usados quando os parâmetros avançados ficam ocultos
+    BUFFER_MINIMO_M = 8.0
+    FATOR_RECUO_GAPS = 0.30
+    AREA_MAX_BURACO_HA = 0.50
+
+    if PARAMETROS_AVANCADOS_AREA:
+        BUFFER_MINIMO_M = st.number_input(
+            "Buffer mínimo (m)",
+            min_value=0.0,
+            max_value=50.0,
+            value=8.0,
+            step=0.5,
+            key="buffer_minimo_m_input"
+        )
+
+        FATOR_RECUO_GAPS = st.number_input(
+            "Fechamento do buffer",
+            min_value=0.0,
+            max_value=1.0,
+            value=0.30,
+            step=0.05,
+            key="fator_recuo_gaps_input"
+        )
+
+        AREA_MAX_BURACO_HA = st.number_input(
+            "Preencher buracos até (ha)",
+            min_value=0.0,
+            max_value=10.0,
+            value=0.50,
+            step=0.10,
+            key="area_max_buraco_ha_input"
+        )
+
     if MAPA_AREA:
-        MOSTRAR_TALHOES = st.checkbox("📄 Incluir tabela por Gleba / Talhão no PDF e CSV", value=False, key="mostrar_talhoes_chk")
+        MOSTRAR_TALHOES = st.checkbox(
+            "📄 Incluir tabela por Gleba / Talhão no PDF e CSV",
+            value=False,
+            key="mostrar_talhoes_chk"
+        )
     else:
         MOSTRAR_TALHOES = False
 
