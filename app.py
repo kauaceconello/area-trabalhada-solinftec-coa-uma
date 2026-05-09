@@ -1241,7 +1241,12 @@ else:
 
 if GERAR:
     st.session_state["mapas_gerados"] = True
-if not uploaded_zips or not os.path.exists(BASE_PADRAO_PATH):
+
+# No modo Colhedora/operador, não processa enquanto todas as fazendas não forem classificadas.
+# Isso evita aparecer "Processando..." e mensagens duplicadas antes da seleção completa das frentes.
+if MAPA_OPERADOR and (not uploaded_zips or not TODAS_FAZENDAS_COM_FRENTE):
+    st.session_state["mapas_gerados"] = False
+elif not uploaded_zips or not os.path.exists(BASE_PADRAO_PATH):
     st.session_state["mapas_gerados"] = False
 
 st.caption(f"✅ Tipo selecionado: {MODO_MAPA}")
