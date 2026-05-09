@@ -703,8 +703,9 @@ with sidebar_container():
     )
 
 MAPA_AREA = MODO_MAPA == "Área trabalhada"
-MAPA_VEL = False
-MAPA_RPM = False
+# No modo operacional, Velocidade e RPM sempre são gerados juntos.
+MAPA_VEL = MODO_MAPA == "Velocidade e RPM"
+MAPA_RPM = MODO_MAPA == "Velocidade e RPM"
 
 with sidebar_container():
     st.markdown("### 🧭 Base cartográfica")
@@ -735,8 +736,7 @@ else:
 if MODO_MAPA == "Velocidade e RPM":
     with sidebar_container():
         st.markdown("### 🧪 Mapas operacionais")
-        MAPA_VEL = st.checkbox("Mapa de Velocidade", value=True, key="mapa_vel_chk")
-        MAPA_RPM = st.checkbox("Mapa de RPM", value=True, key="mapa_rpm_chk")
+        st.caption("Velocidade e RPM serão gerados automaticamente.")
 
 RPM_MIN, RPM_MAX, RPM_PASSO = 1200, 2000, 100
 if MAPA_RPM:
@@ -787,15 +787,8 @@ if not uploaded_zips or not os.path.exists(BASE_PADRAO_PATH):
 
 if MAPA_AREA:
     st.caption("✅ Tipo selecionado: Área trabalhada")
-elif MAPA_VEL or MAPA_RPM:
-    mapas_op = []
-    if MAPA_VEL:
-        mapas_op.append("Velocidade")
-    if MAPA_RPM:
-        mapas_op.append("RPM")
-    st.caption("✅ Tipo selecionado: " + ", ".join(mapas_op))
 else:
-    st.caption("⚠️ Nenhum mapa operacional selecionado.")
+    st.caption("✅ Tipo selecionado: Velocidade e RPM")
 
 # =========================================================
 # PROCESSAMENTO
@@ -807,10 +800,6 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
     if MAPA_VEL and VEL_MAX <= VEL_MIN:
         st.error("❌ Ajuste os parâmetros de velocidade.")
         st.stop()
-    if MODO_MAPA == "Velocidade e RPM" and not (MAPA_VEL or MAPA_RPM):
-        st.error("❌ Selecione Velocidade, RPM ou ambos.")
-        st.stop()
-
     with st.spinner("Processando arquivos e gerando mapas..."):
         with tempfile.TemporaryDirectory() as tmpdir:
             dfs = []
@@ -879,7 +868,7 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                 fazendas_processar = sorted(df_area["cd_fazenda"].dropna().astype(str).unique(), key=chave_ordenacao_mista)
             else:
                 if not (mascara_linha.any() or TEM_PONTOS):
-                    st.warning("⚠️ O modo Velocidade/RPM precisa de CSV com LINESTRING ou pontos de latitude/longitude.")
+                    st.warning("⚠️ O modo Velocidade/RPM precisa de um CSV de linhas ou de pontos da Solinftec com as colunas de velocidade e RPM.")
                     st.stop()
                 if MAPA_VEL and "vl_velocidade" not in df.columns:
                     st.error("❌ Coluna obrigatória faltante: vl_velocidade")
@@ -1052,7 +1041,7 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                 gc.collect()
 
             if mapas_gerados_total == 0:
-                st.warning("⚠️ Não foi possível gerar nenhum mapa com os dados enviados. Confira se o modo escolhido combina com o tipo de CSV enviado.")
+                st.warning("⚠️ Não foi possível gerar nenhum mapa com os dados enviados. Confira se o modo escolhido combina com o arquivo enviado da Solinftec.")
 
 else:
     st.info("⬆️ Envie os ZIPs com CSVs e clique em **Gerar mapa**.")
