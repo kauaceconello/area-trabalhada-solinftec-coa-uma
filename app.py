@@ -30,6 +30,18 @@ CRS_METRICO = 31983
 TEMPO_MAX_SEG = 60
 LARGURA_PADRAO_M = 3.0
 
+# Colhedoras cadastradas no sistema, em ordem e sem duplicidade.
+COLHEDORAS_CADASTRADAS = [
+    "4.121",
+    "4.122",
+    "4.125",
+    "4.126",
+    "4.127",
+    "4.130",
+    "4.132",
+    "4.133",
+]
+
 if "mapas_gerados" not in st.session_state:
     st.session_state["mapas_gerados"] = False
 
@@ -140,6 +152,13 @@ def normalizar_codigo(valor):
 def chave_ordenacao_mista(valor):
     texto = str(valor).strip()
     return re.sub(r"\d+", lambda m: f"{int(m.group()):010d}", texto)
+
+
+def slug_texto(valor):
+    texto = str(valor).strip()
+    texto = re.sub(r"[^A-Za-z0-9_-]+", "_", texto)
+    texto = texto.strip("_")
+    return texto or "item"
 
 
 def formatar_numero(valor, casas=0):
@@ -640,7 +659,7 @@ def adicionar_header(fig, titulo, fazenda_id, nome_fazenda, periodo_ini, periodo
     axh.add_patch(card)
 
     # Evita que o período passe por cima de títulos longos.
-    fonte_titulo = 14.8 if len(str(titulo)) > 48 else 16
+    fonte_titulo = 14.2 if len(str(titulo)) > 58 else 14.8 if len(str(titulo)) > 48 else 16
     axh.text(0.03, 0.64, titulo, fontsize=fonte_titulo, weight="bold", color="#0F172A", ha="left", va="center")
     axh.text(0.03, 0.26, f"Fazenda {fazenda_id} • {nome_fazenda}", fontsize=10.2, color="#475569", ha="left", va="center")
 
@@ -734,11 +753,12 @@ def criar_figura_area(base_fazenda, area_trabalhada, area_total_ha, area_trab_ha
     return fig
 
 
-def criar_figura_area_colhedora(base_fazenda, gdf_area_colhedora, df_legenda, cores, turno, periodo_txt, fazenda_id, nome_fazenda):
+def criar_figura_area_colhedora(base_fazenda, gdf_area_colhedora, df_legenda, cores, turno, periodo_txt, fazenda_id, nome_fazenda, frente_nome=None):
     fig = plt.figure(figsize=(15.5, 8.8))
     fig.patch.set_facecolor("#F4F7FB")
     adicionar_moldura_layout(fig)
-    titulo = f"Mapa de Área por Colhedora/Operador • {turno} ({intervalo_turno(turno)})"
+    prefixo_frente = f"{frente_nome} • " if frente_nome else ""
+    titulo = f"Mapa de Área por Colhedora/Operador • {prefixo_frente}{turno} ({intervalo_turno(turno)})"
     adicionar_header(fig, titulo, fazenda_id, nome_fazenda, periodo_txt, periodo_txt)
 
     # Mesmo padrão visual dos demais mapas: mapa à esquerda e resumo/legenda à direita.
@@ -766,7 +786,8 @@ def criar_figura_area_colhedora(base_fazenda, gdf_area_colhedora, df_legenda, co
     )
     axl.add_patch(box)
     axl.text(0.07, 0.955, "Resumo por Colhedora", fontsize=12, weight="bold", color="#0F172A", va="center")
-    axl.text(0.07, 0.915, f"{turno} • {intervalo_turno(turno)}", fontsize=8.6, color="#64748B", va="center")
+    subtitulo = f"{frente_nome} • {turno} • {intervalo_turno(turno)}" if frente_nome else f"{turno} • {intervalo_turno(turno)}"
+    axl.text(0.07, 0.915, subtitulo, fontsize=8.2, color="#64748B", va="center")
     axl.plot([0.07, 0.93], [0.885, 0.885], color="#E2E8F0", linewidth=1)
 
     if df_legenda is None or df_legenda.empty:
@@ -801,7 +822,6 @@ def criar_figura_area_colhedora(base_fazenda, gdf_area_colhedora, df_legenda, co
             espacamento = min(0.052, altura_disponivel / max(total_linhas - 1, 1))
 
         altura_usada = espacamento * max(total_linhas - 1, 0)
-        # Centraliza verticalmente quando há poucas linhas, evitando ficar tudo no topo ou exageradamente espalhado.
         y_inicio = min(topo_texto, base_texto + altura_disponivel / 2 + altura_usada / 2)
 
         fonte_operador = max(4.4, min(9.2, espacamento * 210))
@@ -1014,8 +1034,45 @@ if MAPA_OPERADOR:
             step=0.10,
             key="area_min_operador_input",
         )
+
+    with sidebar_container():
+        st.markdown("### 🚜 Frentes")
+        st.caption("Selecione as colhedoras de cada frente. As escolhidas somem das próximas frentes.")
+
+        FRENTE_1_NOME = st.text_input("Nome da F1", value="F1", key="frente_1_nome")
+        FRENTE_1_COLHEDORAS = st.multiselect(
+            "Colhedoras da F1",
+            options=COLHEDORAS_CADASTRADAS,
+            key="frente_1_colhedoras",
+        )
+
+        restantes_f2 = [c for c in COLHEDORAS_CADASTRADAS if c not in FRENTE_1_COLHEDORAS]
+        FRENTE_2_NOME = st.text_input("Nome da F2", value="F2", key="frente_2_nome")
+        FRENTE_2_COLHEDORAS = st.multiselect(
+            "Colhedoras da F2",
+            options=restantes_f2,
+            key="frente_2_colhedoras",
+        )
+
+        selecionadas_ate_f2 = set(FRENTE_1_COLHEDORAS) | set(FRENTE_2_COLHEDORAS)
+        restantes_f3 = [c for c in COLHEDORAS_CADASTRADAS if c not in selecionadas_ate_f2]
+        FRENTE_3_NOME = st.text_input("Nome da F3", value="F3", key="frente_3_nome")
+        FRENTE_3_COLHEDORAS = st.multiselect(
+            "Colhedoras da F3",
+            options=restantes_f3,
+            key="frente_3_colhedoras",
+        )
+
+        INCLUIR_SEM_FRENTE = st.checkbox(
+            "Incluir colhedoras não selecionadas em 'Sem frente definida'",
+            value=True,
+            key="incluir_sem_frente_chk",
+        )
 else:
     AREA_MIN_OPERADOR_HA = 0.50
+    FRENTE_1_NOME, FRENTE_2_NOME, FRENTE_3_NOME = "F1", "F2", "F3"
+    FRENTE_1_COLHEDORAS, FRENTE_2_COLHEDORAS, FRENTE_3_COLHEDORAS = [], [], []
+    INCLUIR_SEM_FRENTE = True
 
 RPM_MIN, RPM_MAX, RPM_PASSO = 1200, 2000, 100
 VEL_MIN, VEL_MAX, VEL_PASSO = 4.0, 8.0, 1.0
@@ -1244,90 +1301,123 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                     st.warning("⚠️ Nenhuma linha válida encontrada para separar por turno.")
                     st.stop()
 
+                # Monta frentes a partir das seleções fixas de colhedoras.
+                frentes_config = []
+                for nome_frente, colhedoras_frente in [
+                    (FRENTE_1_NOME, FRENTE_1_COLHEDORAS),
+                    (FRENTE_2_NOME, FRENTE_2_COLHEDORAS),
+                    (FRENTE_3_NOME, FRENTE_3_COLHEDORAS),
+                ]:
+                    nome_frente = str(nome_frente).strip() or "Frente"
+                    colhedoras_frente = [normalizar_codigo(c) for c in colhedoras_frente]
+                    if colhedoras_frente:
+                        frentes_config.append((nome_frente, colhedoras_frente))
+
+                colhedoras_selecionadas = set()
+                for _, colhedoras_frente in frentes_config:
+                    colhedoras_selecionadas.update(colhedoras_frente)
+
+                colhedoras_no_csv = set(df_linhas["cd_equipamento"].dropna().astype(str).map(normalizar_codigo).unique())
+                colhedoras_sem_frente = sorted(list(colhedoras_no_csv - colhedoras_selecionadas), key=chave_ordenacao_mista)
+                if INCLUIR_SEM_FRENTE and colhedoras_sem_frente:
+                    frentes_config.append(("Sem frente definida", colhedoras_sem_frente))
+
+                if not frentes_config:
+                    st.warning("⚠️ Nenhuma colhedora foi selecionada para as frentes e não há colhedoras sem frente no CSV.")
+                    st.stop()
+
                 ordem_turnos = ["Turno C", "Turno A", "Turno B"]
-                for turno in ordem_turnos:
-                    df_turno = df_linhas[df_linhas["turno"] == turno].copy()
-                    if df_turno.empty:
+
+                for nome_frente, colhedoras_frente in frentes_config:
+                    df_frente = df_linhas[df_linhas["cd_equipamento"].astype(str).map(normalizar_codigo).isin(colhedoras_frente)].copy()
+                    if df_frente.empty:
                         continue
 
-                    with st.expander(f"🕒 {turno} ({intervalo_turno(turno)})", expanded=False):
-                        fazendas_turno = sorted(df_turno["cd_fazenda"].dropna().unique(), key=chave_ordenacao_mista)
-                        registros_turno = []
-
-                        # Primeiro gera todos os mapas do turno em memória.
-                        # Assim o botão do PDF único aparece no topo do expander do turno.
-                        for FAZENDA_ID in fazendas_turno:
-                            base_fazenda = base[base["FAZENDA"] == FAZENDA_ID].copy()
-                            if base_fazenda.empty:
-                                continue
-                            nome_fazenda = base_fazenda["PROPRIEDADE"].iloc[0]
-                            base_fazenda = base_fazenda.to_crs(epsg=CRS_METRICO)
-                            geom_fazenda = unary_union(base_fazenda.geometry)
-                            df_faz_turno = df_turno[df_turno["cd_fazenda"] == FAZENDA_ID].copy()
-                            periodo_ini, periodo_fim = obter_periodo(None, df_faz_turno)
-                            periodo_txt = f"{periodo_ini} até {periodo_fim}" if periodo_ini != "-" else intervalo_turno(turno)
-                            gdf_area_colhedora, df_legenda = criar_area_colhedora_por_linhas(df_faz_turno, coluna_linha, geom_fazenda)
-                            if gdf_area_colhedora.empty or df_legenda.empty:
+                    with st.expander(f"🚜 {nome_frente}", expanded=False):
+                        for turno in ordem_turnos:
+                            df_turno = df_frente[df_frente["turno"] == turno].copy()
+                            if df_turno.empty:
                                 continue
 
-                            area_total_mapa_ha = pd.to_numeric(df_legenda["Área trabalhada (ha)"], errors="coerce").fillna(0).sum()
-                            if area_total_mapa_ha < AREA_MIN_OPERADOR_HA:
-                                continue
+                            with st.expander(f"🕒 {turno} ({intervalo_turno(turno)})", expanded=False):
+                                fazendas_turno = sorted(df_turno["cd_fazenda"].dropna().unique(), key=chave_ordenacao_mista)
+                                registros_turno = []
 
-                            colhedoras = df_legenda["Colhedora"].astype(str).tolist()
-                            cores = criar_cores_distintas(colhedoras)
-                            fig_op = criar_figura_area_colhedora(
-                                base_fazenda,
-                                gdf_area_colhedora,
-                                df_legenda,
-                                cores,
-                                turno,
-                                periodo_txt,
-                                FAZENDA_ID,
-                                nome_fazenda,
-                            )
-                            registros_turno.append({
-                                "fazenda_id": FAZENDA_ID,
-                                "nome_fazenda": nome_fazenda,
-                                "fig": fig_op,
-                            })
+                                # Primeiro gera todos os mapas do turno em memória.
+                                # Assim o botão do PDF único aparece no topo do expander do turno.
+                                for FAZENDA_ID in fazendas_turno:
+                                    base_fazenda = base[base["FAZENDA"] == FAZENDA_ID].copy()
+                                    if base_fazenda.empty:
+                                        continue
+                                    nome_fazenda = base_fazenda["PROPRIEDADE"].iloc[0]
+                                    base_fazenda = base_fazenda.to_crs(epsg=CRS_METRICO)
+                                    geom_fazenda = unary_union(base_fazenda.geometry)
+                                    df_faz_turno = df_turno[df_turno["cd_fazenda"] == FAZENDA_ID].copy()
+                                    periodo_ini, periodo_fim = obter_periodo(None, df_faz_turno)
+                                    periodo_txt = f"{periodo_ini} até {periodo_fim}" if periodo_ini != "-" else intervalo_turno(turno)
+                                    gdf_area_colhedora, df_legenda = criar_area_colhedora_por_linhas(df_faz_turno, coluna_linha, geom_fazenda)
+                                    if gdf_area_colhedora.empty or df_legenda.empty:
+                                        continue
 
-                        if not registros_turno:
-                            st.info(f"Nenhum mapa acima de {AREA_MIN_OPERADOR_HA:.2f} ha foi gerado para este turno.".replace(".", ","))
-                            continue
+                                    area_total_mapa_ha = pd.to_numeric(df_legenda["Área trabalhada (ha)"], errors="coerce").fillna(0).sum()
+                                    if area_total_mapa_ha < AREA_MIN_OPERADOR_HA:
+                                        continue
 
-                        # Botão do PDF único fica antes dos mapas individuais para não ficar escondido no final.
-                        figuras_turno = [r["fig"] for r in registros_turno]
-                        pdf_turno = figuras_para_pdf_multipaginas(figuras_turno)
-                        st.download_button(
-                            f"⬇️ Baixar PDF único – Todas as fazendas do {turno}",
-                            data=pdf_turno,
-                            file_name=f"mapas_area_colhedora_operador_{turno.replace(' ', '_')}.pdf",
-                            mime="application/pdf",
-                            key=f"pdf_operador_turno_{turno}",
-                        )
+                                    colhedoras = df_legenda["Colhedora"].astype(str).tolist()
+                                    cores = criar_cores_distintas(colhedoras)
+                                    fig_op = criar_figura_area_colhedora(
+                                        base_fazenda,
+                                        gdf_area_colhedora,
+                                        df_legenda,
+                                        cores,
+                                        turno,
+                                        periodo_txt,
+                                        FAZENDA_ID,
+                                        nome_fazenda,
+                                        frente_nome=nome_frente,
+                                    )
+                                    registros_turno.append({
+                                        "fazenda_id": FAZENDA_ID,
+                                        "nome_fazenda": nome_fazenda,
+                                        "fig": fig_op,
+                                    })
 
-                        st.caption(f"PDF único contém {len(registros_turno)} mapa(s), com uma fazenda por página.")
+                                if not registros_turno:
+                                    st.info(f"Nenhum mapa acima de {AREA_MIN_OPERADOR_HA:.2f} ha foi gerado para {nome_frente} / {turno}.".replace(".", ","))
+                                    continue
 
-                        # Depois exibe os mapas individuais e seus downloads separados.
-                        for registro in registros_turno:
-                            FAZENDA_ID = registro["fazenda_id"]
-                            nome_fazenda = registro["nome_fazenda"]
-                            fig_op = registro["fig"]
-                            with st.expander(f"🗺️ {nome_fazenda}", expanded=False):
-                                st.pyplot(fig_op)
-                                pdf_op = figura_para_pdf_bytes(fig_op)
+                                figuras_turno = [r["fig"] for r in registros_turno]
+                                pdf_turno = figuras_para_pdf_multipaginas(figuras_turno)
+                                chave_pdf_turno = slug_texto(f"{nome_frente}_{turno}")
                                 st.download_button(
-                                    "⬇️ Baixar PDF vetorial – Área por Colhedora/Operador",
-                                    data=pdf_op,
-                                    file_name=f"mapa_area_colhedora_operador_{turno.replace(' ', '_')}_{FAZENDA_ID}.pdf",
+                                    f"⬇️ Baixar PDF único – {nome_frente} / {turno}",
+                                    data=pdf_turno,
+                                    file_name=f"mapas_area_colhedora_operador_{chave_pdf_turno}.pdf",
                                     mime="application/pdf",
-                                    key=f"pdf_operador_{turno}_{FAZENDA_ID}",
+                                    key=f"pdf_operador_turno_{chave_pdf_turno}",
                                 )
-                                mapas_gerados_total += 1
 
-                        for registro in registros_turno:
-                            plt.close(registro["fig"])
+                                st.caption(f"PDF único contém {len(registros_turno)} mapa(s), com uma fazenda por página.")
+
+                                for registro in registros_turno:
+                                    FAZENDA_ID = registro["fazenda_id"]
+                                    nome_fazenda = registro["nome_fazenda"]
+                                    fig_op = registro["fig"]
+                                    chave_individual = slug_texto(f"{nome_frente}_{turno}_{FAZENDA_ID}")
+                                    with st.expander(f"🗺️ {nome_fazenda}", expanded=False):
+                                        st.pyplot(fig_op)
+                                        pdf_op = figura_para_pdf_bytes(fig_op)
+                                        st.download_button(
+                                            "⬇️ Baixar PDF vetorial – Área por Colhedora/Operador",
+                                            data=pdf_op,
+                                            file_name=f"mapa_area_colhedora_operador_{chave_individual}.pdf",
+                                            mime="application/pdf",
+                                            key=f"pdf_operador_{chave_individual}",
+                                        )
+                                        mapas_gerados_total += 1
+
+                                for registro in registros_turno:
+                                    plt.close(registro["fig"])
 
             # =====================================================
             # MODO 3: VELOCIDADE E RPM - CSV LINHAS OU PONTOS
