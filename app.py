@@ -1063,16 +1063,10 @@ if MAPA_OPERADOR:
             key="frente_3_colhedoras",
         )
 
-        INCLUIR_SEM_FRENTE = st.checkbox(
-            "Incluir colhedoras não selecionadas em 'Sem frente definida'",
-            value=True,
-            key="incluir_sem_frente_chk",
-        )
 else:
     AREA_MIN_OPERADOR_HA = 0.50
     FRENTE_1_NOME, FRENTE_2_NOME, FRENTE_3_NOME = "F1", "F2", "F3"
     FRENTE_1_COLHEDORAS, FRENTE_2_COLHEDORAS, FRENTE_3_COLHEDORAS = [], [], []
-    INCLUIR_SEM_FRENTE = True
 
 RPM_MIN, RPM_MAX, RPM_PASSO = 1200, 2000, 100
 VEL_MIN, VEL_MAX, VEL_PASSO = 4.0, 8.0, 1.0
@@ -1317,13 +1311,8 @@ if uploaded_zips and os.path.exists(BASE_PADRAO_PATH) and st.session_state.get("
                 for _, colhedoras_frente in frentes_config:
                     colhedoras_selecionadas.update(colhedoras_frente)
 
-                colhedoras_no_csv = set(df_linhas["cd_equipamento"].dropna().astype(str).map(normalizar_codigo).unique())
-                colhedoras_sem_frente = sorted(list(colhedoras_no_csv - colhedoras_selecionadas), key=chave_ordenacao_mista)
-                if INCLUIR_SEM_FRENTE and colhedoras_sem_frente:
-                    frentes_config.append(("Sem frente definida", colhedoras_sem_frente))
-
                 if not frentes_config:
-                    st.warning("⚠️ Nenhuma colhedora foi selecionada para as frentes e não há colhedoras sem frente no CSV.")
+                    st.warning("⚠️ Nenhuma colhedora foi selecionada para as frentes.")
                     st.stop()
 
                 ordem_turnos = ["Turno C", "Turno A", "Turno B"]
