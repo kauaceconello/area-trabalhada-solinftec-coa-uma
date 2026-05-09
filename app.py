@@ -1076,32 +1076,8 @@ if uploaded_zips and MAPA_OPERADOR and os.path.exists(BASE_PADRAO_PATH):
                         opcoes_fazendas.append(label)
                         label_para_codigo[label] = cod_fazenda
 
-                    st.markdown(
-                        """
-                        <style>
-                        .frentes-card {background: linear-gradient(135deg, rgba(37,99,235,.16), rgba(14,165,233,.07)); border: 1px solid rgba(96,165,250,.28); border-radius: 18px; padding: 18px 20px; margin: 12px 0 18px 0; box-shadow: 0 12px 28px rgba(0,0,0,.22);}
-                        .frentes-title {font-size: 1.35rem; font-weight: 800; color: #F8FAFC; margin-bottom: 6px; display: flex; align-items: center; gap: 8px;}
-                        .frentes-text {font-size: .94rem; color: #CBD5E1; line-height: 1.45;}
-                        .frentes-badge-row {display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px;}
-                        .frentes-badge {background: rgba(15,23,42,.65); border: 1px solid rgba(148,163,184,.20); border-radius: 999px; color: #E5E7EB; padding: 6px 11px; font-size: .82rem;}
-                        div[data-baseweb="tag"] {background-color: #2563EB !important; border-radius: 10px !important;}
-                        div[data-baseweb="tag"] span {color: white !important;}
-                        </style>
-                        <div class="frentes-card">
-                            <div class="frentes-title">🚜 Definição das frentes</div>
-                            <div class="frentes-text">
-                                O ZIP foi lido automaticamente. Classifique <b>todas</b> as fazendas em F1, F2 ou F3.
-                                As fazendas selecionadas em uma frente somem das outras listas, evitando duplicidade.
-                            </div>
-                            <div class="frentes-badge-row">
-                                <div class="frentes-badge">Seleção excludente</div>
-                                <div class="frentes-badge">PDF único por frente</div>
-                                <div class="frentes-badge">Separação por turno no PDF</div>
-                            </div>
-                        </div>
-                        """,
-                        unsafe_allow_html=True,
-                    )
+                    # Tela de definição das frentes: sem card de instrução para manter a área mais limpa.
+                    st.markdown("### 🚜 Definição das frentes")
 
                     total_fazendas = len(opcoes_fazendas)
                     prev_f1 = [x for x in st.session_state.get("fazendas_f1_select", []) if x in opcoes_fazendas]
